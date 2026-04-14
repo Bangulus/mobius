@@ -153,27 +153,29 @@ export default function Page() {
     setLoading(false);
   }
 
+  // Gruppiert nach group_title ODER display_group
   function groupMarkets(markets: any[]) {
-    const groups: { [key: string]: any[] } = {};
+    const groups: { [key: string]: { title: string; markets: any[]; isDisplay: boolean } } = {};
     markets.forEach((market) => {
-      const key = market.group_title || '__ungrouped__';
-      if (!groups[key]) groups[key] = [];
-      groups[key].push(market);
+      const key = market.group_title || market.display_group || `__single__${market.id}`;
+      const isDisplay = !market.group_title && !!market.display_group;
+      if (!groups[key]) groups[key] = { title: market.group_title || market.display_group || '', markets: [], isDisplay };
+      groups[key].markets.push(market);
     });
     return groups;
   }
 
   function renderMarketGrid(marketList: any[]) {
     const grouped = groupMarkets(marketList);
-    return Object.entries(grouped).map(([groupTitle, groupMarkets]) => (
-      <div key={groupTitle} style={{ marginBottom: '2rem' }}>
-        {groupTitle !== '__ungrouped__' && (
-          <h2 style={{ fontSize: '1.1rem', fontWeight: 'bold', marginBottom: '0.75rem', padding: '0.4rem 1rem', background: '#0f3460', color: 'white', borderRadius: '8px' }}>
-            {groupTitle}
+    return Object.entries(grouped).map(([key, group]) => (
+      <div key={key} style={{ marginBottom: '2rem' }}>
+        {group.title && (
+          <h2 style={{ fontSize: '1.1rem', fontWeight: 'bold', marginBottom: '0.75rem', padding: '0.4rem 1rem', background: group.isDisplay ? '#64748b' : '#0f3460', color: 'white', borderRadius: '8px' }}>
+            {group.title}
           </h2>
         )}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '0.75rem' }}>
-          {groupMarkets.map((market: any) => (
+          {group.markets.map((market: any) => (
             <div key={market.id} style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '0.75rem', background: 'white', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
               <div style={{ fontWeight: '600', fontSize: '0.9rem', marginBottom: '0.5rem', color: '#111' }}>
                 {market.short_label || market.question}
@@ -207,9 +209,7 @@ export default function Page() {
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'flex-end' }}>
               {avatarUrl ? (
                 <img src={avatarUrl} alt="Avatar" style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover' }} />
-              ) : (
-                <span>👤</span>
-              )}
+              ) : <span>👤</span>}
               <span style={{ fontWeight: 'bold' }}>{displayName}</span>
             </div>
             <div style={{ color: '#16a34a', fontWeight: 'bold' }}>💰 {balance?.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Dukaten</div>
