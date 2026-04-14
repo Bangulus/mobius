@@ -27,6 +27,8 @@ export default function BetButton({
   const [qNo, setQNo] = useState(currentQNo);
   const [result, setResult] = useState('');
   const [einsatz, setEinsatz] = useState(10);
+  const [side, setSide] = useState<'yes' | 'no'>('yes');
+  const [expanded, setExpanded] = useState(false);
 
   function calcProb(qY: number, qN: number) {
     const expYes = Math.exp(qY / b);
@@ -35,72 +37,133 @@ export default function BetButton({
   }
 
   const prob = calcProb(qYes, qNo);
-  const percentage = Math.round(prob * 100);
+  const percentageYes = Math.round(prob * 100);
+  const percentageNo = 100 - percentageYes;
 
-  async function bet(type: 'yes' | 'no') {
+  const newQYes = side === 'yes' ? qYes + einsatz : qYes;
+  const newQNo = side === 'no' ? qNo + einsatz : qNo;
+  const priceAfter = calcProb(newQYes, newQNo);
+  const cost = einsatz * ((prob + priceAfter) / 2);
+  const gewinn = einsatz - cost;
+
+  async function bet() {
     if (einsatz <= 0) return;
     setLoading(true);
     setResult('');
-    const shares = einsatz;
     const priceBefore = prob;
-    const newQYes = type === 'yes' ? qYes + shares : qYes;
-    const newQNo = type === 'no' ? qNo + shares : qNo;
-    const priceAfter = calcProb(newQYes, newQNo);
-    const cost = shares * ((priceBefore + priceAfter) / 2);
 
-    if (type === 'yes') setQYes((q) => q + shares);
-    else setQNo((q) => q + shares);
+    if (side === 'yes') setQYes((q) => q + einsatz);
+    else setQNo((q) => q + einsatz);
 
     const res = await placeBet(
-      marketId, type, shares, cost, priceBefore, priceAfter, newQYes, newQNo, userId, token
+      marketId, side, einsatz, cost, priceBefore, priceAfter, newQYes, newQNo, userId, token
     );
 
     if (res.success && res.newBalance !== undefined) {
       onBalanceUpdate(res.newBalance);
+      setResult('✓');
+    } else {
+      setResult('✗');
     }
-    setResult(res.error ? '✗' : '✓');
     setLoading(false);
+    setTimeout(() => setResult(''), 2000);
+  }
+
+  if (!expanded) {
+    return (
+      <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', marginTop: '0.5rem' }}>
+        <button
+          onClick={() => { setSide('yes'); setExpanded(true); }}
+          style={{ padding: '0.25rem 0.75rem', background: '#16a34a', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 'bold' }}
+        >
+          Ja {percentageYes}¢
+        </button>
+        <button
+          onClick={() => { setSide('no'); setExpanded(true); }}
+          style={{ padding: '0.25rem 0.75rem', background: '#dc2626', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 'bold' }}
+        >
+          Nein {percentageNo}¢
+        </button>
+      </div>
+    );
   }
 
   return (
-    <div style={{ marginTop: '0.5rem' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.4rem' }}>
-        <span style={{ fontWeight: 'bold', fontSize: '0.9rem', color: percentage > 50 ? '#16a34a' : '#dc2626', minWidth: '36px' }}>
-          {percentage}%
+    <div style={{ marginTop: '0.5rem', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '10px', padding: '0.75rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <button
+            onClick={() => setSide('yes')}
+            style={{ padding: '0.3rem 1rem', background: side === 'yes' ? '#16a34a' : '#e5e7eb', color: side === 'yes' ? 'white' : '#333', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 'bold' }}
+          >
+            Ja {percentageYes}¢
+          </button>
+          <button
+            onClick={() => setSide('no')}
+            style={{ padding: '0.3rem 1rem', background: side === 'no' ? '#dc2626' : '#e5e7eb', color: side === 'no' ? 'white' : '#333', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 'bold' }}
+          >
+            Nein {percentageNo}¢
+          </button>
+        </div>
+        <button
+          onClick={() => setExpanded(false)}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1rem', color: '#999' }}
+        >
+          ✕
+        </button>
+      </div>
+
+      <div style={{ marginBottom: '0.75rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.3rem' }}>
+          <span style={{ fontSize: '0.8rem', color: '#666' }}>Betrag</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+            <input
+              type="number"
+              min="1"
+              value={einsatz}
+              onChange={(e) => setEinsatz(Math.max(1, Number(e.target.value)))}
+              style={{ width: '80px', padding: '0.3rem 0.5rem', fontSize: '1rem', fontWeight: 'bold', borderRadius: '6px', border: '1px solid #ccc', textAlign: 'right' }}
+            />
+            <span style={{ fontSize: '0.85rem', color: '#666' }}>D</span>
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: '0.4rem' }}>
+          {[1, 5, 10, 50, 100].map((v) => (
+            <button
+              key={v}
+              onClick={() => setEinsatz((e) => e + v)}
+              style={{ flex: 1, padding: '0.2rem 0', background: '#e5e7eb', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.75rem', color: '#333' }}
+            >
+              +{v}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', padding: '0.5rem', background: 'white', borderRadius: '6px', border: '1px solid #e5e7eb' }}>
+        <span style={{ fontSize: '0.85rem', color: '#666' }}>💰 Um zu gewinnen</span>
+        <span style={{ fontSize: '1rem', fontWeight: 'bold', color: '#16a34a' }}>
+          +{gewinn.toFixed(2)} D
         </span>
-        <input
-          type="number"
-          min="1"
-          value={einsatz}
-          onChange={(e) => setEinsatz(Math.max(1, Number(e.target.value)))}
-          style={{
-            width: '60px',
-            padding: '0.15rem 0.3rem',
-            fontSize: '0.8rem',
-            borderRadius: '4px',
-            border: '1px solid #ccc',
-            textAlign: 'center',
-          }}
-        />
-        <span style={{ fontSize: '0.75rem', color: '#666' }}>D</span>
       </div>
-      <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
-        <button
-          onClick={() => bet('yes')}
-          disabled={loading}
-          style={{ padding: '0.2rem 0.7rem', background: '#16a34a', color: 'white', border: 'none', borderRadius: '4px', cursor: loading ? 'not-allowed' : 'pointer', fontSize: '0.8rem', fontWeight: 'bold' }}
-        >
-          YES
-        </button>
-        <button
-          onClick={() => bet('no')}
-          disabled={loading}
-          style={{ padding: '0.2rem 0.7rem', background: '#dc2626', color: 'white', border: 'none', borderRadius: '4px', cursor: loading ? 'not-allowed' : 'pointer', fontSize: '0.8rem', fontWeight: 'bold' }}
-        >
-          NO
-        </button>
-        {result && <span style={{ fontSize: '0.8rem', color: result === '✓' ? '#16a34a' : 'red' }}>{result}</span>}
-      </div>
+
+      <button
+        onClick={bet}
+        disabled={loading}
+        style={{
+          width: '100%',
+          padding: '0.5rem',
+          background: side === 'yes' ? '#16a34a' : '#dc2626',
+          color: 'white',
+          border: 'none',
+          borderRadius: '6px',
+          cursor: loading ? 'not-allowed' : 'pointer',
+          fontSize: '0.9rem',
+          fontWeight: 'bold',
+        }}
+      >
+        {loading ? '...' : result === '✓' ? '✓ Trade platziert!' : `${side === 'yes' ? 'Ja' : 'Nein'} kaufen`}
+      </button>
     </div>
   );
 }
