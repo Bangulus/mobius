@@ -26,6 +26,7 @@ export default function BetButton({
   const [qYes, setQYes] = useState(currentQYes);
   const [qNo, setQNo] = useState(currentQNo);
   const [result, setResult] = useState('');
+  const [einsatz, setEinsatz] = useState(10);
 
   function calcProb(qY: number, qN: number) {
     const expYes = Math.exp(qY / b);
@@ -37,9 +38,10 @@ export default function BetButton({
   const percentage = Math.round(prob * 100);
 
   async function bet(type: 'yes' | 'no') {
+    if (einsatz <= 0) return;
     setLoading(true);
     setResult('');
-    const shares = 10;
+    const shares = einsatz;
     const priceBefore = prob;
     const newQYes = type === 'yes' ? qYes + shares : qYes;
     const newQNo = type === 'no' ? qNo + shares : qNo;
@@ -50,78 +52,54 @@ export default function BetButton({
     else setQNo((q) => q + shares);
 
     const res = await placeBet(
-      marketId,
-      type,
-      shares,
-      cost,
-      priceBefore,
-      priceAfter,
-      newQYes,
-      newQNo,
-      userId,
-      token
+      marketId, type, shares, cost, priceBefore, priceAfter, newQYes, newQNo, userId, token
     );
 
     if (res.success && res.newBalance !== undefined) {
       onBalanceUpdate(res.newBalance);
     }
-
-    setResult(res.error ? `Fehler: ${res.error}` : '✓');
+    setResult(res.error ? '✗' : '✓');
     setLoading(false);
   }
 
   return (
-    <div style={{ marginTop: '1rem' }}>
-      <div
-        style={{
-          fontSize: '1.5rem',
-          fontWeight: 'bold',
-          marginBottom: '0.5rem',
-        }}
-      >
-        {percentage}%
+    <div style={{ marginTop: '0.5rem' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.4rem' }}>
+        <span style={{ fontWeight: 'bold', fontSize: '0.9rem', color: percentage > 50 ? '#16a34a' : '#dc2626', minWidth: '36px' }}>
+          {percentage}%
+        </span>
+        <input
+          type="number"
+          min="1"
+          value={einsatz}
+          onChange={(e) => setEinsatz(Math.max(1, Number(e.target.value)))}
+          style={{
+            width: '60px',
+            padding: '0.15rem 0.3rem',
+            fontSize: '0.8rem',
+            borderRadius: '4px',
+            border: '1px solid #ccc',
+            textAlign: 'center',
+          }}
+        />
+        <span style={{ fontSize: '0.75rem', color: '#666' }}>D</span>
       </div>
-      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+      <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
         <button
           onClick={() => bet('yes')}
           disabled={loading}
-          style={{
-            background: '#16a34a',
-            color: 'white',
-            border: 'none',
-            padding: '0.5rem 1.5rem',
-            borderRadius: '6px',
-            cursor: loading ? 'not-allowed' : 'pointer',
-            fontSize: '1rem',
-          }}
+          style={{ padding: '0.2rem 0.7rem', background: '#16a34a', color: 'white', border: 'none', borderRadius: '4px', cursor: loading ? 'not-allowed' : 'pointer', fontSize: '0.8rem', fontWeight: 'bold' }}
         >
-          {loading ? '...' : 'YES'}
+          YES
         </button>
         <button
           onClick={() => bet('no')}
           disabled={loading}
-          style={{
-            background: '#dc2626',
-            color: 'white',
-            border: 'none',
-            padding: '0.5rem 1.5rem',
-            borderRadius: '6px',
-            cursor: loading ? 'not-allowed' : 'pointer',
-            fontSize: '1rem',
-          }}
+          style={{ padding: '0.2rem 0.7rem', background: '#dc2626', color: 'white', border: 'none', borderRadius: '4px', cursor: loading ? 'not-allowed' : 'pointer', fontSize: '0.8rem', fontWeight: 'bold' }}
         >
-          {loading ? '...' : 'NO'}
+          NO
         </button>
-        {result && (
-          <span
-            style={{
-              fontSize: '0.85rem',
-              color: result.startsWith('Fehler') ? 'red' : '#16a34a',
-            }}
-          >
-            {result}
-          </span>
-        )}
+        {result && <span style={{ fontSize: '0.8rem', color: result === '✓' ? '#16a34a' : 'red' }}>{result}</span>}
       </div>
     </div>
   );
