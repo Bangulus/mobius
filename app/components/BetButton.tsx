@@ -26,7 +26,7 @@ export default function BetButton({
   const [qYes, setQYes] = useState(currentQYes);
   const [qNo, setQNo] = useState(currentQNo);
   const [result, setResult] = useState('');
-  const [einsatz, setEinsatz] = useState(10);
+  const [einsatz, setEinsatz] = useState(0);
   const [side, setSide] = useState<'yes' | 'no'>('yes');
   const [expanded, setExpanded] = useState(false);
 
@@ -90,49 +90,56 @@ export default function BetButton({
 
   return (
     <div style={{ marginTop: '0.75rem', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '1rem' }}>
+      {/* Ja/Nein Tabs */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
           <button
             onClick={() => setSide('yes')}
-            style={{ padding: '0.35rem 1.1rem', background: side === 'yes' ? '#16a34a' : '#e5e7eb', color: side === 'yes' ? 'white' : '#333', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 'bold' }}
+            style={{ padding: '0.4rem 1.2rem', background: side === 'yes' ? '#16a34a' : '#e5e7eb', color: side === 'yes' ? 'white' : '#555', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '0.9rem', fontWeight: 'bold' }}
           >
             Ja {percentageYes}¢
           </button>
           <button
             onClick={() => setSide('no')}
-            style={{ padding: '0.35rem 1.1rem', background: side === 'no' ? '#dc2626' : '#e5e7eb', color: side === 'no' ? 'white' : '#333', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 'bold' }}
+            style={{ padding: '0.4rem 1.2rem', background: side === 'no' ? '#dc2626' : '#e5e7eb', color: side === 'no' ? 'white' : '#555', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '0.9rem', fontWeight: 'bold' }}
           >
             Nein {percentageNo}¢
           </button>
         </div>
-        <button
-          onClick={() => setExpanded(false)}
-          style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1rem', color: '#999' }}
-        >
+        <button onClick={() => setExpanded(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.1rem', color: '#aaa' }}>
           ✕
         </button>
       </div>
 
+      {/* Betrag */}
       <div style={{ marginBottom: '1rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-          <span style={{ fontSize: '0.85rem', color: '#666' }}>Betrag</span>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-            <input
-              type="number"
-              min="1"
-              value={einsatz}
-              onChange={(e) => setEinsatz(Math.max(1, Number(e.target.value)))}
-              style={{ width: '80px', padding: '0.35rem 0.5rem', fontSize: '1rem', fontWeight: 'bold', borderRadius: '6px', border: '1px solid #ccc', textAlign: 'right' }}
-            />
-            <span style={{ fontSize: '0.85rem', color: '#666' }}>D</span>
-          </div>
+          <span style={{ fontSize: '0.85rem', color: '#888' }}>Betrag</span>
+          <input
+            type="number"
+            min="0"
+            value={einsatz === 0 ? '' : einsatz}
+            placeholder="0"
+            onChange={(e) => setEinsatz(Math.max(0, Number(e.target.value)))}
+            style={{
+              width: '100px',
+              padding: '0.35rem 0.5rem',
+              fontSize: '1.4rem',
+              fontWeight: 'bold',
+              borderRadius: '6px',
+              border: '1px solid #ccc',
+              textAlign: 'right',
+              appearance: 'textfield',
+              MozAppearance: 'textfield',
+            } as any}
+          />
         </div>
         <div style={{ display: 'flex', gap: '0.4rem' }}>
           {[1, 5, 10, 50, 100].map((v) => (
             <button
               key={v}
               onClick={() => setEinsatz((e) => e + v)}
-              style={{ flex: 1, padding: '0.3rem 0', background: '#e5e7eb', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.75rem', color: '#333' }}
+              style={{ flex: 1, padding: '0.3rem 0', background: '#e5e7eb', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.75rem', color: '#333', fontWeight: '500' }}
             >
               +{v}
             </button>
@@ -140,24 +147,31 @@ export default function BetButton({
         </div>
       </div>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', padding: '0.6rem 0.75rem', background: 'white', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
+      {/* Um zu gewinnen */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', padding: '0.65rem 0.75rem', background: 'white', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
         <span style={{ fontSize: '0.85rem', color: '#666' }}>💰 Um zu gewinnen</span>
-        <span style={{ fontSize: '1rem', fontWeight: 'bold', color: '#16a34a' }}>
-          +{gewinn.toFixed(2)} D
-        </span>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.25rem' }}>
+          <span style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#16a34a' }}>
+            +{gewinn.toFixed(2)}
+          </span>
+          <span style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#16a34a' }}>
+            D
+          </span>
+        </div>
       </div>
 
+      {/* Kaufen Button */}
       <button
         onClick={bet}
-        disabled={loading}
+        disabled={loading || einsatz <= 0}
         style={{
           width: '100%',
-          padding: '0.6rem',
-          background: side === 'yes' ? '#16a34a' : '#dc2626',
+          padding: '0.65rem',
+          background: einsatz <= 0 ? '#ccc' : side === 'yes' ? '#16a34a' : '#dc2626',
           color: 'white',
           border: 'none',
           borderRadius: '8px',
-          cursor: loading ? 'not-allowed' : 'pointer',
+          cursor: loading || einsatz <= 0 ? 'not-allowed' : 'pointer',
           fontSize: '0.95rem',
           fontWeight: 'bold',
         }}
