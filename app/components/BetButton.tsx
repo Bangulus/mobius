@@ -71,16 +71,16 @@ export default function BetButton({
 
   if (!expanded) {
     return (
-      <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', marginTop: '0.5rem' }}>
+      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginTop: '0.75rem' }}>
         <button
           onClick={() => { setSide('yes'); setExpanded(true); }}
-          style={{ padding: '0.25rem 0.75rem', background: '#16a34a', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 'bold' }}
+          style={{ padding: '0.35rem 1rem', background: '#16a34a', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 'bold' }}
         >
           Ja {percentageYes}¢
         </button>
         <button
           onClick={() => { setSide('no'); setExpanded(true); }}
-          style={{ padding: '0.25rem 0.75rem', background: '#dc2626', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 'bold' }}
+          style={{ padding: '0.35rem 1rem', background: '#dc2626', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 'bold' }}
         >
           Nein {percentageNo}¢
         </button>
@@ -89,18 +89,18 @@ export default function BetButton({
   }
 
   return (
-    <div style={{ marginTop: '0.5rem', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '10px', padding: '0.75rem' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+    <div style={{ marginTop: '0.75rem', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '1rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
           <button
             onClick={() => setSide('yes')}
-            style={{ padding: '0.3rem 1rem', background: side === 'yes' ? '#16a34a' : '#e5e7eb', color: side === 'yes' ? 'white' : '#333', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 'bold' }}
+            style={{ padding: '0.35rem 1.1rem', background: side === 'yes' ? '#16a34a' : '#e5e7eb', color: side === 'yes' ? 'white' : '#333', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 'bold' }}
           >
             Ja {percentageYes}¢
           </button>
           <button
             onClick={() => setSide('no')}
-            style={{ padding: '0.3rem 1rem', background: side === 'no' ? '#dc2626' : '#e5e7eb', color: side === 'no' ? 'white' : '#333', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 'bold' }}
+            style={{ padding: '0.35rem 1.1rem', background: side === 'no' ? '#dc2626' : '#e5e7eb', color: side === 'no' ? 'white' : '#333', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 'bold' }}
           >
             Nein {percentageNo}¢
           </button>
@@ -113,16 +113,16 @@ export default function BetButton({
         </button>
       </div>
 
-      <div style={{ marginBottom: '0.75rem' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.3rem' }}>
-          <span style={{ fontSize: '0.8rem', color: '#666' }}>Betrag</span>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+      <div style={{ marginBottom: '1rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+          <span style={{ fontSize: '0.85rem', color: '#666' }}>Betrag</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
             <input
               type="number"
               min="1"
               value={einsatz}
               onChange={(e) => setEinsatz(Math.max(1, Number(e.target.value)))}
-              style={{ width: '80px', padding: '0.3rem 0.5rem', fontSize: '1rem', fontWeight: 'bold', borderRadius: '6px', border: '1px solid #ccc', textAlign: 'right' }}
+              style={{ width: '80px', padding: '0.35rem 0.5rem', fontSize: '1rem', fontWeight: 'bold', borderRadius: '6px', border: '1px solid #ccc', textAlign: 'right' }}
             />
             <span style={{ fontSize: '0.85rem', color: '#666' }}>D</span>
           </div>
@@ -132,7 +132,7 @@ export default function BetButton({
             <button
               key={v}
               onClick={() => setEinsatz((e) => e + v)}
-              style={{ flex: 1, padding: '0.2rem 0', background: '#e5e7eb', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.75rem', color: '#333' }}
+              style={{ flex: 1, padding: '0.3rem 0', background: '#e5e7eb', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.75rem', color: '#333' }}
             >
               +{v}
             </button>
@@ -140,7 +140,7 @@ export default function BetButton({
         </div>
       </div>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', padding: '0.5rem', background: 'white', borderRadius: '6px', border: '1px solid #e5e7eb' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', padding: '0.6rem 0.75rem', background: 'white', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
         <span style={{ fontSize: '0.85rem', color: '#666' }}>💰 Um zu gewinnen</span>
         <span style={{ fontSize: '1rem', fontWeight: 'bold', color: '#16a34a' }}>
           +{gewinn.toFixed(2)} D
@@ -152,13 +152,13 @@ export default function BetButton({
         disabled={loading}
         style={{
           width: '100%',
-          padding: '0.5rem',
+          padding: '0.6rem',
           background: side === 'yes' ? '#16a34a' : '#dc2626',
           color: 'white',
           border: 'none',
-          borderRadius: '6px',
+          borderRadius: '8px',
           cursor: loading ? 'not-allowed' : 'pointer',
-          fontSize: '0.9rem',
+          fontSize: '0.95rem',
           fontWeight: 'bold',
         }}
       >
