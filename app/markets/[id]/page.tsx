@@ -77,11 +77,26 @@ export default function MarketPage() {
     return expYes / (expYes + expNo);
   }
 
+  // Normalisierte Wahrscheinlichkeiten für Gruppenmarkt
+  function getNormalizedProbs(markets: any[]) {
+    const rawProbs = markets.map(m => calcProb(m.q_yes, m.q_no, m.b));
+    const total = rawProbs.reduce((a, b) => a + b, 0);
+    return rawProbs.map(p => p / total);
+  }
+
   const selectedMarket = groupMarkets.find(m => m.id === selectedMarketId) || market;
+  const normalizedProbs = groupMarkets.length > 1 ? getNormalizedProbs(groupMarkets) : null;
 
   const prob = selectedMarket ? calcProb(selectedMarket.q_yes, selectedMarket.q_no, selectedMarket.b) : 0.5;
   const percentageYes = Math.round(prob * 100);
   const percentageNo = 100 - percentageYes;
+
+  // Normalisierte % für ausgewählten Markt
+  const selectedIndex = groupMarkets.findIndex(m => m.id === selectedMarketId);
+  const normalizedPctYes = normalizedProbs && selectedIndex >= 0
+    ? Math.round(normalizedProbs[selectedIndex] * 100)
+    : percentageYes;
+  const normalizedPctNo = 100 - normalizedPctYes;
 
   const newQYes = side === 'yes' ? (selectedMarket?.q_yes || 0) + einsatz : (selectedMarket?.q_yes || 0);
   const newQNo = side === 'no' ? (selectedMarket?.q_no || 0) + einsatz : (selectedMarket?.q_no || 0);
@@ -165,27 +180,27 @@ export default function MarketPage() {
       </div>
 
       <div style={{ maxWidth: '1100px', margin: '0 auto', padding: '2rem', display: 'grid', gridTemplateColumns: '1fr 360px', gap: '2rem', alignItems: 'start' }}>
-        {/* Links: Marktinfo */}
+        {/* Links */}
         <div>
           <div style={{ background: 'white', borderRadius: '12px', padding: '2rem', marginBottom: '1.5rem', border: '1px solid #e5e7eb' }}>
             {market.group_title && (
               <div style={{ fontSize: '0.85rem', color: '#888', marginBottom: '0.5rem' }}>{market.group_title}</div>
             )}
-            <h1 style={{ fontSize: '1.8rem', fontWeight: 'bold', margin: '0 0 1rem', color: '#111' }}>
+            <h1 style={{ fontSize: '1.8rem', fontWeight: 'bold', margin: '0 0 1.5rem', color: '#111' }}>
               {market.group_title || market.question}
             </h1>
 
             {/* Gruppenmarkt-Liste */}
             {groupMarkets.length > 1 && (
               <div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: '0.5rem', alignItems: 'center', padding: '0.5rem 0', borderBottom: '1px solid #f3f4f6', marginBottom: '0.5rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: '0.5rem', alignItems: 'center', padding: '0.5rem 0.75rem', borderBottom: '1px solid #f3f4f6', marginBottom: '0.5rem' }}>
                   <span style={{ fontSize: '0.8rem', color: '#888', fontWeight: 'bold' }}>Option</span>
-                  <span style={{ fontSize: '0.8rem', color: '#888', fontWeight: 'bold', textAlign: 'center' }}>Wahrsch.</span>
-                  <span style={{ fontSize: '0.8rem', color: '#888', fontWeight: 'bold' }}></span>
+                  <span style={{ fontSize: '0.8rem', color: '#888', fontWeight: 'bold', textAlign: 'center', marginRight: '0.5rem' }}>Wahrsch.</span>
+                  <span></span>
                 </div>
-                {groupMarkets.map((gm: any) => {
-                  const p = calcProb(gm.q_yes, gm.q_no, gm.b);
-                  const pct = Math.round(p * 100);
+                {groupMarkets.map((gm: any, idx: number) => {
+                  const normProb = normalizedProbs ? normalizedProbs[idx] : calcProb(gm.q_yes, gm.q_no, gm.b);
+                  const pct = Math.round(normProb * 100);
                   const isSelected = gm.id === selectedMarketId;
                   return (
                     <div
@@ -194,7 +209,7 @@ export default function MarketPage() {
                       style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: '0.75rem', alignItems: 'center', padding: '0.75rem', borderRadius: '8px', background: isSelected ? '#f0f9ff' : 'white', border: isSelected ? '1px solid #0f3460' : '1px solid #f3f4f6', marginBottom: '0.4rem', cursor: 'pointer' }}
                     >
                       <span style={{ fontWeight: isSelected ? 'bold' : 'normal', fontSize: '0.95rem' }}>{gm.short_label || gm.question}</span>
-                      <span style={{ fontWeight: 'bold', fontSize: '1rem', color: '#111' }}>{pct}%</span>
+                      <span style={{ fontWeight: 'bold', fontSize: '1rem', color: '#111', marginRight: '0.5rem' }}>{pct}%</span>
                       <div style={{ display: 'flex', gap: '0.3rem' }}>
                         <button
                           onClick={(e) => { e.stopPropagation(); setSelectedMarketId(gm.id); setSide('yes'); setEinsatz(0); }}
@@ -218,8 +233,8 @@ export default function MarketPage() {
             {/* Einzelmarkt */}
             {groupMarkets.length <= 1 && (
               <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                <span style={{ fontSize: '2rem', fontWeight: 'bold' }}>{percentageYes}%</span>
-                <span style={{ color: '#888' }}>Wahrscheinlichkeit</span>
+                <span style={{ fontSize: '2.5rem', fontWeight: 'bold' }}>{percentageYes}%</span>
+                <span style={{ color: '#888', fontSize: '1rem' }}>Wahrscheinlichkeit</span>
               </div>
             )}
           </div>
@@ -233,23 +248,21 @@ export default function MarketPage() {
             </div>
           )}
 
-          {/* Ja/Nein */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '1.5rem' }}>
             <button
               onClick={() => setSide('yes')}
               style={{ padding: '0.75rem', background: side === 'yes' ? '#16a34a' : '#f3f4f6', color: side === 'yes' ? 'white' : '#555', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '1rem', fontWeight: 'bold' }}
             >
-              Ja {percentageYes}¢
+              Ja {normalizedPctYes}¢
             </button>
             <button
               onClick={() => setSide('no')}
               style={{ padding: '0.75rem', background: side === 'no' ? '#dc2626' : '#f3f4f6', color: side === 'no' ? 'white' : '#555', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '1rem', fontWeight: 'bold' }}
             >
-              Nein {percentageNo}¢
+              Nein {normalizedPctNo}¢
             </button>
           </div>
 
-          {/* Betrag */}
           <div style={{ marginBottom: '1.5rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
               <div>
@@ -284,7 +297,6 @@ export default function MarketPage() {
             </div>
           </div>
 
-          {/* Um zu gewinnen */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem', background: '#f9fafb', borderRadius: '8px', marginBottom: '1.5rem', border: '1px solid #e5e7eb' }}>
             <span style={{ fontSize: '0.9rem', color: '#666' }}>💰 Um zu gewinnen</span>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.25rem' }}>
@@ -293,7 +305,6 @@ export default function MarketPage() {
             </div>
           </div>
 
-          {/* Kaufen Button */}
           {userId ? (
             <button
               onClick={bet}
