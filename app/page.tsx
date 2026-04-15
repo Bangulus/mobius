@@ -27,7 +27,6 @@ export default function Page() {
   const [avatarUrl, setAvatarUrl] = useState('');
   const [view, setView] = useState<'markets' | 'portfolio' | 'leaderboard' | 'admin' | 'profile'>('markets');
   const [activeCategory, setActiveCategory] = useState('Trends');
-  const [selectedOption, setSelectedOption] = useState<{ [groupKey: string]: string }>({});
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -171,88 +170,71 @@ export default function Page() {
     return groups;
   }
 
-  // Rendert eine Multiple-Choice-Gruppe in Detailansicht
   function renderGroupDetail(groupKey: string, group: { title: string; markets: any[]; isDisplay: boolean }) {
-    // Normalisierte Wahrscheinlichkeiten berechnen
     const rawProbs = group.markets.map((m) => getLMSRProb(m.q_yes, m.q_no, m.b));
     const total = rawProbs.reduce((a, b) => a + b, 0);
     const normProbs = rawProbs.map((p) => p / total);
 
-    const selected = selectedOption[groupKey] || group.markets[0]?.id;
-    const selectedMarket = group.markets.find((m) => m.id === selected) || group.markets[0];
+    const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+    const tokenParam = searchParams?.get('token') ? `?token=${searchParams.get('token')}&user_id=${searchParams.get('user_id')}` : '';
 
     return (
       <div key={groupKey} style={{ marginBottom: '2rem', border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden', background: 'white' }}>
-        {/* Gruppenheader */}
         <div style={{ background: '#0f3460', color: 'white', padding: '0.6rem 1rem', fontWeight: 'bold', fontSize: '1rem' }}>
           {group.title}
         </div>
 
-        <div style={{ display: 'flex', gap: '0', flexDirection: 'column' }}>
-          {/* Optionsliste links */}
-          <div style={{ borderBottom: '1px solid #f3f4f6' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', padding: '0.4rem 1rem', fontSize: '0.75rem', color: '#9ca3af', fontWeight: '600', borderBottom: '1px solid #f3f4f6' }}>
-              <span>Option</span>
-              <span>Wahrsch.</span>
-            </div>
-            {group.markets.map((market, i) => {
-              const prob = normProbs[i];
-              const probPct = Math.round(prob * 100);
-              const yesPrice = Math.round(prob * 100);
-              const noPrice = 100 - yesPrice;
-              const isSelected = market.id === selected;
-
-              return (
-                <div
-                  key={market.id}
-                  onClick={() => setSelectedOption((prev) => ({ ...prev, [groupKey]: market.id }))}
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: '1fr auto',
-                    alignItems: 'center',
-                    padding: '0.6rem 1rem',
-                    cursor: 'pointer',
-                    background: isSelected ? '#eff6ff' : 'white',
-                    borderLeft: isSelected ? '3px solid #0f3460' : '3px solid transparent',
-                    borderBottom: '1px solid #f3f4f6',
-                    transition: 'background 0.1s',
-                  }}
-                >
-                  <span style={{ fontWeight: isSelected ? '600' : '400', fontSize: '0.9rem', color: '#111' }}>
-                    {market.short_label || market.question}
-                  </span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <span style={{ fontWeight: 'bold', fontSize: '0.9rem', color: '#111' }}>{probPct}%</span>
-                    <span style={{ background: '#16a34a', color: 'white', padding: '0.15rem 0.4rem', borderRadius: '4px', fontSize: '0.75rem' }}>
-                      Ja {yesPrice}¢
-                    </span>
-                    <span style={{ background: '#dc2626', color: 'white', padding: '0.15rem 0.4rem', borderRadius: '4px', fontSize: '0.75rem' }}>
-                      Nein {noPrice}¢
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* BetButton für ausgewählte Option */}
-          {selectedMarket && (
-            <div style={{ padding: '1rem' }}>
-              <div style={{ fontWeight: '600', fontSize: '0.9rem', marginBottom: '0.5rem', color: '#555' }}>
-                Ausgewählt: <span style={{ color: '#0f3460' }}>{selectedMarket.short_label || selectedMarket.question}</span>
-              </div>
-              <BetButton
-                marketId={selectedMarket.id}
-                currentQYes={selectedMarket.q_yes}
-                currentQNo={selectedMarket.q_no}
-                b={selectedMarket.b}
-                userId={userId}
-                token={token}
-                onBalanceUpdate={(newBalance) => setBalance(newBalance)}
-              />
-            </div>
-          )}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', padding: '0.4rem 1rem', fontSize: '0.75rem', color: '#9ca3af', fontWeight: '600', borderBottom: '1px solid #f3f4f6' }}>
+          <span>Option</span>
+          <span>Wahrsch.</span>
         </div>
+
+        {group.markets.map((market, i) => {
+          const prob = normProbs[i];
+          const probPct = Math.round(prob * 100);
+          const yesPrice = Math.round(prob * 100);
+          const noPrice = 100 - yesPrice;
+
+          return (
+            <div
+              key={market.id}
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr auto',
+                alignItems: 'center',
+                padding: '0.6rem 1rem',
+                borderBottom: '1px solid #f3f4f6',
+                background: 'white',
+              }}
+            >
+              <span
+                onClick={() => window.location.href = `/markets/${market.id}${tokenParam}`}
+                style={{ fontWeight: '500', fontSize: '0.9rem', color: '#111', cursor: 'pointer' }}
+                title="Zur Marktdetailseite"
+              >
+                {market.short_label || market.question}
+              </span>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <span style={{ fontWeight: 'bold', fontSize: '0.9rem', color: '#111', minWidth: '2.5rem', textAlign: 'right' }}>
+                  {probPct}%
+                </span>
+                <button
+                  onClick={() => window.location.href = `/markets/${market.id}${tokenParam}`}
+                  style={{ background: '#16a34a', color: 'white', border: 'none', borderRadius: '4px', padding: '0.25rem 0.6rem', fontSize: '0.75rem', fontWeight: 'bold', cursor: 'pointer' }}
+                >
+                  Ja {yesPrice}¢
+                </button>
+                <button
+                  onClick={() => window.location.href = `/markets/${market.id}${tokenParam}`}
+                  style={{ background: '#dc2626', color: 'white', border: 'none', borderRadius: '4px', padding: '0.25rem 0.6rem', fontSize: '0.75rem', fontWeight: 'bold', cursor: 'pointer' }}
+                >
+                  Nein {noPrice}¢
+                </button>
+              </div>
+            </div>
+          );
+        })}
       </div>
     );
   }
@@ -260,12 +242,10 @@ export default function Page() {
   function renderMarketGrid(marketList: any[]) {
     const grouped = groupMarkets(marketList);
     return Object.entries(grouped).map(([key, group]) => {
-      // Multiple-Choice-Gruppen (group_title) → Detailansicht
       if (group.markets.length > 1 && !group.isDisplay) {
         return renderGroupDetail(key, group);
       }
 
-      // Einzelmärkte oder display_group → klassische Karten
       return (
         <div key={key} style={{ marginBottom: '2rem' }}>
           {group.title && (
