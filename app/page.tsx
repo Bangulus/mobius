@@ -289,10 +289,12 @@ export default function Page() {
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'flex-end' }}>
               {avatarUrl ? (
                 <img src={avatarUrl} alt="Avatar" style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover' }} />
-              ) : <span>👤</span>}
-              <span style={{ fontWeight: 'bold' }}>{displayName}</span>
+              ) : <span style={{ fontSize: '1rem' }}>👤</span>}
+              <span style={{ fontWeight: 'bold', fontSize: '0.85rem' }}>{displayName}</span>
             </div>
-            <div style={{ color: '#16a34a', fontWeight: 'bold' }}>💰 {balance?.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Dukaten</div>
+            <div style={{ color: '#16a34a', fontWeight: 'bold', fontSize: '0.85rem' }}>
+              💰 {balance?.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Dukaten
+            </div>
           </div>
         </div>
 
@@ -347,15 +349,15 @@ export default function Page() {
 
         {view === 'leaderboard' && (
           <div>
-            <h2>🏆 Leaderboard</h2>
+            <h2 style={{ fontSize: '1.1rem' }}>🏆 Leaderboard</h2>
             {leaderboard.map((user: any, index: number) => (
-              <div key={user.username} style={{ border: '1px solid #ccc', padding: '1rem', marginBottom: '0.5rem', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: user.username === displayName ? '#f0f9ff' : 'white' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                  <span style={{ fontSize: '1.5rem', fontWeight: 'bold', color: index === 0 ? '#f59e0b' : index === 1 ? '#9ca3af' : index === 2 ? '#b45309' : '#666' }}>
+              <div key={user.username} style={{ border: '1px solid #ccc', padding: '0.75rem 1rem', marginBottom: '0.5rem', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: user.username === displayName ? '#f0f9ff' : 'white', fontSize: '0.85rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                  <span style={{ fontSize: '1.1rem', fontWeight: 'bold', color: index === 0 ? '#f59e0b' : index === 1 ? '#9ca3af' : index === 2 ? '#b45309' : '#666' }}>
                     {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `#${index + 1}`}
                   </span>
                   {user.avatar_url ? (
-                    <img src={user.avatar_url} alt="Avatar" style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover' }} />
+                    <img src={user.avatar_url} alt="Avatar" style={{ width: '28px', height: '28px', borderRadius: '50%', objectFit: 'cover' }} />
                   ) : <span>👤</span>}
                   <span style={{ fontWeight: user.username === displayName ? 'bold' : 'normal' }}>
                     {user.username} {user.username === displayName ? '(Du)' : ''}
