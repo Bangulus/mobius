@@ -41,34 +41,34 @@ export default function ProfileView({ userId, token, displayName, avatarUrl, bal
 
   async function uploadAvatar(file: File) {
     setUploadingAvatar(true);
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${userId}.${fileExt}`;
-    const uploadResponse = await fetch(
-      `${supabaseUrl}/storage/v1/object/avatars/${fileName}`,
-      {
-        method: 'POST',
-        headers: {
-          apikey: supabaseKey,
-          Authorization: `Bearer ${token}`,
-          'Content-Type': file.type,
-          'x-upsert': 'true',
-        },
-        body: file,
-      }
-    );
-    if (uploadResponse.ok) {
-      const newAvatarUrl = `${supabaseUrl}/storage/v1/object/public/avatars/${fileName}?t=${Date.now()}`;
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('userId', userId);
+
+    const response = await fetch('/api/upload-avatar', {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (response.ok) {
+      const { url } = await response.json();
       await fetch(`${supabaseUrl}/rest/v1/users?id=eq.${userId}`, {
         method: 'PATCH',
-        headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-        body: JSON.stringify({ avatar_url: newAvatarUrl }),
+        headers: {
+          apikey: supabaseKey,
+          Authorization: `Bearer ${supabaseKey}`,
+          'Content-Type': 'application/json',
+          Prefer: 'return=minimal',
+        },
+        body: JSON.stringify({ avatar_url: url }),
       });
-      onAvatarChange(newAvatarUrl);
+      onAvatarChange(url);
       setProfileMessage('Profilbild erfolgreich gespeichert!');
     } else {
-      const errorText = await uploadResponse.text();
-      setProfileMessage(`Fehler: ${uploadResponse.status} - ${errorText}`);
+      const { error } = await response.json();
+      setProfileMessage(`Fehler beim Upload: ${error}`);
     }
+
     setUploadingAvatar(false);
     setTimeout(() => setProfileMessage(''), 5000);
   }
