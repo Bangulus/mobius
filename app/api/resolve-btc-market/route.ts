@@ -5,9 +5,9 @@ const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
 async function getBtcPrice(): Promise<number | null> {
   try {
-    const res = await fetch('https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT');
+    const res = await fetch('https://api.coinbase.com/v2/prices/BTC-USD/spot');
     const data = await res.json();
-    return parseFloat(data.price);
+    return parseFloat(data.data.amount);
   } catch {
     return null;
   }
@@ -19,7 +19,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'marketId fehlt' }, { status: 400 });
   }
 
-  // Markt laden
   const marketRes = await fetch(`${supabaseUrl}/rest/v1/markets?id=eq.${marketId}&select=*`, {
     headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` },
   });
@@ -34,7 +33,6 @@ export async function POST(req: NextRequest) {
 
   const resolution = endPrice >= market.start_price ? 'yes' : 'no';
 
-  // end_price speichern
   await fetch(`${supabaseUrl}/rest/v1/markets?id=eq.${marketId}`, {
     method: 'PATCH',
     headers: {
@@ -46,7 +44,6 @@ export async function POST(req: NextRequest) {
     body: JSON.stringify({ end_price: endPrice }),
   });
 
-  // resolve_market aufrufen
   const resolveRes = await fetch(`${supabaseUrl}/rest/v1/rpc/resolve_market`, {
     method: 'POST',
     headers: {
