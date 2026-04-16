@@ -26,7 +26,6 @@ export default function MarketPage() {
   // BTC Live
   const [livePrice, setLivePrice] = useState<number | null>(null);
   const [displayPrice, setDisplayPrice] = useState<number | null>(null);
-  const [prevPrice, setPrevPrice] = useState<number | null>(null);
   const [nextPrice, setNextPrice] = useState<number | null>(null);
   const [priceHistory, setPriceHistory] = useState<{ time: number; price: number }[]>([]);
   const [now, setNow] = useState(Date.now());
@@ -81,7 +80,8 @@ export default function MarketPage() {
 
   async function fetchLivePrice() {
     try {
-      const res = await fetch('https://api.coinbase.com/v2/prices/BTC-USD/spot');
+      const coin = market?.coin ?? 'BTC';
+      const res = await fetch(`https://api.coinbase.com/v2/prices/${coin}-USD/spot`);
       const data = await res.json();
       const price = parseFloat(data.data.amount);
       setNextPrice(price);
@@ -153,30 +153,34 @@ export default function MarketPage() {
     };
   }
 
-  function renderBtcChart() {
+  function renderChart() {
     if (priceHistory.length < 2 || !market?.start_price) return null;
 
     const width = 600;
     const height = 160;
     const padL = 70;
-    const padR = 20;
+    const padR = 30;
     const padT = 20;
     const padB = 30;
 
-    const prices = priceHistory.map(p => p.price);
+    const historyWithLive = livePrice
+      ? [...priceHistory.slice(0, -1), { time: Date.now(), price: livePrice }]
+      : priceHistory;
+
+    const prices = historyWithLive.map(p => p.price);
     const allPrices = [...prices, market.start_price];
     const minP = Math.min(...allPrices) - 20;
     const maxP = Math.max(...allPrices) + 20;
 
-    const xScale = (i: number) => padL + (i / (priceHistory.length - 1)) * (width - padL - padR);
+    const xScale = (i: number) => padL + (i / Math.max(historyWithLive.length - 1, 1)) * (width - padL - padR);
     const yScale = (p: number) => padT + ((maxP - p) / (maxP - minP)) * (height - padT - padB);
 
-    const linePath = priceHistory
+    const linePath = historyWithLive
       .map((p, i) => `${i === 0 ? 'M' : 'L'}${xScale(i).toFixed(1)},${yScale(p.price).toFixed(1)}`)
       .join(' ');
 
     const targetY = yScale(market.start_price).toFixed(1);
-    const currentPrice = priceHistory[priceHistory.length - 1].price;
+    const currentPrice = historyWithLive[historyWithLive.length - 1].price;
     const isUp = currentPrice >= market.start_price;
 
     const ySteps = 4;
@@ -185,7 +189,7 @@ export default function MarketPage() {
       return { val, y: yScale(val) };
     });
 
-    const xLabels = priceHistory
+    const xLabels = historyWithLive
       .filter((_, i) => i % 5 === 0)
       .map((p, i) => ({
         label: new Date(p.time).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }),
@@ -216,7 +220,7 @@ export default function MarketPage() {
           <text x={width - padR + 2} y={Number(targetY) + 4} fontSize="9" fill="#9ca3af">Ziel</text>
           <path d={linePath} fill="none" stroke={isUp ? '#16a34a' : '#dc2626'} strokeWidth="2" strokeLinejoin="round" />
           <circle
-            cx={xScale(priceHistory.length - 1)}
+            cx={xScale(historyWithLive.length - 1)}
             cy={yScale(currentPrice)}
             r="4"
             fill={isUp ? '#16a34a' : '#dc2626'}
@@ -303,6 +307,7 @@ export default function MarketPage() {
   const countdown = isBtcAuto ? formatCountdown(market.closes_at) : null;
   const priceDiff = livePrice && market.start_price ? livePrice - market.start_price : null;
   const isUp = priceDiff !== null ? priceDiff >= 0 : null;
+  const coinLabel = market.coin ?? 'BTC';
 
   return (
     <main style={{ fontFamily: 'sans-serif', background: '#f9fafb', minHeight: '100vh' }}>
@@ -366,12 +371,12 @@ export default function MarketPage() {
                 <div style={{ border: '1px solid #e5e7eb', borderRadius: '8px', overflow: 'hidden', background: '#f9fafb', padding: '0.5rem' }}>
                   {priceHistory.length < 2
                     ? <div style={{ padding: '2rem', textAlign: 'center', color: '#9ca3af', fontSize: '0.85rem' }}>⏳ Sammle Preisdaten...</div>
-                    : renderBtcChart()
+                    : renderChart()
                   }
                 </div>
 
                 <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '0.5rem' }}>
-                  Quelle: Coinbase BTC/USD · Aktualisierung alle 10 Sekunden
+                  Quelle: Coinbase {coinLabel}/USD · Aktualisierung alle 10 Sekunden
                 </div>
               </div>
             )}
