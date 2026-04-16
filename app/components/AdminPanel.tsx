@@ -5,6 +5,13 @@ import { useState, useEffect } from 'react';
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
+const COINS = [
+  { id: 'BTC', label: '₿ Bitcoin', color: '#f59e0b' },
+  { id: 'ETH', label: 'Ξ Ethereum', color: '#6366f1' },
+  { id: 'SOL', label: '◎ Solana', color: '#9945ff' },
+  { id: 'XRP', label: '✕ XRP', color: '#00aae4' },
+];
+
 interface Props {
   userId: string;
   openMarkets: any[];
@@ -39,13 +46,17 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
     setBtcMarkets(await res.json());
   }
 
-  async function createBtcMarket() {
+  async function createCryptoMarket(coin: string) {
     setBtcCreating(true);
     setBtcMessage('');
-    const res = await fetch('/api/create-btc-market', { method: 'POST' });
+    const res = await fetch('/api/create-crypto-market', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ coin }),
+    });
     const data = await res.json();
     if (data.success) {
-      setBtcMessage(`✅ Markt erstellt! Startpreis: $${data.startPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
+      setBtcMessage(`✅ ${coin}-Markt erstellt! Startpreis: $${Number(data.startPrice).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
       loadBtcMarkets();
       onMarketResolved();
     } else {
@@ -54,10 +65,10 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
     setBtcCreating(false);
   }
 
-  async function resolveBtcMarket(marketId: string) {
+  async function resolveCryptoMarket(marketId: string) {
     setResolvingBtc(marketId);
     setBtcMessage('');
-    const res = await fetch('/api/resolve-btc-market', {
+    const res = await fetch('/api/resolve-crypto-market', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ marketId }),
@@ -152,24 +163,26 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
           Aufgelöste Märkte
         </button>
         <button onClick={() => setAdminTab('btc')} style={{ padding: '0.5rem 1.5rem', background: adminTab === 'btc' ? '#f59e0b' : '#eee', color: adminTab === 'btc' ? 'white' : '#333', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '1rem' }}>
-          ₿ BTC-Märkte
+          🪙 Krypto-Märkte
         </button>
       </div>
 
       {adminTab === 'btc' && (
         <div>
           <div style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '1.5rem', marginBottom: '1.5rem' }}>
-            <h3 style={{ margin: '0 0 1rem', fontSize: '1rem' }}>Neuen 15-Minuten BTC-Markt starten</h3>
-            <p style={{ fontSize: '0.85rem', color: '#666', marginBottom: '1rem' }}>
-              Holt aktuellen BTC/USD-Preis von Binance, erstellt Markt und startet 15-Minuten-Timer.
-            </p>
-            <button
-              onClick={createBtcMarket}
-              disabled={btcCreating}
-              style={{ padding: '0.6rem 1.5rem', background: '#f59e0b', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '1rem', fontWeight: 'bold' }}
-            >
-              {btcCreating ? '⏳ Wird erstellt...' : '₿ BTC-Markt starten'}
-            </button>
+            <h3 style={{ margin: '0 0 1rem', fontSize: '1rem' }}>Neuen 3-Minuten Krypto-Markt starten</h3>
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+              {COINS.map((c) => (
+                <button
+                  key={c.id}
+                  onClick={() => createCryptoMarket(c.id)}
+                  disabled={btcCreating}
+                  style={{ padding: '0.6rem 1.2rem', background: c.color, color: 'white', border: 'none', borderRadius: '8px', cursor: btcCreating ? 'not-allowed' : 'pointer', fontSize: '0.95rem', fontWeight: 'bold', opacity: btcCreating ? 0.6 : 1 }}
+                >
+                  {btcCreating ? '⏳...' : c.label}
+                </button>
+              ))}
+            </div>
             {btcMessage && (
               <p style={{ marginTop: '0.75rem', fontSize: '0.9rem', color: btcMessage.startsWith('✅') ? '#16a34a' : '#dc2626' }}>
                 {btcMessage}
@@ -177,15 +190,21 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
             )}
           </div>
 
-          <h3 style={{ fontSize: '1rem', marginBottom: '0.75rem' }}>Laufende & vergangene BTC-Märkte</h3>
-          {btcMarkets.length === 0 && <p style={{ color: '#666', fontSize: '0.9rem' }}>Noch keine BTC-Märkte erstellt.</p>}
+          <h3 style={{ fontSize: '1rem', marginBottom: '0.75rem' }}>Laufende & vergangene Krypto-Märkte</h3>
+          {btcMarkets.length === 0 && <p style={{ color: '#666', fontSize: '0.9rem' }}>Noch keine Krypto-Märkte erstellt.</p>}
           {btcMarkets.map((market: any) => {
             const isOpen = market.status === 'open';
             const expired = new Date(market.closes_at).getTime() < now;
+            const coinData = COINS.find(c => c.id === (market.coin ?? 'BTC'));
             return (
               <div key={market.id} style={{ border: '1px solid #e5e7eb', borderRadius: '10px', padding: '1rem', marginBottom: '0.75rem', background: 'white' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
-                  <div style={{ fontWeight: '600', fontSize: '0.9rem' }}>{market.short_label}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <span style={{ padding: '0.15rem 0.5rem', borderRadius: '4px', background: coinData?.color ?? '#888', color: 'white', fontSize: '0.75rem', fontWeight: 'bold' }}>
+                      {market.coin ?? 'BTC'}
+                    </span>
+                    <span style={{ fontWeight: '600', fontSize: '0.9rem' }}>{market.short_label}</span>
+                  </div>
                   <span style={{ fontSize: '0.75rem', padding: '0.2rem 0.6rem', borderRadius: '20px', background: isOpen ? '#dcfce7' : '#f3f4f6', color: isOpen ? '#16a34a' : '#666' }}>
                     {isOpen ? 'Offen' : `Aufgelöst: ${market.resolution?.toUpperCase()}`}
                   </span>
@@ -197,7 +216,7 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
                 </div>
                 {isOpen && (
                   <button
-                    onClick={() => resolveBtcMarket(market.id)}
+                    onClick={() => resolveCryptoMarket(market.id)}
                     disabled={resolvingBtc === market.id}
                     style={{ padding: '0.3rem 1rem', background: expired ? '#dc2626' : '#64748b', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem' }}
                   >
