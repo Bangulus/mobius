@@ -25,10 +25,14 @@ export default function MarketPage() {
 
   // BTC Live
   const [livePrice, setLivePrice] = useState<number | null>(null);
+  const [displayPrice, setDisplayPrice] = useState<number | null>(null);
+  const [prevPrice, setPrevPrice] = useState<number | null>(null);
+  const [nextPrice, setNextPrice] = useState<number | null>(null);
   const [priceHistory, setPriceHistory] = useState<{ time: number; price: number }[]>([]);
   const [now, setNow] = useState(Date.now());
   const priceIntervalRef = useRef<any>(null);
   const countdownIntervalRef = useRef<any>(null);
+  const interpolateRef = useRef<any>(null);
 
   useEffect(() => {
     const params2 = new URLSearchParams(window.location.search);
@@ -51,18 +55,39 @@ export default function MarketPage() {
     return () => {
       clearInterval(priceIntervalRef.current);
       clearInterval(countdownIntervalRef.current);
+      clearInterval(interpolateRef.current);
     };
   }, [market?.id]);
+
+  useEffect(() => {
+    if (nextPrice === null) return;
+    const start = displayPrice ?? nextPrice;
+    const end = nextPrice;
+    const duration = 10000;
+    const startTime = Date.now();
+
+    clearInterval(interpolateRef.current);
+    interpolateRef.current = setInterval(() => {
+      const elapsed = Date.now() - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      const interpolated = start + (end - start) * progress;
+      setDisplayPrice(interpolated);
+      setLivePrice(interpolated);
+      if (progress >= 1) clearInterval(interpolateRef.current);
+    }, 1000);
+
+    return () => clearInterval(interpolateRef.current);
+  }, [nextPrice]);
 
   async function fetchLivePrice() {
     try {
       const res = await fetch('https://api.coinbase.com/v2/prices/BTC-USD/spot');
       const data = await res.json();
       const price = parseFloat(data.data.amount);
-      setLivePrice(price);
+      setNextPrice(price);
       setPriceHistory(prev => {
         const next = [...prev, { time: Date.now(), price }];
-        return next.slice(-30); // max 30 Datenpunkte
+        return next.slice(-30);
       });
     } catch {
       // silent fail
@@ -146,46 +171,41 @@ export default function MarketPage() {
     const xScale = (i: number) => padL + (i / (priceHistory.length - 1)) * (width - padL - padR);
     const yScale = (p: number) => padT + ((maxP - p) / (maxP - minP)) * (height - padT - padB);
 
-    const linePath = priceHistory.map((p, i) => `${i === 0 ? 'M' : 'L'}${xScale(i).toFixed(1)},${yScale(p.price).toFixed(1)}`).join(' ');
+    const linePath = priceHistory
+      .map((p, i) => `${i === 0 ? 'M' : 'L'}${xScale(i).toFixed(1)},${yScale(p.price).toFixed(1)}`)
+      .join(' ');
 
     const targetY = yScale(market.start_price).toFixed(1);
     const currentPrice = priceHistory[priceHistory.length - 1].price;
     const isUp = currentPrice >= market.start_price;
 
-    // Y-Achse Labels
     const ySteps = 4;
     const yLabels = Array.from({ length: ySteps + 1 }, (_, i) => {
       const val = minP + ((maxP - minP) * i) / ySteps;
       return { val, y: yScale(val) };
     });
 
-    // X-Achse Labels (Zeit)
-    const xLabels = priceHistory.filter((_, i) => i % 5 === 0).map((p, i) => ({
-      label: new Date(p.time).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }),
-      x: xScale(i * 5),
-    }));
+    const xLabels = priceHistory
+      .filter((_, i) => i % 5 === 0)
+      .map((p, i) => ({
+        label: new Date(p.time).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }),
+        x: xScale(i * 5),
+      }));
 
     return (
       <div style={{ overflowX: 'auto' }}>
         <svg viewBox={`0 0 ${width} ${height}`} style={{ width: '100%', height: 'auto', display: 'block' }}>
-          {/* Hintergrund */}
           <rect x="0" y="0" width={width} height={height} fill="#f9fafb" rx="8" />
-
-          {/* Y-Achse Labels */}
           {yLabels.map((l, i) => (
             <text key={i} x={padL - 8} y={l.y + 4} textAnchor="end" fontSize="10" fill="#9ca3af">
               ${Math.round(l.val).toLocaleString()}
             </text>
           ))}
-
-          {/* X-Achse Labels */}
           {xLabels.map((l, i) => (
             <text key={i} x={l.x} y={height - 4} textAnchor="middle" fontSize="9" fill="#9ca3af">
               {l.label}
             </text>
           ))}
-
-          {/* Zielpreis-Linie (gestrichelt) */}
           <line
             x1={padL} y1={targetY}
             x2={width - padR} y2={targetY}
@@ -194,11 +214,7 @@ export default function MarketPage() {
             strokeDasharray="6,4"
           />
           <text x={width - padR + 2} y={Number(targetY) + 4} fontSize="9" fill="#9ca3af">Ziel</text>
-
-          {/* Preislinie */}
           <path d={linePath} fill="none" stroke={isUp ? '#16a34a' : '#dc2626'} strokeWidth="2" strokeLinejoin="round" />
-
-          {/* Aktueller Punkt */}
           <circle
             cx={xScale(priceHistory.length - 1)}
             cy={yScale(currentPrice)}
@@ -290,7 +306,6 @@ export default function MarketPage() {
 
   return (
     <main style={{ fontFamily: 'sans-serif', background: '#f9fafb', minHeight: '100vh' }}>
-      {/* Header */}
       <div style={{ background: 'white', borderBottom: '1px solid #e5e7eb', padding: '1rem 2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <button
           onClick={() => router.push(`/${tokenParam}`)}
@@ -307,7 +322,6 @@ export default function MarketPage() {
       </div>
 
       <div style={{ maxWidth: '1100px', margin: '0 auto', padding: '2rem', display: 'grid', gridTemplateColumns: '1fr 360px', gap: '2rem', alignItems: 'start' }}>
-        {/* Links */}
         <div>
           <div style={{ background: 'white', borderRadius: '12px', padding: '2rem', marginBottom: '1.5rem', border: '1px solid #e5e7eb' }}>
             {market.group_title && (
@@ -317,10 +331,8 @@ export default function MarketPage() {
               {market.group_title || market.question}
             </h1>
 
-            {/* BTC Live Panel */}
             {isBtcAuto && (
               <div style={{ marginBottom: '1.5rem' }}>
-                {/* Preisleiste */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '2rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
                   <div>
                     <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginBottom: '0.2rem' }}>Zielpreis</div>
@@ -351,7 +363,6 @@ export default function MarketPage() {
                   </div>
                 </div>
 
-                {/* Chart */}
                 <div style={{ border: '1px solid #e5e7eb', borderRadius: '8px', overflow: 'hidden', background: '#f9fafb', padding: '0.5rem' }}>
                   {priceHistory.length < 2
                     ? <div style={{ padding: '2rem', textAlign: 'center', color: '#9ca3af', fontSize: '0.85rem' }}>⏳ Sammle Preisdaten...</div>
@@ -365,7 +376,6 @@ export default function MarketPage() {
               </div>
             )}
 
-            {/* Gruppenmarkt-Liste */}
             {groupMarkets.length > 1 && (
               <div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: '0.5rem', alignItems: 'center', padding: '0.5rem 0.75rem', borderBottom: '1px solid #f3f4f6', marginBottom: '0.5rem' }}>
@@ -405,7 +415,6 @@ export default function MarketPage() {
               </div>
             )}
 
-            {/* Einzelmarkt */}
             {groupMarkets.length <= 1 && !isBtcAuto && (
               <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                 <span style={{ fontSize: '2.5rem', fontWeight: 'bold' }}>{percentageYes}%</span>
@@ -415,7 +424,6 @@ export default function MarketPage() {
           </div>
         </div>
 
-        {/* Rechts: Trading Panel */}
         <div style={{ background: 'white', borderRadius: '12px', padding: '1.5rem', border: '1px solid #e5e7eb', position: 'sticky', top: '1rem' }}>
           {selectedMarket && (
             <div style={{ marginBottom: '1rem', fontWeight: 'bold', fontSize: '1rem', color: '#111' }}>
