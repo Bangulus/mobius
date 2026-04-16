@@ -27,6 +27,12 @@ export default function Page() {
   const [avatarUrl, setAvatarUrl] = useState('');
   const [view, setView] = useState<'markets' | 'portfolio' | 'leaderboard' | 'admin' | 'profile'>('markets');
   const [activeCategory, setActiveCategory] = useState('Trends');
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    const interval = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -159,6 +165,14 @@ export default function Page() {
     return expYes / (expYes + expNo);
   }
 
+  function formatCountdown(closesAt: string) {
+    const diff = new Date(closesAt).getTime() - now;
+    if (diff <= 0) return { label: '⏰ Abgelaufen', color: '#dc2626' };
+    const mins = Math.floor(diff / 60000);
+    const secs = Math.floor((diff % 60000) / 1000);
+    return { label: `⏱ ${mins}:${secs.toString().padStart(2, '0')}`, color: '#f59e0b' };
+  }
+
   function groupMarkets(markets: any[]) {
     const groups: { [key: string]: { title: string; markets: any[]; isDisplay: boolean } } = {};
     markets.forEach((market) => {
@@ -183,52 +197,31 @@ export default function Page() {
         <div style={{ background: '#0f3460', color: 'white', padding: '0.6rem 1rem', fontWeight: 'bold', fontSize: '1rem' }}>
           {group.title}
         </div>
-
         <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', padding: '0.4rem 1rem', fontSize: '0.75rem', color: '#9ca3af', fontWeight: '600', borderBottom: '1px solid #f3f4f6' }}>
           <span>Option</span>
           <span>Wahrsch.</span>
         </div>
-
         {group.markets.map((market, i) => {
           const prob = normProbs[i];
           const probPct = Math.round(prob * 100);
           const yesPrice = Math.round(prob * 100);
           const noPrice = 100 - yesPrice;
-
           return (
-            <div
-              key={market.id}
-              style={{
-                display: 'grid',
-                gridTemplateColumns: '1fr auto',
-                alignItems: 'center',
-                padding: '0.6rem 1rem',
-                borderBottom: '1px solid #f3f4f6',
-                background: 'white',
-              }}
-            >
+            <div key={market.id} style={{ display: 'grid', gridTemplateColumns: '1fr auto', alignItems: 'center', padding: '0.6rem 1rem', borderBottom: '1px solid #f3f4f6', background: 'white' }}>
               <span
                 onClick={() => window.location.href = `/markets/${market.id}${tokenParam}`}
                 style={{ fontWeight: '500', fontSize: '0.9rem', color: '#111', cursor: 'pointer' }}
-                title="Zur Marktdetailseite"
               >
                 {market.short_label || market.question}
               </span>
-
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <span style={{ fontWeight: 'bold', fontSize: '0.9rem', color: '#111', minWidth: '2.5rem', textAlign: 'right' }}>
                   {probPct}%
                 </span>
-                <button
-                  onClick={() => window.location.href = `/markets/${market.id}${tokenParam}`}
-                  style={{ background: '#16a34a', color: 'white', border: 'none', borderRadius: '4px', padding: '0.25rem 0.6rem', fontSize: '0.75rem', fontWeight: 'bold', cursor: 'pointer' }}
-                >
+                <button onClick={() => window.location.href = `/markets/${market.id}${tokenParam}`} style={{ background: '#16a34a', color: 'white', border: 'none', borderRadius: '4px', padding: '0.25rem 0.6rem', fontSize: '0.75rem', fontWeight: 'bold', cursor: 'pointer' }}>
                   Ja {yesPrice}¢
                 </button>
-                <button
-                  onClick={() => window.location.href = `/markets/${market.id}${tokenParam}`}
-                  style={{ background: '#dc2626', color: 'white', border: 'none', borderRadius: '4px', padding: '0.25rem 0.6rem', fontSize: '0.75rem', fontWeight: 'bold', cursor: 'pointer' }}
-                >
+                <button onClick={() => window.location.href = `/markets/${market.id}${tokenParam}`} style={{ background: '#dc2626', color: 'white', border: 'none', borderRadius: '4px', padding: '0.25rem 0.6rem', fontSize: '0.75rem', fontWeight: 'bold', cursor: 'pointer' }}>
                   Nein {noPrice}¢
                 </button>
               </div>
@@ -254,22 +247,30 @@ export default function Page() {
             </h2>
           )}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '0.75rem' }}>
-            {group.markets.map((market: any) => (
-              <div key={market.id} style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '0.75rem', background: 'white', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-                <div style={{ fontWeight: '600', fontSize: '0.9rem', marginBottom: '0.5rem', color: '#111' }}>
-                  {market.short_label || market.question}
+            {group.markets.map((market: any) => {
+              const countdown = market.is_auto && market.closes_at ? formatCountdown(market.closes_at) : null;
+              return (
+                <div key={market.id} style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '0.75rem', background: 'white', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                  <div style={{ fontWeight: '600', fontSize: '0.9rem', marginBottom: '0.25rem', color: '#111' }}>
+                    {market.short_label || market.question}
+                  </div>
+                  {countdown && (
+                    <div style={{ fontSize: '0.75rem', fontWeight: 'bold', color: countdown.color, marginBottom: '0.5rem' }}>
+                      {countdown.label}
+                    </div>
+                  )}
+                  <BetButton
+                    marketId={market.id}
+                    currentQYes={market.q_yes}
+                    currentQNo={market.q_no}
+                    b={market.b}
+                    userId={userId}
+                    token={token}
+                    onBalanceUpdate={(newBalance) => setBalance(newBalance)}
+                  />
                 </div>
-                <BetButton
-                  marketId={market.id}
-                  currentQYes={market.q_yes}
-                  currentQNo={market.q_no}
-                  b={market.b}
-                  userId={userId}
-                  token={token}
-                  onBalanceUpdate={(newBalance) => setBalance(newBalance)}
-                />
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       );
