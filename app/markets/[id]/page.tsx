@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -23,6 +23,13 @@ export default function MarketPage() {
   const [result, setResult] = useState('');
   const [selectedMarketId, setSelectedMarketId] = useState(marketId);
 
+  // BTC Live
+  const [livePrice, setLivePrice] = useState<number | null>(null);
+  const [priceHistory, setPriceHistory] = useState<{ time: number; price: number }[]>([]);
+  const [now, setNow] = useState(Date.now());
+  const priceIntervalRef = useRef<any>(null);
+  const countdownIntervalRef = useRef<any>(null);
+
   useEffect(() => {
     const params2 = new URLSearchParams(window.location.search);
     const uid = params2.get('user_id');
@@ -34,6 +41,33 @@ export default function MarketPage() {
     }
     loadMarket();
   }, [marketId]);
+
+  useEffect(() => {
+    if (market?.is_auto && market?.status === 'open') {
+      fetchLivePrice();
+      priceIntervalRef.current = setInterval(fetchLivePrice, 10000);
+      countdownIntervalRef.current = setInterval(() => setNow(Date.now()), 1000);
+    }
+    return () => {
+      clearInterval(priceIntervalRef.current);
+      clearInterval(countdownIntervalRef.current);
+    };
+  }, [market?.id]);
+
+  async function fetchLivePrice() {
+    try {
+      const res = await fetch('https://api.coinbase.com/v2/prices/BTC-USD/spot');
+      const data = await res.json();
+      const price = parseFloat(data.data.amount);
+      setLivePrice(price);
+      setPriceHistory(prev => {
+        const next = [...prev, { time: Date.now(), price }];
+        return next.slice(-30); // max 30 Datenpunkte
+      });
+    } catch {
+      // silent fail
+    }
+  }
 
   async function loadMarket() {
     const response = await fetch(
@@ -77,11 +111,103 @@ export default function MarketPage() {
     return expYes / (expYes + expNo);
   }
 
-  // Normalisierte Wahrscheinlichkeiten für Gruppenmarkt
   function getNormalizedProbs(markets: any[]) {
     const rawProbs = markets.map(m => calcProb(m.q_yes, m.q_no, m.b));
     const total = rawProbs.reduce((a, b) => a + b, 0);
     return rawProbs.map(p => p / total);
+  }
+
+  function formatCountdown(closesAt: string) {
+    const diff = new Date(closesAt).getTime() - now;
+    if (diff <= 0) return { label: '00:00', color: '#dc2626' };
+    const mins = Math.floor(diff / 60000);
+    const secs = Math.floor((diff % 60000) / 1000);
+    return {
+      label: `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`,
+      color: diff < 60000 ? '#dc2626' : '#f59e0b',
+    };
+  }
+
+  function renderBtcChart() {
+    if (priceHistory.length < 2 || !market?.start_price) return null;
+
+    const width = 600;
+    const height = 160;
+    const padL = 70;
+    const padR = 20;
+    const padT = 20;
+    const padB = 30;
+
+    const prices = priceHistory.map(p => p.price);
+    const allPrices = [...prices, market.start_price];
+    const minP = Math.min(...allPrices) - 20;
+    const maxP = Math.max(...allPrices) + 20;
+
+    const xScale = (i: number) => padL + (i / (priceHistory.length - 1)) * (width - padL - padR);
+    const yScale = (p: number) => padT + ((maxP - p) / (maxP - minP)) * (height - padT - padB);
+
+    const linePath = priceHistory.map((p, i) => `${i === 0 ? 'M' : 'L'}${xScale(i).toFixed(1)},${yScale(p.price).toFixed(1)}`).join(' ');
+
+    const targetY = yScale(market.start_price).toFixed(1);
+    const currentPrice = priceHistory[priceHistory.length - 1].price;
+    const isUp = currentPrice >= market.start_price;
+
+    // Y-Achse Labels
+    const ySteps = 4;
+    const yLabels = Array.from({ length: ySteps + 1 }, (_, i) => {
+      const val = minP + ((maxP - minP) * i) / ySteps;
+      return { val, y: yScale(val) };
+    });
+
+    // X-Achse Labels (Zeit)
+    const xLabels = priceHistory.filter((_, i) => i % 5 === 0).map((p, i) => ({
+      label: new Date(p.time).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }),
+      x: xScale(i * 5),
+    }));
+
+    return (
+      <div style={{ overflowX: 'auto' }}>
+        <svg viewBox={`0 0 ${width} ${height}`} style={{ width: '100%', height: 'auto', display: 'block' }}>
+          {/* Hintergrund */}
+          <rect x="0" y="0" width={width} height={height} fill="#f9fafb" rx="8" />
+
+          {/* Y-Achse Labels */}
+          {yLabels.map((l, i) => (
+            <text key={i} x={padL - 8} y={l.y + 4} textAnchor="end" fontSize="10" fill="#9ca3af">
+              ${Math.round(l.val).toLocaleString()}
+            </text>
+          ))}
+
+          {/* X-Achse Labels */}
+          {xLabels.map((l, i) => (
+            <text key={i} x={l.x} y={height - 4} textAnchor="middle" fontSize="9" fill="#9ca3af">
+              {l.label}
+            </text>
+          ))}
+
+          {/* Zielpreis-Linie (gestrichelt) */}
+          <line
+            x1={padL} y1={targetY}
+            x2={width - padR} y2={targetY}
+            stroke="#d1d5db"
+            strokeWidth="1.5"
+            strokeDasharray="6,4"
+          />
+          <text x={width - padR + 2} y={Number(targetY) + 4} fontSize="9" fill="#9ca3af">Ziel</text>
+
+          {/* Preislinie */}
+          <path d={linePath} fill="none" stroke={isUp ? '#16a34a' : '#dc2626'} strokeWidth="2" strokeLinejoin="round" />
+
+          {/* Aktueller Punkt */}
+          <circle
+            cx={xScale(priceHistory.length - 1)}
+            cy={yScale(currentPrice)}
+            r="4"
+            fill={isUp ? '#16a34a' : '#dc2626'}
+          />
+        </svg>
+      </div>
+    );
   }
 
   const selectedMarket = groupMarkets.find(m => m.id === selectedMarketId) || market;
@@ -91,7 +217,6 @@ export default function MarketPage() {
   const percentageYes = Math.round(prob * 100);
   const percentageNo = 100 - percentageYes;
 
-  // Normalisierte % für ausgewählten Markt
   const selectedIndex = groupMarkets.findIndex(m => m.id === selectedMarketId);
   const normalizedPctYes = normalizedProbs && selectedIndex >= 0
     ? Math.round(normalizedProbs[selectedIndex] * 100)
@@ -108,7 +233,6 @@ export default function MarketPage() {
     if (einsatz <= 0 || !userId) return;
     setLoading(true);
     setResult('');
-
     const priceBefore = prob;
     const response = await fetch(`${supabaseUrl}/rest/v1/trades`, {
       method: 'POST',
@@ -128,14 +252,12 @@ export default function MarketPage() {
         user_id: userId,
       }),
     });
-
     if (response.ok) {
       await fetch(`${supabaseUrl}/rest/v1/markets?id=eq.${selectedMarketId}`, {
         method: 'PATCH',
         headers: { apikey: supabaseKey, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
         body: JSON.stringify({ q_yes: newQYes, q_no: newQNo }),
       });
-
       const userResponse = await fetch(`${supabaseUrl}/rest/v1/users?id=eq.${userId}&select=balance`, {
         headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` },
       });
@@ -160,6 +282,11 @@ export default function MarketPage() {
   const tokenParam = searchParams.get('token') ? `?token=${searchParams.get('token')}&user_id=${searchParams.get('user_id')}` : '';
 
   if (!market) return <div style={{ padding: '2rem', fontFamily: 'sans-serif' }}>Lädt...</div>;
+
+  const isBtcAuto = market.is_auto && market.status === 'open';
+  const countdown = isBtcAuto ? formatCountdown(market.closes_at) : null;
+  const priceDiff = livePrice && market.start_price ? livePrice - market.start_price : null;
+  const isUp = priceDiff !== null ? priceDiff >= 0 : null;
 
   return (
     <main style={{ fontFamily: 'sans-serif', background: '#f9fafb', minHeight: '100vh' }}>
@@ -186,9 +313,57 @@ export default function MarketPage() {
             {market.group_title && (
               <div style={{ fontSize: '0.85rem', color: '#888', marginBottom: '0.5rem' }}>{market.group_title}</div>
             )}
-            <h1 style={{ fontSize: '1.8rem', fontWeight: 'bold', margin: '0 0 1.5rem', color: '#111' }}>
+            <h1 style={{ fontSize: '1.4rem', fontWeight: 'bold', margin: '0 0 1.5rem', color: '#111' }}>
               {market.group_title || market.question}
             </h1>
+
+            {/* BTC Live Panel */}
+            {isBtcAuto && (
+              <div style={{ marginBottom: '1.5rem' }}>
+                {/* Preisleiste */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '2rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+                  <div>
+                    <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginBottom: '0.2rem' }}>Zielpreis</div>
+                    <div style={{ fontSize: '1.4rem', fontWeight: 'bold', color: '#111' }}>
+                      ${Number(market.start_price).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginBottom: '0.2rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                      Aktueller Preis
+                      {priceDiff !== null && (
+                        <span style={{ color: isUp ? '#16a34a' : '#dc2626', fontWeight: 'bold' }}>
+                          {isUp ? '▲' : '▼'} ${Math.abs(priceDiff).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: '1.4rem', fontWeight: 'bold', color: isUp === null ? '#111' : isUp ? '#16a34a' : '#dc2626' }}>
+                      {livePrice
+                        ? `$${livePrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                        : '...'}
+                    </div>
+                  </div>
+                  <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
+                    <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginBottom: '0.2rem' }}>Verbleibend</div>
+                    <div style={{ fontSize: '2rem', fontWeight: 'bold', color: countdown?.color, letterSpacing: '0.05em' }}>
+                      {countdown?.label}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Chart */}
+                <div style={{ border: '1px solid #e5e7eb', borderRadius: '8px', overflow: 'hidden', background: '#f9fafb', padding: '0.5rem' }}>
+                  {priceHistory.length < 2
+                    ? <div style={{ padding: '2rem', textAlign: 'center', color: '#9ca3af', fontSize: '0.85rem' }}>⏳ Sammle Preisdaten...</div>
+                    : renderBtcChart()
+                  }
+                </div>
+
+                <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '0.5rem' }}>
+                  Quelle: Coinbase BTC/USD · Aktualisierung alle 10 Sekunden
+                </div>
+              </div>
+            )}
 
             {/* Gruppenmarkt-Liste */}
             {groupMarkets.length > 1 && (
@@ -231,7 +406,7 @@ export default function MarketPage() {
             )}
 
             {/* Einzelmarkt */}
-            {groupMarkets.length <= 1 && (
+            {groupMarkets.length <= 1 && !isBtcAuto && (
               <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                 <span style={{ fontSize: '2.5rem', fontWeight: 'bold' }}>{percentageYes}%</span>
                 <span style={{ color: '#888', fontSize: '1rem' }}>Wahrscheinlichkeit</span>
