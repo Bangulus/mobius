@@ -1,516 +1,429 @@
-'use client';
+'use client'
 
-import { useState, useEffect, useRef } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useEffect, useState, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
+import AdminPanel from './components/AdminPanel'
+import ProfileView from './components/ProfileView'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+const SUPABASE_URL = 'https://zrujclkigcrlrvpgxrqx.supabase.co'
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpydWpjbGtpZ2NybHJ2cGd4cnF4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU4MjQ0NTEsImV4cCI6MjA5MTQwMDQ1MX0.JpuZxskptogAKtw5cUR3gJOAcnh3BFh1NSvfVEtN8IQ'
 
-export default function MarketPage() {
-  const params = useParams();
-  const router = useRouter();
-  const marketId = params.id as string;
+async function dbGet(table: string, params: string) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}`, {
+    headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
+    cache: 'no-store',
+  })
+  return res.json()
+}
 
-  const [market, setMarket] = useState<any>(null);
-  const [groupMarkets, setGroupMarkets] = useState<any[]>([]);
-  const [userId, setUserId] = useState('');
-  const [token, setToken] = useState('');
-  const [balance, setBalance] = useState<number | null>(null);
-  const [displayName, setDisplayName] = useState('');
-  const [side, setSide] = useState<'yes' | 'no'>('yes');
-  const [einsatz, setEinsatz] = useState(0);
-  const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState('');
-  const [selectedMarketId, setSelectedMarketId] = useState(marketId);
+interface Market {
+  id: string
+  question: string
+  description?: string
+  status: string
+  b: number
+  q_yes: number
+  q_no: number
+  closes_at: string
+  group_title?: string
+  short_label?: string
+  category?: string
+  resolved: boolean
+  resolution?: string
+  display_group?: string
+  is_auto?: boolean
+  coin?: string
+}
 
-  // BTC Live
-  const [livePrice, setLivePrice] = useState<number | null>(null);
-  const [displayPrice, setDisplayPrice] = useState<number | null>(null);
-  const [nextPrice, setNextPrice] = useState<number | null>(null);
-  const [priceHistory, setPriceHistory] = useState<{ time: number; price: number }[]>([]);
-  const [now, setNow] = useState(Date.now());
-  const priceIntervalRef = useRef<any>(null);
-  const countdownIntervalRef = useRef<any>(null);
-  const interpolateRef = useRef<any>(null);
+interface User {
+  id: string
+  username: string
+  balance: number
+  avatar_url?: string
+}
+
+interface LeaderboardEntry {
+  user_id: string
+  username: string
+  total_balance: number
+  avatar_url?: string
+}
+
+function calcProb(qYes: number, qNo: number, b: number): number {
+  const eYes = Math.exp(qYes / b)
+  const eNo  = Math.exp(qNo  / b)
+  return Math.round((eYes / (eYes + eNo)) * 100)
+}
+
+const CATEGORIES = ['Alle', 'Politik', 'Sport', 'Krypto', 'Entertainment', 'Wirtschaft']
+
+const CAT_CLASS: Record<string, string> = {
+  Politik:       'cat-politik',
+  Sport:         'cat-sport',
+  Krypto:        'cat-krypto',
+  Entertainment: 'cat-entertainment',
+  Wirtschaft:    'cat-wirtschaft',
+}
+
+const AVATAR_COLORS = [
+  { bg: '#eff6ff', color: '#1d4ed8' },
+  { bg: '#f0fdf4', color: '#166534' },
+  { bg: '#fdf4ff', color: '#6b21a8' },
+  { bg: '#fffbeb', color: '#92400e' },
+  { bg: '#f0f9ff', color: '#075985' },
+]
+function avatarColor(str: string) {
+  let h = 0
+  for (let i = 0; i < str.length; i++) h = str.charCodeAt(i) + ((h << 5) - h)
+  return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length]
+}
+
+export default function Home() {
+  const router = useRouter()
+  const [markets, setMarkets]         = useState<Market[]>([])
+  const [user, setUser]               = useState<User | null>(null)
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([])
+  const [category, setCategory]       = useState('Alle')
+  const [view, setView]               = useState<'markets' | 'portfolio' | 'admin' | 'profil'>('markets')
+  const [loading, setLoading]         = useState(true)
+
+  const ADMIN_ID = 'b75edaf4-141d-41f1-9555-887a8ddbac58'
 
   useEffect(() => {
-    const params2 = new URLSearchParams(window.location.search);
-    const uid = params2.get('user_id');
-    const tok = params2.get('token');
-    if (uid && tok) {
-      setUserId(uid);
-      setToken(tok);
-      loadUserData(uid);
-    }
-    loadMarket();
-  }, [marketId]);
+    const params = new URLSearchParams(window.location.search)
+    const token = params.get('token')
+    if (!token) return
+    dbGet('users', `id=eq.${token}&select=*`).then((data) => {
+      if (data?.[0]) setUser(data[0])
+    })
+  }, [])
+
+  const loadMarkets = useCallback(async () => {
+    setLoading(true)
+    const data = await dbGet('markets', 'status=eq.open&select=*&order=created_at.desc')
+    setMarkets(data ?? [])
+    setLoading(false)
+  }, [])
+
+  const loadLeaderboard = useCallback(async () => {
+    const data = await dbGet('users', 'select=id,username,balance,avatar_url&order=balance.desc&limit=10')
+    setLeaderboard(
+      (data ?? []).map((u: User) => ({
+        user_id: u.id,
+        username: u.username,
+        total_balance: u.balance,
+        avatar_url: u.avatar_url,
+      }))
+    )
+  }, [])
 
   useEffect(() => {
-    if (market?.is_auto && market?.status === 'open') {
-      fetchLivePrice();
-      priceIntervalRef.current = setInterval(fetchLivePrice, 10000);
-      countdownIntervalRef.current = setInterval(() => setNow(Date.now()), 1000);
-    }
-    return () => {
-      clearInterval(priceIntervalRef.current);
-      clearInterval(countdownIntervalRef.current);
-      clearInterval(interpolateRef.current);
-    };
-  }, [market?.id]);
+    loadMarkets()
+    loadLeaderboard()
+  }, [loadMarkets, loadLeaderboard])
 
-  useEffect(() => {
-    if (nextPrice === null) return;
-    const start = displayPrice ?? nextPrice;
-    const end = nextPrice;
-    const duration = 10000;
-    const startTime = Date.now();
+  const filteredMarkets = markets.filter((m) =>
+    category === 'Alle' || m.category === category
+  )
 
-    clearInterval(interpolateRef.current);
-    interpolateRef.current = setInterval(() => {
-      const elapsed = Date.now() - startTime;
-      const progress = Math.min(elapsed / duration, 1);
-      const interpolated = start + (end - start) * progress;
-      setDisplayPrice(interpolated);
-      setLivePrice(interpolated);
-      if (progress >= 1) clearInterval(interpolateRef.current);
-    }, 1000);
-
-    return () => clearInterval(interpolateRef.current);
-  }, [nextPrice]);
-
-  async function fetchLivePrice() {
-    try {
-      const coin = market?.coin ?? 'BTC';
-      const res = await fetch(`https://api.coinbase.com/v2/prices/${coin}-USD/spot`);
-      const data = await res.json();
-      const price = parseFloat(data.data.amount);
-      setNextPrice(price);
-      setPriceHistory(prev => {
-        const next = [...prev, { time: Date.now(), price }];
-        return next.slice(-30);
-      });
-    } catch {
-      // silent fail
-    }
-  }
-
-  async function loadMarket() {
-    const response = await fetch(
-      `${supabaseUrl}/rest/v1/markets?id=eq.${marketId}&select=*`,
-      { headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` } }
-    );
-    const data = await response.json();
-    if (data[0]) {
-      setMarket(data[0]);
-      setSelectedMarketId(data[0].id);
-      if (data[0].group_title) {
-        loadGroupMarkets(data[0].group_title);
-      }
-    }
-  }
-
-  async function loadGroupMarkets(groupTitle: string) {
-    const response = await fetch(
-      `${supabaseUrl}/rest/v1/markets?group_title=eq.${encodeURIComponent(groupTitle)}&status=eq.open&select=*`,
-      { headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` } }
-    );
-    const data = await response.json();
-    setGroupMarkets(data);
-  }
-
-  async function loadUserData(uid: string) {
-    const response = await fetch(
-      `${supabaseUrl}/rest/v1/users?id=eq.${uid}&select=*`,
-      { headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` } }
-    );
-    const data = await response.json();
-    if (data[0]) {
-      setBalance(data[0].balance);
-      setDisplayName(data[0].username);
-    }
-  }
-
-  function calcProb(qY: number, qN: number, b: number) {
-    const expYes = Math.exp(qY / b);
-    const expNo = Math.exp(qN / b);
-    return expYes / (expYes + expNo);
-  }
-
-  function getNormalizedProbs(markets: any[]) {
-    const rawProbs = markets.map(m => calcProb(m.q_yes, m.q_no, m.b));
-    const total = rawProbs.reduce((a, b) => a + b, 0);
-    return rawProbs.map(p => p / total);
-  }
-
-  function formatCountdown(closesAt: string) {
-    const diff = new Date(closesAt).getTime() - now;
-    if (diff <= 0) return { label: '00:00', color: '#dc2626' };
-    const mins = Math.floor(diff / 60000);
-    const secs = Math.floor((diff % 60000) / 1000);
-    return {
-      label: `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`,
-      color: diff < 60000 ? '#dc2626' : '#f59e0b',
-    };
-  }
-
-  function renderChart() {
-    if (priceHistory.length < 2 || !market?.start_price) return null;
-
-    const width = 600;
-    const height = 160;
-    const padL = 70;
-    const padR = 30;
-    const padT = 20;
-    const padB = 30;
-
-    const historyWithLive = livePrice
-      ? [...priceHistory.slice(0, -1), { time: Date.now(), price: livePrice }]
-      : priceHistory;
-
-    const prices = historyWithLive.map(p => p.price);
-    const allPrices = [...prices, market.start_price];
-    const minP = Math.min(...allPrices) - 20;
-    const maxP = Math.max(...allPrices) + 20;
-
-    const xScale = (i: number) => padL + (i / Math.max(historyWithLive.length - 1, 1)) * (width - padL - padR);
-    const yScale = (p: number) => padT + ((maxP - p) / (maxP - minP)) * (height - padT - padB);
-
-    const linePath = historyWithLive
-      .map((p, i) => `${i === 0 ? 'M' : 'L'}${xScale(i).toFixed(1)},${yScale(p.price).toFixed(1)}`)
-      .join(' ');
-
-    const targetY = yScale(market.start_price).toFixed(1);
-    const currentPrice = historyWithLive[historyWithLive.length - 1].price;
-    const isUp = currentPrice >= market.start_price;
-
-    const ySteps = 4;
-    const yLabels = Array.from({ length: ySteps + 1 }, (_, i) => {
-      const val = minP + ((maxP - minP) * i) / ySteps;
-      return { val, y: yScale(val) };
-    });
-
-    const xLabels = historyWithLive
-      .filter((_, i) => i % 5 === 0)
-      .map((p, i) => ({
-        label: new Date(p.time).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }),
-        x: xScale(i * 5),
-      }));
-
-    return (
-      <div style={{ overflowX: 'auto' }}>
-        <svg viewBox={`0 0 ${width} ${height}`} style={{ width: '100%', height: 'auto', display: 'block' }}>
-          <rect x="0" y="0" width={width} height={height} fill="#f9fafb" rx="8" />
-          {yLabels.map((l, i) => (
-            <text key={i} x={padL - 8} y={l.y + 4} textAnchor="end" fontSize="10" fill="#9ca3af">
-              ${Math.round(l.val).toLocaleString()}
-            </text>
-          ))}
-          {xLabels.map((l, i) => (
-            <text key={i} x={l.x} y={height - 4} textAnchor="middle" fontSize="9" fill="#9ca3af">
-              {l.label}
-            </text>
-          ))}
-          <line
-            x1={padL} y1={targetY}
-            x2={width - padR} y2={targetY}
-            stroke="#d1d5db"
-            strokeWidth="1.5"
-            strokeDasharray="6,4"
-          />
-          <text x={width - padR + 2} y={Number(targetY) + 4} fontSize="9" fill="#9ca3af">Ziel</text>
-          <path d={linePath} fill="none" stroke={isUp ? '#16a34a' : '#dc2626'} strokeWidth="2" strokeLinejoin="round" />
-          <circle
-            cx={xScale(historyWithLive.length - 1)}
-            cy={yScale(currentPrice)}
-            r="4"
-            fill={isUp ? '#16a34a' : '#dc2626'}
-          />
-        </svg>
-      </div>
-    );
-  }
-
-  const selectedMarket = groupMarkets.find(m => m.id === selectedMarketId) || market;
-  const normalizedProbs = groupMarkets.length > 1 ? getNormalizedProbs(groupMarkets) : null;
-
-  const prob = selectedMarket ? calcProb(selectedMarket.q_yes, selectedMarket.q_no, selectedMarket.b) : 0.5;
-  const percentageYes = Math.round(prob * 100);
-  const percentageNo = 100 - percentageYes;
-
-  const selectedIndex = groupMarkets.findIndex(m => m.id === selectedMarketId);
-  const normalizedPctYes = normalizedProbs && selectedIndex >= 0
-    ? Math.round(normalizedProbs[selectedIndex] * 100)
-    : percentageYes;
-  const normalizedPctNo = 100 - normalizedPctYes;
-
-  const newQYes = side === 'yes' ? (selectedMarket?.q_yes || 0) + einsatz : (selectedMarket?.q_yes || 0);
-  const newQNo = side === 'no' ? (selectedMarket?.q_no || 0) + einsatz : (selectedMarket?.q_no || 0);
-  const priceAfter = selectedMarket ? calcProb(newQYes, newQNo, selectedMarket.b) : 0.5;
-  const cost = einsatz * ((prob + priceAfter) / 2);
-  const gewinn = einsatz - cost;
-
-  async function bet() {
-    if (einsatz <= 0 || !userId) return;
-    setLoading(true);
-    setResult('');
-    const priceBefore = prob;
-    const response = await fetch(`${supabaseUrl}/rest/v1/trades`, {
-      method: 'POST',
-      headers: {
-        apikey: supabaseKey,
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-        Prefer: 'return=minimal',
-      },
-      body: JSON.stringify({
-        market_id: selectedMarketId,
-        type: side === 'yes' ? 'buy_yes' : 'buy_no',
-        shares: einsatz,
-        cost,
-        price_before: priceBefore,
-        price_after: priceAfter,
-        user_id: userId,
-      }),
-    });
-    if (response.ok) {
-      await fetch(`${supabaseUrl}/rest/v1/markets?id=eq.${selectedMarketId}`, {
-        method: 'PATCH',
-        headers: { apikey: supabaseKey, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-        body: JSON.stringify({ q_yes: newQYes, q_no: newQNo }),
-      });
-      const userResponse = await fetch(`${supabaseUrl}/rest/v1/users?id=eq.${userId}&select=balance`, {
-        headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` },
-      });
-      const userData = await userResponse.json();
-      const newBalance = (userData[0]?.balance || 0) - cost;
-      await fetch(`${supabaseUrl}/rest/v1/users?id=eq.${userId}`, {
-        method: 'PATCH',
-        headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-        body: JSON.stringify({ balance: newBalance }),
-      });
-      setBalance(newBalance);
-      setResult('✓ Trade platziert!');
-      loadMarket();
-    } else {
-      setResult('✗ Fehler beim Trade');
-    }
-    setLoading(false);
-    setTimeout(() => setResult(''), 3000);
-  }
-
-  const searchParams = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
-  const tokenParam = searchParams.get('token') ? `?token=${searchParams.get('token')}&user_id=${searchParams.get('user_id')}` : '';
-
-  if (!market) return <div style={{ padding: '2rem', fontFamily: 'sans-serif' }}>Lädt...</div>;
-
-  const isBtcAuto = market.is_auto && market.status === 'open';
-  const countdown = isBtcAuto ? formatCountdown(market.closes_at) : null;
-  const priceDiff = livePrice && market.start_price ? livePrice - market.start_price : null;
-  const isUp = priceDiff !== null ? priceDiff >= 0 : null;
-  const coinLabel = market.coin ?? 'BTC';
+  const token = user?.id ? `?token=${user.id}` : ''
 
   return (
-    <main style={{ fontFamily: 'sans-serif', background: '#f9fafb', minHeight: '100vh' }}>
-      <div style={{ background: 'white', borderBottom: '1px solid #e5e7eb', padding: '1rem 2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <button
-          onClick={() => router.push(`/${tokenParam}`)}
-          style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.5rem', fontWeight: 'bold', color: '#0f3460' }}
-        >
-          ← Möbius
-        </button>
-        {displayName && (
-          <div style={{ textAlign: 'right' }}>
-            <div style={{ fontWeight: 'bold' }}>👤 {displayName}</div>
-            <div style={{ color: '#16a34a', fontWeight: 'bold' }}>💰 {balance?.toLocaleString('de-DE', { minimumFractionDigits: 2 })} D</div>
-          </div>
-        )}
-      </div>
-
-      <div style={{ maxWidth: '1100px', margin: '0 auto', padding: '2rem', display: 'grid', gridTemplateColumns: '1fr 360px', gap: '2rem', alignItems: 'start' }}>
-        <div>
-          <div style={{ background: 'white', borderRadius: '12px', padding: '2rem', marginBottom: '1.5rem', border: '1px solid #e5e7eb' }}>
-            {market.group_title && (
-              <div style={{ fontSize: '0.85rem', color: '#888', marginBottom: '0.5rem' }}>{market.group_title}</div>
-            )}
-            <h1 style={{ fontSize: '1.4rem', fontWeight: 'bold', margin: '0 0 1.5rem', color: '#111' }}>
-              {market.group_title || market.question}
-            </h1>
-
-            {isBtcAuto && (
-              <div style={{ marginBottom: '1.5rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '2rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
-                  <div>
-                    <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginBottom: '0.2rem' }}>Zielpreis</div>
-                    <div style={{ fontSize: '1.4rem', fontWeight: 'bold', color: '#111' }}>
-                      ${Number(market.start_price).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </div>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginBottom: '0.2rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                      Aktueller Preis
-                      {priceDiff !== null && (
-                        <span style={{ color: isUp ? '#16a34a' : '#dc2626', fontWeight: 'bold' }}>
-                          {isUp ? '▲' : '▼'} ${Math.abs(priceDiff).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </span>
-                      )}
-                    </div>
-                    <div style={{ fontSize: '1.4rem', fontWeight: 'bold', color: isUp === null ? '#111' : isUp ? '#16a34a' : '#dc2626' }}>
-                      {livePrice
-                        ? `$${livePrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                        : '...'}
-                    </div>
-                  </div>
-                  <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
-                    <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginBottom: '0.2rem' }}>Verbleibend</div>
-                    <div style={{ fontSize: '2rem', fontWeight: 'bold', color: countdown?.color, letterSpacing: '0.05em' }}>
-                      {countdown?.label}
-                    </div>
-                  </div>
-                </div>
-
-                <div style={{ border: '1px solid #e5e7eb', borderRadius: '8px', overflow: 'hidden', background: '#f9fafb', padding: '0.5rem' }}>
-                  {priceHistory.length < 2
-                    ? <div style={{ padding: '2rem', textAlign: 'center', color: '#9ca3af', fontSize: '0.85rem' }}>⏳ Sammle Preisdaten...</div>
-                    : renderChart()
-                  }
-                </div>
-
-                <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '0.5rem' }}>
-                  Quelle: Coinbase {coinLabel}/USD · Aktualisierung alle 10 Sekunden
-                </div>
-              </div>
-            )}
-
-            {groupMarkets.length > 1 && (
-              <div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: '0.5rem', alignItems: 'center', padding: '0.5rem 0.75rem', borderBottom: '1px solid #f3f4f6', marginBottom: '0.5rem' }}>
-                  <span style={{ fontSize: '0.8rem', color: '#888', fontWeight: 'bold' }}>Option</span>
-                  <span style={{ fontSize: '0.8rem', color: '#888', fontWeight: 'bold', textAlign: 'center', marginRight: '0.5rem' }}>Wahrsch.</span>
-                  <span></span>
-                </div>
-                {groupMarkets.map((gm: any, idx: number) => {
-                  const normProb = normalizedProbs ? normalizedProbs[idx] : calcProb(gm.q_yes, gm.q_no, gm.b);
-                  const pct = Math.round(normProb * 100);
-                  const isSelected = gm.id === selectedMarketId;
-                  return (
-                    <div
-                      key={gm.id}
-                      onClick={() => { setSelectedMarketId(gm.id); setSide('yes'); setEinsatz(0); }}
-                      style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: '0.75rem', alignItems: 'center', padding: '0.75rem', borderRadius: '8px', background: isSelected ? '#f0f9ff' : 'white', border: isSelected ? '1px solid #0f3460' : '1px solid #f3f4f6', marginBottom: '0.4rem', cursor: 'pointer' }}
-                    >
-                      <span style={{ fontWeight: isSelected ? 'bold' : 'normal', fontSize: '0.95rem' }}>{gm.short_label || gm.question}</span>
-                      <span style={{ fontWeight: 'bold', fontSize: '1rem', color: '#111', marginRight: '0.5rem' }}>{pct}%</span>
-                      <div style={{ display: 'flex', gap: '0.3rem' }}>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); setSelectedMarketId(gm.id); setSide('yes'); setEinsatz(0); }}
-                          style={{ padding: '0.2rem 0.6rem', background: '#16a34a', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 'bold' }}
-                        >
-                          Ja {pct}¢
-                        </button>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); setSelectedMarketId(gm.id); setSide('no'); setEinsatz(0); }}
-                          style={{ padding: '0.2rem 0.6rem', background: '#dc2626', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 'bold' }}
-                        >
-                          Nein {100 - pct}¢
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-            {groupMarkets.length <= 1 && !isBtcAuto && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                <span style={{ fontSize: '2.5rem', fontWeight: 'bold' }}>{percentageYes}%</span>
-                <span style={{ color: '#888', fontSize: '1rem' }}>Wahrscheinlichkeit</span>
-              </div>
-            )}
+    <>
+      <nav className="nav">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <div className="nav-logo">
+            <div className="nav-logo-mark"><div className="nav-logo-inner" /></div>
+            Möbius
           </div>
         </div>
-
-        <div style={{ background: 'white', borderRadius: '12px', padding: '1.5rem', border: '1px solid #e5e7eb', position: 'sticky', top: '1rem' }}>
-          {selectedMarket && (
-            <div style={{ marginBottom: '1rem', fontWeight: 'bold', fontSize: '1rem', color: '#111' }}>
-              {selectedMarket.short_label || selectedMarket.question}
-            </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button className="nav-btn" onClick={() => setView('markets')}>Märkte</button>
+          {user && (
+            <button className="nav-btn" onClick={() => setView('portfolio')}>Portfolio</button>
           )}
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '1.5rem' }}>
-            <button
-              onClick={() => setSide('yes')}
-              style={{ padding: '0.75rem', background: side === 'yes' ? '#16a34a' : '#f3f4f6', color: side === 'yes' ? 'white' : '#555', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '1rem', fontWeight: 'bold' }}
-            >
-              Ja {normalizedPctYes}¢
+          {user?.id === ADMIN_ID && (
+            <button className="nav-btn" onClick={() => setView('admin')}
+              style={{ background: 'rgba(124,58,237,0.2)', borderColor: 'rgba(124,58,237,0.4)' }}>
+              Admin
             </button>
-            <button
-              onClick={() => setSide('no')}
-              style={{ padding: '0.75rem', background: side === 'no' ? '#dc2626' : '#f3f4f6', color: side === 'no' ? 'white' : '#555', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '1rem', fontWeight: 'bold' }}
-            >
-              Nein {normalizedPctNo}¢
-            </button>
-          </div>
-
-          <div style={{ marginBottom: '1.5rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-              <div>
-                <div style={{ fontSize: '0.85rem', color: '#888' }}>Betrag</div>
-                <div style={{ fontSize: '0.75rem', color: '#aaa' }}>Stand 0.00 D</div>
-              </div>
-              <input
-                type="number"
-                min="0"
-                value={einsatz === 0 ? '' : einsatz}
-                placeholder="0"
-                onChange={(e) => setEinsatz(Math.max(0, Number(e.target.value)))}
-                style={{ width: '120px', padding: '0.4rem 0.6rem', fontSize: '1.8rem', fontWeight: 'bold', borderRadius: '8px', border: '1px solid #e5e7eb', textAlign: 'right', appearance: 'textfield', MozAppearance: 'textfield' } as any}
-              />
+          )}
+          {user ? (
+            <div className="nav-avatar" onClick={() => setView('profil')} title={user.username}>
+              {user.avatar_url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={user.avatar_url} alt={user.username}
+                  style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+              ) : (
+                user.username.slice(0, 2).toUpperCase()
+              )}
             </div>
-            <div style={{ display: 'flex', gap: '0.4rem' }}>
-              {[1, 5, 10, 100].map((v) => (
+          ) : (
+            <button className="nav-btn accent">Anmelden</button>
+          )}
+        </div>
+      </nav>
+
+      <main className="page-container">
+        {view === 'admin' && user?.id === ADMIN_ID && (
+          <AdminPanel userId={user.id} />
+        )}
+        {view === 'profil' && user && (
+          <ProfileView user={user} onUpdate={setUser} />
+        )}
+        {view === 'markets' && (
+          <>
+            {user && (
+              <div className="stats-grid">
+                <div className="stat-card">
+                  <div className="stat-label">Portfolio</div>
+                  <div className="stat-value">{user.balance.toLocaleString('de')} ₫</div>
+                  <div className="stat-delta delta-neu">Deine Dukaten</div>
+                </div>
+                <div className="stat-card">
+                  <div className="stat-label">Aktive Märkte</div>
+                  <div className="stat-value">{markets.length}</div>
+                  <div className="stat-delta delta-neu">offen</div>
+                </div>
+              </div>
+            )}
+            <div className="pills">
+              {CATEGORIES.map((cat) => (
                 <button
-                  key={v}
-                  onClick={() => setEinsatz((e) => e + v)}
-                  style={{ flex: 1, padding: '0.4rem 0', background: '#f3f4f6', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem', color: '#333', fontWeight: '500' }}
+                  key={cat}
+                  className={`pill ${category === cat ? 'active' : ''}`}
+                  onClick={() => setCategory(cat)}
                 >
-                  +{v}
+                  {cat}
                 </button>
               ))}
-              <button
-                onClick={() => balance && setEinsatz(Math.floor(balance))}
-                style={{ flex: 1, padding: '0.4rem 0', background: '#f3f4f6', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem', color: '#333', fontWeight: '500' }}
-              >
-                Max
-              </button>
             </div>
-          </div>
-
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem', background: '#f9fafb', borderRadius: '8px', marginBottom: '1.5rem', border: '1px solid #e5e7eb' }}>
-            <span style={{ fontSize: '0.9rem', color: '#666' }}>💰 Um zu gewinnen</span>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.25rem' }}>
-              <span style={{ fontSize: '1.3rem', fontWeight: 'bold', color: '#16a34a' }}>+{gewinn.toFixed(2)}</span>
-              <span style={{ fontSize: '1.3rem', fontWeight: 'bold', color: '#16a34a' }}>D</span>
+            <div className="section-head">
+              <div className="section-title">
+                {category === 'Alle' ? 'Alle Märkte' : category}
+              </div>
+              <div className="section-link" onClick={loadMarkets}>Aktualisieren</div>
             </div>
-          </div>
+            {loading ? (
+              <div style={{ color: 'var(--text-muted)', fontSize: 14, padding: '24px 0' }}>
+                Märkte werden geladen…
+              </div>
+            ) : filteredMarkets.length === 0 ? (
+              <div style={{ color: 'var(--text-muted)', fontSize: 14, padding: '24px 0' }}>
+                Keine Märkte in dieser Kategorie.
+              </div>
+            ) : (
+              <MarketsGrid
+                markets={filteredMarkets}
+                onOpen={(id) => router.push(`/markets/${id}${token}`)}
+              />
+            )}
+            <div className="section-head" style={{ marginTop: 32 }}>
+              <div className="section-title">Bestenliste</div>
+            </div>
+            <Leaderboard entries={leaderboard} currentUserId={user?.id} />
+          </>
+        )}
+        {view === 'portfolio' && user && (
+          <PortfolioView userId={user.id} token={token} router={router} />
+        )}
+      </main>
+    </>
+  )
+}
 
-          {userId ? (
-            <button
-              onClick={bet}
-              disabled={loading || einsatz <= 0}
-              style={{ width: '100%', padding: '0.85rem', background: einsatz <= 0 ? '#ccc' : side === 'yes' ? '#16a34a' : '#dc2626', color: 'white', border: 'none', borderRadius: '8px', cursor: einsatz <= 0 ? 'not-allowed' : 'pointer', fontSize: '1rem', fontWeight: 'bold' }}
-            >
-              {loading ? '...' : result || `${side === 'yes' ? 'Ja' : 'Nein'} kaufen`}
-            </button>
-          ) : (
-            <button
-              onClick={() => router.push(`/${tokenParam}`)}
-              style={{ width: '100%', padding: '0.85rem', background: '#0f3460', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '1rem', fontWeight: 'bold' }}
-            >
-              Anmelden um zu traden
-            </button>
-          )}
+function MarketsGrid({ markets, onOpen }: { markets: Market[]; onOpen: (id: string) => void }) {
+  const groups: Record<string, Market[]> = {}
+  const ungrouped: Market[] = []
+
+  markets.forEach((m) => {
+    if (m.group_title) {
+      if (!groups[m.group_title]) groups[m.group_title] = []
+      groups[m.group_title].push(m)
+    } else if (m.display_group) {
+      if (!groups[`__dg__${m.display_group}`]) groups[`__dg__${m.display_group}`] = []
+      groups[`__dg__${m.display_group}`].push(m)
+    } else {
+      ungrouped.push(m)
+    }
+  })
+
+  return (
+    <div>
+      {ungrouped.length > 0 && (
+        <div className="markets-grid">
+          {ungrouped.map((m) => (
+            <MarketCard key={m.id} market={m} onClick={() => onOpen(m.id)} />
+          ))}
         </div>
+      )}
+      {Object.entries(groups).map(([key, mts]) => {
+        const isDisplay = key.startsWith('__dg__')
+        const label = isDisplay ? key.replace('__dg__', '') : key
+        return (
+          <div key={key}>
+            <div className={isDisplay ? 'display-group-header' : 'group-header'}>{label}</div>
+            <div className="markets-grid">
+              {mts.map((m) => (
+                <MarketCard key={m.id} market={m} onClick={() => onOpen(m.id)} />
+              ))}
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function MarketCard({ market, onClick }: { market: Market; onClick: () => void }) {
+  const prob = calcProb(market.q_yes, market.q_no, market.b)
+  const isLow = prob < 50
+  const catClass = CAT_CLASS[market.category ?? ''] ?? ''
+
+  return (
+    <div className="market-card" onClick={onClick}>
+      <div className="market-card-meta">
+        {market.category && (
+          <span className={`cat-badge ${catClass}`}>{market.category}</span>
+        )}
+        {market.is_auto && <div className="live-dot" title="Live" />}
       </div>
-    </main>
-  );
+      <div className="market-card-question">
+        {market.short_label ?? market.question}
+      </div>
+      <div className="prob-bar">
+        <div className={`prob-bar-fill ${isLow ? 'low' : ''}`} style={{ width: `${prob}%` }} />
+      </div>
+      <div className="market-card-footer">
+        <div className={`market-prob ${isLow ? 'low' : ''}`}>{prob}%</div>
+        <div className="market-volume">{Math.round(market.q_yes + market.q_no)} ₫ Vol.</div>
+      </div>
+      <div className="bet-btns">
+        <button className="btn-yes" onClick={(e) => { e.stopPropagation(); onClick() }}>
+          Ja {prob}%
+        </button>
+        <button className="btn-no" onClick={(e) => { e.stopPropagation(); onClick() }}>
+          Nein {100 - prob}%
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function Leaderboard({ entries, currentUserId }: { entries: LeaderboardEntry[]; currentUserId?: string }) {
+  const rankClass = (i: number) => i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : ''
+
+  return (
+    <div className="leaderboard">
+      {entries.map((e, i) => {
+        const initials = e.username.slice(0, 2).toUpperCase()
+        const av = avatarColor(e.username)
+        const isMe = e.user_id === currentUserId
+        return (
+          <div key={e.user_id} className="lb-row" style={isMe ? { background: 'var(--accent-light)' } : {}}>
+            <div className={`lb-rank ${rankClass(i)}`}>{i + 1}</div>
+            <div className="lb-avatar" style={{ background: av.bg, color: av.color }}>
+              {e.avatar_url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={e.avatar_url} alt={e.username}
+                  style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+              ) : initials}
+            </div>
+            <div className="lb-name">
+              {e.username}
+              {isMe && <span className="lb-badge">Du</span>}
+            </div>
+            <div className="lb-score">{e.total_balance.toLocaleString('de')} ₫</div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function PortfolioView({ userId, token, router }: {
+  userId: string
+  token: string
+  router: ReturnType<typeof useRouter>
+}) {
+  interface Position {
+    market_id: string
+    direction: string
+    amount: number
+    question: string
+    q_yes: number
+    q_no: number
+    b: number
+    resolved: boolean
+    resolution?: string
+  }
+
+  const [positions, setPositions] = useState<Position[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    dbGet('positions', `user_id=eq.${userId}&select=*`).then(async (posData) => {
+      if (!posData || posData.length === 0) { setLoading(false); return }
+      const ids = posData.map((p: { market_id: string }) => p.market_id).join(',')
+      const mktData = await dbGet('markets', `id=in.(${ids})&select=id,question,q_yes,q_no,b,resolved,resolution`)
+      const mktMap: Record<string, Market> = {}
+      mktData?.forEach((m: Market) => { mktMap[m.id] = m })
+      setPositions(posData.map((p: { market_id: string; direction: string; amount: number }) => ({
+        ...p,
+        ...mktMap[p.market_id],
+      })))
+      setLoading(false)
+    })
+  }, [userId])
+
+  if (loading) return (
+    <div style={{ color: 'var(--text-muted)', padding: '24px 0' }}>Portfolio wird geladen…</div>
+  )
+
+  if (positions.length === 0) return (
+    <div className="card" style={{ textAlign: 'center', padding: 32 }}>
+      <div style={{ fontSize: 14, color: 'var(--text-muted)', marginBottom: 8 }}>Noch keine Positionen.</div>
+      <div style={{ fontSize: 13, color: 'var(--text-subtle)' }}>Platziere deine erste Wette auf einen Markt.</div>
+    </div>
+  )
+
+  return (
+    <div>
+      <div className="section-head">
+        <div className="section-title">Mein Portfolio</div>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {positions.map((p, i) => {
+          const prob = calcProb(p.q_yes, p.q_no, p.b)
+          const isYes = p.direction === 'yes'
+          return (
+            <div key={i} className="card" style={{ cursor: 'pointer' }}
+              onClick={() => router.push(`/markets/${p.market_id}${token}`)}>
+              <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 8, color: 'var(--text)' }}>
+                {p.question}
+              </div>
+              <div style={{ display: 'flex', gap: 16, fontSize: 13, flexWrap: 'wrap' }}>
+                <span style={{ color: 'var(--text-muted)' }}>
+                  Position: <strong style={{ color: isYes ? 'var(--yes)' : 'var(--no)' }}>
+                    {isYes ? 'Ja' : 'Nein'}
+                  </strong>
+                </span>
+                <span style={{ color: 'var(--text-muted)' }}>
+                  Einsatz: <strong style={{ color: 'var(--text)' }}>{p.amount} ₫</strong>
+                </span>
+                <span style={{ color: 'var(--text-muted)' }}>
+                  Aktuell: <strong style={{ color: 'var(--text)' }}>{prob}%</strong>
+                </span>
+                {p.resolved && (
+                  <span className={`pos-badge ${p.resolution === p.direction ? 'pos-yes' : 'pos-no'}`}>
+                    {p.resolution === p.direction ? 'Gewonnen' : 'Verloren'}
+                  </span>
+                )}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
 }
