@@ -1,413 +1,439 @@
-'use client';
+'use client'
 
-import { useState, useEffect } from 'react';
-import BetButton from './components/BetButton';
-import ProfileView from './components/ProfileView';
-import AdminView from './components/AdminPanel';
+import { useEffect, useState, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
+import { supabase } from '@/lib/supabase'
+import AdminPanel from './components/AdminPanel'
+import ProfileView from './components/ProfileView'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-const ADMIN_ID = 'b75edaf4-141d-41f1-9555-887a8ddbac58';
+/* ─── Typen ──────────────────────────────────────────────────── */
+interface Market {
+  id: string
+  question: string
+  description?: string
+  status: string
+  b: number
+  q_yes: number
+  q_no: number
+  closes_at: string
+  group_title?: string
+  short_label?: string
+  category?: string
+  resolved: boolean
+  resolution?: string
+  display_group?: string
+  is_auto?: boolean
+  coin?: string
+}
 
-export default function Page() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [username, setUsername] = useState('');
-  const [message, setMessage] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [markets, setMarkets] = useState<any[]>([]);
-  const [trendingMarkets, setTrendingMarkets] = useState<any[]>([]);
-  const [trades, setTrades] = useState<any[]>([]);
-  const [leaderboard, setLeaderboard] = useState<any[]>([]);
-  const [loggedIn, setLoggedIn] = useState(false);
-  const [userId, setUserId] = useState('');
-  const [token, setToken] = useState('');
-  const [balance, setBalance] = useState<number | null>(null);
-  const [displayName, setDisplayName] = useState('');
-  const [avatarUrl, setAvatarUrl] = useState('');
-  const [view, setView] = useState<'markets' | 'portfolio' | 'leaderboard' | 'admin' | 'profile'>('markets');
-  const [activeCategory, setActiveCategory] = useState('Trends');
-  const [now, setNow] = useState(Date.now());
+interface User {
+  id: string
+  username: string
+  balance: number
+  avatar_url?: string
+}
+
+interface LeaderboardEntry {
+  user_id: string
+  username: string
+  total_balance: number
+  avatar_url?: string
+}
+
+/* ─── LMSR Formel ────────────────────────────────────────────── */
+function calcProb(qYes: number, qNo: number, b: number): number {
+  const eYes = Math.exp(qYes / b)
+  const eNo  = Math.exp(qNo  / b)
+  return Math.round((eYes / (eYes + eNo)) * 100)
+}
+
+/* ─── Kategorien ─────────────────────────────────────────────── */
+const CATEGORIES = ['Alle', 'Politik', 'Sport', 'Krypto', 'Entertainment', 'Wirtschaft']
+
+const CAT_CLASS: Record<string, string> = {
+  Politik:       'cat-politik',
+  Sport:         'cat-sport',
+  Krypto:        'cat-krypto',
+  Entertainment: 'cat-entertainment',
+  Wirtschaft:    'cat-wirtschaft',
+}
+
+/* ─── Avatar Farben ──────────────────────────────────────────── */
+const AVATAR_COLORS = [
+  { bg: '#eff6ff', color: '#1d4ed8' },
+  { bg: '#f0fdf4', color: '#166534' },
+  { bg: '#fdf4ff', color: '#6b21a8' },
+  { bg: '#fffbeb', color: '#92400e' },
+  { bg: '#f0f9ff', color: '#075985' },
+]
+function avatarColor(str: string) {
+  let h = 0
+  for (let i = 0; i < str.length; i++) h = str.charCodeAt(i) + ((h << 5) - h)
+  return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length]
+}
+
+/* ─── Hauptkomponente ────────────────────────────────────────── */
+export default function Home() {
+  const router = useRouter()
+  const [markets, setMarkets]     = useState<Market[]>([])
+  const [user, setUser]           = useState<User | null>(null)
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([])
+  const [category, setCategory]   = useState('Alle')
+  const [view, setView]           = useState<'markets' | 'portfolio' | 'admin' | 'profil'>('markets')
+  const [loading, setLoading]     = useState(true)
+
+  const ADMIN_ID = 'b75edaf4-141d-41f1-9555-887a8ddbac58'
 
   useEffect(() => {
-    const interval = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(interval);
-  }, []);
+    const params = new URLSearchParams(window.location.search)
+    const token = params.get('token')
+    if (!token) return
+    supabase
+      .from('users')
+      .select('*')
+      .eq('id', token)
+      .single()
+      .then(({ data }) => { if (data) setUser(data) })
+  }, [])
+
+  const loadMarkets = useCallback(async () => {
+    setLoading(true)
+    const { data } = await supabase
+      .from('markets')
+      .select('*')
+      .eq('status', 'open')
+      .order('created_at', { ascending: false })
+    setMarkets(data ?? [])
+    setLoading(false)
+  }, [])
+
+  const loadLeaderboard = useCallback(async () => {
+    const { data } = await supabase
+      .from('users')
+      .select('id, username, balance, avatar_url')
+      .order('balance', { ascending: false })
+      .limit(10)
+    setLeaderboard(
+      (data ?? []).map((u) => ({
+        user_id: u.id,
+        username: u.username,
+        total_balance: u.balance,
+        avatar_url: u.avatar_url,
+      }))
+    )
+  }, [])
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const uid = params.get('user_id');
-    const tok = params.get('token');
-    if (uid && tok) {
-      setUserId(uid);
-      setToken(tok);
-      setLoggedIn(true);
-      loadMarkets();
-      loadUserData(uid);
-      loadTrades(uid);
-      loadLeaderboard();
-      loadTrending();
-    }
-  }, []);
+    loadMarkets()
+    loadLeaderboard()
+  }, [loadMarkets, loadLeaderboard])
 
-  async function loadMarkets() {
-    const response = await fetch(
-      `${supabaseUrl}/rest/v1/markets?select=*`,
-      { headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` } }
-    );
-    setMarkets(await response.json());
-  }
+  const filteredMarkets = markets.filter((m) =>
+    category === 'Alle' || m.category === category
+  )
 
-  async function loadTrending() {
-    const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-    const response = await fetch(
-      `${supabaseUrl}/rest/v1/trades?created_at=gte.${since}&select=market_id`,
-      { headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` } }
-    );
-    const tradesData = await response.json();
-    const counts: { [key: string]: number } = {};
-    tradesData.forEach((t: any) => { counts[t.market_id] = (counts[t.market_id] || 0) + 1; });
-    const sortedIds = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([id]) => id);
+  const token = user?.id ? `?token=${user.id}` : ''
 
-    if (sortedIds.length === 0) {
-      const fallback = await fetch(
-        `${supabaseUrl}/rest/v1/markets?status=eq.open&select=*&limit=10`,
-        { headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` } }
-      );
-      setTrendingMarkets(await fallback.json());
-      return;
-    }
-    const marketsResponse = await fetch(
-      `${supabaseUrl}/rest/v1/markets?id=in.(${sortedIds.join(',')})&status=eq.open&select=*`,
-      { headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` } }
-    );
-    setTrendingMarkets(await marketsResponse.json());
-  }
-
-  async function loadUserData(uid: string) {
-    const response = await fetch(
-      `${supabaseUrl}/rest/v1/users?id=eq.${uid}&select=*`,
-      { headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` } }
-    );
-    const data = await response.json();
-    if (data[0]) {
-      setBalance(data[0].balance);
-      setDisplayName(data[0].username);
-      setAvatarUrl(data[0].avatar_url || '');
-    }
-  }
-
-  async function loadTrades(uid: string) {
-    const tradesResponse = await fetch(
-      `${supabaseUrl}/rest/v1/trades?user_id=eq.${uid}&select=*&order=created_at.desc`,
-      { headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` } }
-    );
-    const tradesData = await tradesResponse.json();
-    const marketsResponse = await fetch(
-      `${supabaseUrl}/rest/v1/markets?select=id,question,short_label`,
-      { headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` } }
-    );
-    const marketsData = await marketsResponse.json();
-    const marketsMap: { [key: string]: any } = {};
-    marketsData.forEach((m: any) => { marketsMap[m.id] = m; });
-    setTrades(tradesData.map((trade: any) => ({ ...trade, market: marketsMap[trade.market_id] || null })));
-  }
-
-  async function loadLeaderboard() {
-    const response = await fetch(
-      `${supabaseUrl}/rest/v1/users?select=username,balance,avatar_url&order=balance.desc&limit=10`,
-      { headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` } }
-    );
-    setLeaderboard(await response.json());
-  }
-
-  async function signUp() {
-    setLoading(true);
-    const response = await fetch(`${supabaseUrl}/auth/v1/signup`, {
-      method: 'POST',
-      headers: { apikey: supabaseKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
-    });
-    const data = await response.json();
-    if (data.user) {
-      await fetch(`${supabaseUrl}/rest/v1/users`, {
-        method: 'POST',
-        headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-        body: JSON.stringify({ id: data.user.id, email: data.user.email, username: username || email.split('@')[0] }),
-      });
-      setMessage('Konto erstellt. Du kannst dich jetzt anmelden.');
-    } else {
-      setMessage(data.msg || 'Fehler beim Registrieren.');
-    }
-    setLoading(false);
-  }
-
-  async function signIn() {
-    setLoading(true);
-    const response = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`, {
-      method: 'POST',
-      headers: { apikey: supabaseKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
-    });
-    const data = await response.json();
-    if (data.access_token) {
-      setTimeout(() => { window.location.href = `/?token=${data.access_token}&user_id=${data.user.id}`; }, 2000);
-      setMessage('Login erfolgreich! Du wirst weitergeleitet...');
-    } else {
-      setMessage(data.error_description || 'Fehler beim Anmelden.');
-    }
-    setLoading(false);
-  }
-
-  function getLMSRProb(qYes: number, qNo: number, b: number) {
-    const expYes = Math.exp(qYes / b);
-    const expNo = Math.exp(qNo / b);
-    return expYes / (expYes + expNo);
-  }
-
-  function formatCountdown(closesAt: string) {
-    const diff = new Date(closesAt).getTime() - now;
-    if (diff <= 0) return { label: '⏰ Abgelaufen', color: '#dc2626' };
-    const mins = Math.floor(diff / 60000);
-    const secs = Math.floor((diff % 60000) / 1000);
-    return { label: `⏱ ${mins}:${secs.toString().padStart(2, '0')}`, color: '#f59e0b' };
-  }
-
-  function groupMarkets(markets: any[]) {
-    const groups: { [key: string]: { title: string; markets: any[]; isDisplay: boolean } } = {};
-    markets.forEach((market) => {
-      const key = market.group_title || market.display_group || `__single__${market.id}`;
-      const isDisplay = !market.group_title && !!market.display_group;
-      if (!groups[key]) groups[key] = { title: market.group_title || market.display_group || '', markets: [], isDisplay };
-      groups[key].markets.push(market);
-    });
-    return groups;
-  }
-
-  function renderGroupDetail(groupKey: string, group: { title: string; markets: any[]; isDisplay: boolean }) {
-    const rawProbs = group.markets.map((m) => getLMSRProb(m.q_yes, m.q_no, m.b));
-    const total = rawProbs.reduce((a, b) => a + b, 0);
-    const normProbs = rawProbs.map((p) => p / total);
-
-    const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
-    const tokenParam = searchParams?.get('token') ? `?token=${searchParams.get('token')}&user_id=${searchParams.get('user_id')}` : '';
-
-    return (
-      <div key={groupKey} style={{ marginBottom: '2rem', border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden', background: 'white' }}>
-        <div style={{ background: '#0f3460', color: 'white', padding: '0.6rem 1rem', fontWeight: 'bold', fontSize: '1rem' }}>
-          {group.title}
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', padding: '0.4rem 1rem', fontSize: '0.75rem', color: '#9ca3af', fontWeight: '600', borderBottom: '1px solid #f3f4f6' }}>
-          <span>Option</span>
-          <span>Wahrsch.</span>
-        </div>
-        {group.markets.map((market, i) => {
-          const prob = normProbs[i];
-          const probPct = Math.round(prob * 100);
-          const yesPrice = Math.round(prob * 100);
-          const noPrice = 100 - yesPrice;
-          return (
-            <div key={market.id} style={{ display: 'grid', gridTemplateColumns: '1fr auto', alignItems: 'center', padding: '0.6rem 1rem', borderBottom: '1px solid #f3f4f6', background: 'white' }}>
-              <span
-                onClick={() => window.location.href = `/markets/${market.id}${tokenParam}`}
-                style={{ fontWeight: '500', fontSize: '0.9rem', color: '#111', cursor: 'pointer' }}
-              >
-                {market.short_label || market.question}
-              </span>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <span style={{ fontWeight: 'bold', fontSize: '0.9rem', color: '#111', minWidth: '2.5rem', textAlign: 'right' }}>
-                  {probPct}%
-                </span>
-                <button onClick={() => window.location.href = `/markets/${market.id}${tokenParam}`} style={{ background: '#16a34a', color: 'white', border: 'none', borderRadius: '4px', padding: '0.25rem 0.6rem', fontSize: '0.75rem', fontWeight: 'bold', cursor: 'pointer' }}>
-                  Ja {yesPrice}¢
-                </button>
-                <button onClick={() => window.location.href = `/markets/${market.id}${tokenParam}`} style={{ background: '#dc2626', color: 'white', border: 'none', borderRadius: '4px', padding: '0.25rem 0.6rem', fontSize: '0.75rem', fontWeight: 'bold', cursor: 'pointer' }}>
-                  Nein {noPrice}¢
-                </button>
-              </div>
+  return (
+    <>
+      <nav className="nav">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <div className="nav-logo">
+            <div className="nav-logo-mark">
+              <div className="nav-logo-inner" />
             </div>
-          );
-        })}
-      </div>
-    );
-  }
-
-  function renderMarketGrid(marketList: any[]) {
-    const grouped = groupMarkets(marketList);
-    return Object.entries(grouped).map(([key, group]) => {
-      if (group.markets.length > 1 && !group.isDisplay) {
-        return renderGroupDetail(key, group);
-      }
-
-      return (
-        <div key={key} style={{ marginBottom: '2rem' }}>
-          {group.title && (
-            <h2 style={{ fontSize: '1.1rem', fontWeight: 'bold', marginBottom: '0.75rem', padding: '0.4rem 1rem', background: group.isDisplay ? '#64748b' : '#0f3460', color: 'white', borderRadius: '8px' }}>
-              {group.title}
-            </h2>
-          )}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '0.75rem' }}>
-            {group.markets.map((market: any) => {
-              const countdown = market.is_auto && market.closes_at ? formatCountdown(market.closes_at) : null;
-              return (
-                <div key={market.id} style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '0.75rem', background: 'white', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-                  <div style={{ fontWeight: '600', fontSize: '0.9rem', marginBottom: '0.25rem', color: '#111' }}>
-                    {market.short_label || market.question}
-                  </div>
-                  {countdown && (
-                    <div style={{ fontSize: '0.75rem', fontWeight: 'bold', color: countdown.color, marginBottom: '0.5rem' }}>
-                      {countdown.label}
-                    </div>
-                  )}
-                  <BetButton
-                    marketId={market.id}
-                    currentQYes={market.q_yes}
-                    currentQNo={market.q_no}
-                    b={market.b}
-                    userId={userId}
-                    token={token}
-                    onBalanceUpdate={(newBalance) => setBalance(newBalance)}
-                  />
-                </div>
-              );
-            })}
+            Möbius
           </div>
         </div>
-      );
-    });
-  }
-
-  if (loggedIn) {
-    const openMarkets = markets.filter((m: any) => m.status === 'open');
-    const categories = ['Trends', ...Array.from(new Set(openMarkets.map((m: any) => m.category).filter(Boolean))) as string[]];
-    const filteredMarkets = activeCategory === 'Trends' ? trendingMarkets : openMarkets.filter((m: any) => m.category === activeCategory);
-
-    return (
-      <main style={{ padding: '2rem', fontFamily: 'sans-serif', background: '#f9fafb', minHeight: '100vh' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-          <h1 style={{ margin: 0, fontSize: '1.5rem' }}>Möbius</h1>
-          <div style={{ textAlign: 'right', cursor: 'pointer' }} onClick={() => setView('profile')}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'flex-end' }}>
-              {avatarUrl ? (
-                <img src={avatarUrl} alt="Avatar" style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover' }} />
-              ) : <span style={{ fontSize: '1rem' }}>👤</span>}
-              <span style={{ fontWeight: 'bold', fontSize: '0.85rem' }}>{displayName}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button className="nav-btn" onClick={() => setView('markets')}>Märkte</button>
+          {user && (
+            <button className="nav-btn" onClick={() => setView('portfolio')}>Portfolio</button>
+          )}
+          {user?.id === ADMIN_ID && (
+            <button className="nav-btn" onClick={() => setView('admin')}
+              style={{ background: 'rgba(124,58,237,0.2)', borderColor: 'rgba(124,58,237,0.4)' }}>
+              Admin
+            </button>
+          )}
+          {user ? (
+            <div className="nav-avatar" onClick={() => setView('profil')} title={user.username}>
+              {user.avatar_url ? (
+                <img src={user.avatar_url} alt={user.username}
+                  style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+              ) : (
+                user.username.slice(0, 2).toUpperCase()
+              )}
             </div>
-            <div style={{ color: '#16a34a', fontWeight: 'bold', fontSize: '0.85rem' }}>
-              💰 {balance?.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Dukaten
-            </div>
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
-          <button onClick={() => setView('markets')} style={{ padding: '0.5rem 1.5rem', background: view === 'markets' ? '#0f3460' : '#eee', color: view === 'markets' ? 'white' : '#333', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '1rem' }}>Märkte</button>
-          <button onClick={() => setView('portfolio')} style={{ padding: '0.5rem 1.5rem', background: view === 'portfolio' ? '#0f3460' : '#eee', color: view === 'portfolio' ? 'white' : '#333', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '1rem' }}>Meine bisherigen Trades</button>
-          <button onClick={() => { setView('leaderboard'); loadLeaderboard(); }} style={{ padding: '0.5rem 1.5rem', background: view === 'leaderboard' ? '#0f3460' : '#eee', color: view === 'leaderboard' ? 'white' : '#333', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '1rem' }}>🏆 Leaderboard</button>
-          {userId === ADMIN_ID && (
-            <button onClick={() => setView('admin')} style={{ padding: '0.5rem 1.5rem', background: view === 'admin' ? '#7c3aed' : '#eee', color: view === 'admin' ? 'white' : '#333', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '1rem' }}>⚙️ Admin</button>
+          ) : (
+            <button className="nav-btn accent">Anmelden</button>
           )}
         </div>
+      </nav>
 
+      <main className="page-container">
+        {view === 'admin' && user?.id === ADMIN_ID && (
+          <AdminPanel userId={user.id} onClose={() => setView('markets')} />
+        )}
+        {view === 'profil' && user && (
+          <ProfileView user={user} onClose={() => setView('markets')} onUpdate={setUser} />
+        )}
         {view === 'markets' && (
-          <div>
-            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
-              {categories.map((cat) => (
-                <button key={cat} onClick={() => setActiveCategory(cat)} style={{ padding: '0.3rem 1rem', background: activeCategory === cat ? '#e11d48' : '#f3f4f6', color: activeCategory === cat ? 'white' : '#333', border: 'none', borderRadius: '20px', cursor: 'pointer', fontSize: '0.9rem', fontWeight: activeCategory === cat ? 'bold' : 'normal' }}>
-                  {cat === 'Trends' ? '🔥 Trends' : cat}
+          <>
+            {user && (
+              <div className="stats-grid">
+                <div className="stat-card">
+                  <div className="stat-label">Portfolio</div>
+                  <div className="stat-value">{user.balance.toLocaleString('de')} ₫</div>
+                  <div className="stat-delta delta-neu">Deine Dukaten</div>
+                </div>
+                <div className="stat-card">
+                  <div className="stat-label">Aktive Märkte</div>
+                  <div className="stat-value">{markets.length}</div>
+                  <div className="stat-delta delta-neu">offen</div>
+                </div>
+              </div>
+            )}
+            <div className="pills">
+              {CATEGORIES.map((cat) => (
+                <button
+                  key={cat}
+                  className={`pill ${category === cat ? 'active' : ''}`}
+                  onClick={() => setCategory(cat)}
+                >
+                  {cat}
                 </button>
               ))}
             </div>
-            {renderMarketGrid(filteredMarkets)}
-          </div>
-        )}
-
-        {view === 'portfolio' && (
-          <div>
-            <h2>Meine Trades</h2>
-            {trades.length === 0 && <p>Noch keine Trades platziert.</p>}
-            {trades.map((trade: any) => (
-              <div key={trade.id} style={{ border: '1px solid #ccc', padding: '1rem', marginBottom: '0.75rem', borderRadius: '8px', background: 'white' }}>
-                <div style={{ fontSize: '0.85rem', color: '#666', marginBottom: '0.5rem' }}>
-                  {trade.market?.short_label || trade.market?.question || 'Unbekannter Markt'}
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
-                    <span style={{ background: trade.type === 'buy_yes' ? '#16a34a' : '#dc2626', color: 'white', padding: '0.2rem 0.6rem', borderRadius: '4px', fontSize: '0.8rem', marginRight: '0.5rem' }}>
-                      {trade.type === 'buy_yes' ? 'YES' : 'NO'}
-                    </span>
-                    <span style={{ fontSize: '0.85rem', color: '#666' }}>
-                      {trade.shares} Anteile · Kosten: {Number(trade.cost).toFixed(2)}
-                    </span>
-                  </div>
-                  <div style={{ fontSize: '0.75rem', color: '#999' }}>
-                    {new Date(trade.created_at).toLocaleDateString('de-DE')}
-                  </div>
-                </div>
+            <div className="section-head">
+              <div className="section-title">
+                {category === 'Alle' ? 'Alle Märkte' : category}
               </div>
-            ))}
-          </div>
-        )}
-
-        {view === 'leaderboard' && (
-          <div>
-            <h2 style={{ fontSize: '1.1rem' }}>🏆 Leaderboard</h2>
-            {leaderboard.map((user: any, index: number) => (
-              <div key={user.username} style={{ border: '1px solid #ccc', padding: '0.75rem 1rem', marginBottom: '0.5rem', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: user.username === displayName ? '#f0f9ff' : 'white', fontSize: '0.85rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                  <span style={{ fontSize: '1.1rem', fontWeight: 'bold', color: index === 0 ? '#f59e0b' : index === 1 ? '#9ca3af' : index === 2 ? '#b45309' : '#666' }}>
-                    {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `#${index + 1}`}
-                  </span>
-                  {user.avatar_url ? (
-                    <img src={user.avatar_url} alt="Avatar" style={{ width: '28px', height: '28px', borderRadius: '50%', objectFit: 'cover' }} />
-                  ) : <span>👤</span>}
-                  <span style={{ fontWeight: user.username === displayName ? 'bold' : 'normal' }}>
-                    {user.username} {user.username === displayName ? '(Du)' : ''}
-                  </span>
-                </div>
-                <span style={{ color: '#16a34a', fontWeight: 'bold' }}>
-                  💰 {Number(user.balance).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Dukaten
-                </span>
+              <div className="section-link" onClick={loadMarkets}>Aktualisieren</div>
+            </div>
+            {loading ? (
+              <div style={{ color: 'var(--text-muted)', fontSize: 14, padding: '24px 0' }}>
+                Märkte werden geladen…
               </div>
-            ))}
-          </div>
+            ) : filteredMarkets.length === 0 ? (
+              <div style={{ color: 'var(--text-muted)', fontSize: 14, padding: '24px 0' }}>
+                Keine Märkte in dieser Kategorie.
+              </div>
+            ) : (
+              <MarketsGrid
+                markets={filteredMarkets}
+                onOpen={(id) => router.push(`/markets/${id}${token}`)}
+              />
+            )}
+            <div className="section-head" style={{ marginTop: 32 }}>
+              <div className="section-title">Bestenliste</div>
+            </div>
+            <Leaderboard entries={leaderboard} currentUserId={user?.id} />
+          </>
         )}
-
-        {view === 'profile' && (
-          <ProfileView
-            userId={userId}
-            token={token}
-            displayName={displayName}
-            avatarUrl={avatarUrl}
-            balance={balance}
-            onUsernameChange={(name) => setDisplayName(name)}
-            onAvatarChange={(url) => setAvatarUrl(url)}
-          />
-        )}
-
-        {view === 'admin' && userId === ADMIN_ID && (
-          <AdminView
-            userId={userId}
-            openMarkets={openMarkets}
-            onMarketResolved={() => { loadMarkets(); loadUserData(userId); }}
-          />
+        {view === 'portfolio' && user && (
+          <PortfolioView userId={user.id} token={token} router={router} />
         )}
       </main>
-    );
-  }
+    </>
+  )
+}
+
+/* ─── Märkte-Grid ────────────────────────────────────────────── */
+function MarketsGrid({ markets, onOpen }: { markets: Market[]; onOpen: (id: string) => void }) {
+  const groups: Record<string, Market[]> = {}
+  const ungrouped: Market[] = []
+
+  markets.forEach((m) => {
+    if (m.group_title) {
+      if (!groups[m.group_title]) groups[m.group_title] = []
+      groups[m.group_title].push(m)
+    } else if (m.display_group) {
+      if (!groups[`__dg__${m.display_group}`]) groups[`__dg__${m.display_group}`] = []
+      groups[`__dg__${m.display_group}`].push(m)
+    } else {
+      ungrouped.push(m)
+    }
+  })
 
   return (
-    <main style={{ padding: '2rem', fontFamily: 'sans-serif', maxWidth: '400px' }}>
-      <h1>Möbius</h1>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-        <input type="email" placeholder="E-Mail" value={email} onChange={(e) => setEmail(e.target.value)} style={{ padding: '0.5rem', fontSize: '1rem', borderRadius: '6px', border: '1px solid #ccc' }} />
-        <input type="password" placeholder="Passwort" value={password} onChange={(e) => setPassword(e.target.value)} style={{ padding: '0.5rem', fontSize: '1rem', borderRadius: '6px', border: '1px solid #ccc' }} />
-        <input type="text" placeholder="Benutzername (nur bei Registrierung)" value={username} onChange={(e) => setUsername(e.target.value)} style={{ padding: '0.5rem', fontSize: '1rem', borderRadius: '6px', border: '1px solid #ccc' }} />
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
-          <button type="button" onClick={signIn} disabled={loading} style={{ flex: 1, padding: '0.5rem', background: '#0f3460', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '1rem' }}>Anmelden</button>
-          <button type="button" onClick={signUp} disabled={loading} style={{ flex: 1, padding: '0.5rem', background: '#444', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '1rem' }}>Registrieren</button>
+    <div>
+      {ungrouped.length > 0 && (
+        <div className="markets-grid">
+          {ungrouped.map((m) => (
+            <MarketCard key={m.id} market={m} onClick={() => onOpen(m.id)} />
+          ))}
         </div>
-        {message && <p style={{ color: '#666' }}>{message}</p>}
+      )}
+      {Object.entries(groups).map(([key, mts]) => {
+        const isDisplay = key.startsWith('__dg__')
+        const label = isDisplay ? key.replace('__dg__', '') : key
+        return (
+          <div key={key}>
+            <div className={isDisplay ? 'display-group-header' : 'group-header'}>{label}</div>
+            <div className="markets-grid">
+              {mts.map((m) => (
+                <MarketCard key={m.id} market={m} onClick={() => onOpen(m.id)} />
+              ))}
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+/* ─── Einzelne Markt-Card ────────────────────────────────────── */
+function MarketCard({ market, onClick }: { market: Market; onClick: () => void }) {
+  const prob = calcProb(market.q_yes, market.q_no, market.b)
+  const isLow = prob < 50
+  const catClass = CAT_CLASS[market.category ?? ''] ?? ''
+
+  return (
+    <div className="market-card" onClick={onClick}>
+      <div className="market-card-meta">
+        {market.category && (
+          <span className={`cat-badge ${catClass}`}>{market.category}</span>
+        )}
+        {market.is_auto && <div className="live-dot" title="Live" />}
       </div>
-    </main>
-  );
+      <div className="market-card-question">
+        {market.short_label ?? market.question}
+      </div>
+      <div className="prob-bar">
+        <div className={`prob-bar-fill ${isLow ? 'low' : ''}`} style={{ width: `${prob}%` }} />
+      </div>
+      <div className="market-card-footer">
+        <div className={`market-prob ${isLow ? 'low' : ''}`}>{prob}%</div>
+        <div className="market-volume">{Math.round(market.q_yes + market.q_no)} ₫ Vol.</div>
+      </div>
+      <div className="bet-btns">
+        <button className="btn-yes" onClick={(e) => { e.stopPropagation(); onClick() }}>
+          Ja {prob}%
+        </button>
+        <button className="btn-no" onClick={(e) => { e.stopPropagation(); onClick() }}>
+          Nein {100 - prob}%
+        </button>
+      </div>
+    </div>
+  )
+}
+
+/* ─── Leaderboard ────────────────────────────────────────────── */
+function Leaderboard({ entries, currentUserId }: { entries: LeaderboardEntry[]; currentUserId?: string }) {
+  const rankClass = (i: number) => i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : ''
+
+  return (
+    <div className="leaderboard">
+      {entries.map((e, i) => {
+        const initials = e.username.slice(0, 2).toUpperCase()
+        const av = avatarColor(e.username)
+        const isMe = e.user_id === currentUserId
+        return (
+          <div key={e.user_id} className="lb-row" style={isMe ? { background: 'var(--accent-light)' } : {}}>
+            <div className={`lb-rank ${rankClass(i)}`}>{i + 1}</div>
+            <div className="lb-avatar" style={{ background: av.bg, color: av.color }}>
+              {e.avatar_url ? (
+                <img src={e.avatar_url} alt={e.username}
+                  style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+              ) : initials}
+            </div>
+            <div className="lb-name">
+              {e.username}
+              {isMe && <span className="lb-badge">Du</span>}
+            </div>
+            <div className="lb-score">{e.total_balance.toLocaleString('de')} ₫</div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+/* ─── Portfolio-Ansicht ──────────────────────────────────────── */
+function PortfolioView({ userId, token, router }: {
+  userId: string
+  token: string
+  router: ReturnType<typeof useRouter>
+}) {
+  interface Position {
+    market_id: string
+    direction: string
+    amount: number
+    markets: {
+      question: string
+      q_yes: number
+      q_no: number
+      b: number
+      status: string
+      resolved: boolean
+      resolution?: string
+    }
+  }
+
+  const [positions, setPositions] = useState<Position[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    supabase
+      .from('positions')
+      .select('*, markets(question, q_yes, q_no, b, status, resolved, resolution)')
+      .eq('user_id', userId)
+      .then(({ data }) => {
+        setPositions((data as Position[]) ?? [])
+        setLoading(false)
+      })
+  }, [userId])
+
+  if (loading) return (
+    <div style={{ color: 'var(--text-muted)', padding: '24px 0' }}>Portfolio wird geladen…</div>
+  )
+
+  if (positions.length === 0) return (
+    <div className="card" style={{ textAlign: 'center', padding: 32 }}>
+      <div style={{ fontSize: 14, color: 'var(--text-muted)', marginBottom: 8 }}>Noch keine Positionen.</div>
+      <div style={{ fontSize: 13, color: 'var(--text-subtle)' }}>Platziere deine erste Wette auf einen Markt.</div>
+    </div>
+  )
+
+  return (
+    <div>
+      <div className="section-head">
+        <div className="section-title">Mein Portfolio</div>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {positions.map((p, i) => {
+          const m = p.markets
+          const prob = calcProb(m.q_yes, m.q_no, m.b)
+          const isYes = p.direction === 'yes'
+          return (
+            <div key={i} className="card" style={{ cursor: 'pointer' }}
+              onClick={() => router.push(`/markets/${p.market_id}${token}`)}>
+              <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 8, color: 'var(--text)' }}>
+                {m.question}
+              </div>
+              <div style={{ display: 'flex', gap: 16, fontSize: 13 }}>
+                <span style={{ color: 'var(--text-muted)' }}>
+                  Position: <strong style={{ color: isYes ? 'var(--yes)' : 'var(--no)' }}>
+                    {isYes ? 'Ja' : 'Nein'}
+                  </strong>
+                </span>
+                <span style={{ color: 'var(--text-muted)' }}>
+                  Einsatz: <strong style={{ color: 'var(--text)' }}>{p.amount} ₫</strong>
+                </span>
+                <span style={{ color: 'var(--text-muted)' }}>
+                  Aktuell: <strong style={{ color: 'var(--text)' }}>{prob}%</strong>
+                </span>
+                {m.resolved && (
+                  <span className={`pos-badge ${m.resolution === p.direction ? 'pos-yes' : 'pos-no'}`}>
+                    {m.resolution === p.direction ? 'Gewonnen' : 'Verloren'}
+                  </span>
+                )}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
 }
