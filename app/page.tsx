@@ -2,9 +2,19 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
 import AdminPanel from './components/AdminPanel'
 import ProfileView from './components/ProfileView'
+
+const SUPABASE_URL = 'https://zrujclkigcrlrvpgxrqx.supabase.co'
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpydWpjbGtpZ2NybHJ2cGd4cnF4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU4MjQ0NTEsImV4cCI6MjA5MTQwMDQ1MX0.JpuZxskptogAKtw5cUR3gJOAcnh3BFh1NSvfVEtN8IQ'
+
+async function dbGet(table: string, params: string) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}`, {
+    headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
+    cache: 'no-store',
+  })
+  return res.json()
+}
 
 /* ─── Typen ──────────────────────────────────────────────────── */
 interface Market {
@@ -40,7 +50,7 @@ interface LeaderboardEntry {
   avatar_url?: string
 }
 
-/* ─── LMSR Formel ────────────────────────────────────────────── */
+/* ─── LMSR ───────────────────────────────────────────────────── */
 function calcProb(qYes: number, qNo: number, b: number): number {
   const eYes = Math.exp(qYes / b)
   const eNo  = Math.exp(qNo  / b)
@@ -75,12 +85,12 @@ function avatarColor(str: string) {
 /* ─── Hauptkomponente ────────────────────────────────────────── */
 export default function Home() {
   const router = useRouter()
-  const [markets, setMarkets]     = useState<Market[]>([])
-  const [user, setUser]           = useState<User | null>(null)
+  const [markets, setMarkets]         = useState<Market[]>([])
+  const [user, setUser]               = useState<User | null>(null)
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([])
-  const [category, setCategory]   = useState('Alle')
-  const [view, setView]           = useState<'markets' | 'portfolio' | 'admin' | 'profil'>('markets')
-  const [loading, setLoading]     = useState(true)
+  const [category, setCategory]       = useState('Alle')
+  const [view, setView]               = useState<'markets' | 'portfolio' | 'admin' | 'profil'>('markets')
+  const [loading, setLoading]         = useState(true)
 
   const ADMIN_ID = 'b75edaf4-141d-41f1-9555-887a8ddbac58'
 
@@ -88,33 +98,22 @@ export default function Home() {
     const params = new URLSearchParams(window.location.search)
     const token = params.get('token')
     if (!token) return
-    supabase
-      .from('users')
-      .select('*')
-      .eq('id', token)
-      .single()
-      .then(({ data }) => { if (data) setUser(data) })
+    dbGet('users', `id=eq.${token}&select=*`).then((data) => {
+      if (data?.[0]) setUser(data[0])
+    })
   }, [])
 
   const loadMarkets = useCallback(async () => {
     setLoading(true)
-    const { data } = await supabase
-      .from('markets')
-      .select('*')
-      .eq('status', 'open')
-      .order('created_at', { ascending: false })
+    const data = await dbGet('markets', 'status=eq.open&select=*&order=created_at.desc')
     setMarkets(data ?? [])
     setLoading(false)
   }, [])
 
   const loadLeaderboard = useCallback(async () => {
-    const { data } = await supabase
-      .from('users')
-      .select('id, username, balance, avatar_url')
-      .order('balance', { ascending: false })
-      .limit(10)
+    const data = await dbGet('users', 'select=id,username,balance,avatar_url&order=balance.desc&limit=10')
     setLeaderboard(
-      (data ?? []).map((u) => ({
+      (data ?? []).map((u: User) => ({
         user_id: u.id,
         username: u.username,
         total_balance: u.balance,
@@ -139,9 +138,7 @@ export default function Home() {
       <nav className="nav">
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
           <div className="nav-logo">
-            <div className="nav-logo-mark">
-              <div className="nav-logo-inner" />
-            </div>
+            <div className="nav-logo-mark"><div className="nav-logo-inner" /></div>
             Möbius
           </div>
         </div>
@@ -159,6 +156,7 @@ export default function Home() {
           {user ? (
             <div className="nav-avatar" onClick={() => setView('profil')} title={user.username}>
               {user.avatar_url ? (
+                // eslint-disable-next-line @next/next/no-img-element
                 <img src={user.avatar_url} alt={user.username}
                   style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
               ) : (
@@ -334,6 +332,7 @@ function Leaderboard({ entries, currentUserId }: { entries: LeaderboardEntry[]; 
             <div className={`lb-rank ${rankClass(i)}`}>{i + 1}</div>
             <div className="lb-avatar" style={{ background: av.bg, color: av.color }}>
               {e.avatar_url ? (
+                // eslint-disable-next-line @next/next/no-img-element
                 <img src={e.avatar_url} alt={e.username}
                   style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
               ) : initials}
@@ -360,29 +359,30 @@ function PortfolioView({ userId, token, router }: {
     market_id: string
     direction: string
     amount: number
-    markets: {
-      question: string
-      q_yes: number
-      q_no: number
-      b: number
-      status: string
-      resolved: boolean
-      resolution?: string
-    }
+    question: string
+    q_yes: number
+    q_no: number
+    b: number
+    resolved: boolean
+    resolution?: string
   }
 
   const [positions, setPositions] = useState<Position[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    supabase
-      .from('positions')
-      .select('*, markets(question, q_yes, q_no, b, status, resolved, resolution)')
-      .eq('user_id', userId)
-      .then(({ data }) => {
-        setPositions((data as Position[]) ?? [])
-        setLoading(false)
-      })
+    dbGet('positions', `user_id=eq.${userId}&select=*`).then(async (posData) => {
+      if (!posData || posData.length === 0) { setLoading(false); return }
+      const ids = posData.map((p: { market_id: string }) => p.market_id).join(',')
+      const mktData = await dbGet('markets', `id=in.(${ids})&select=id,question,q_yes,q_no,b,resolved,resolution`)
+      const mktMap: Record<string, Market> = {}
+      mktData?.forEach((m: Market) => { mktMap[m.id] = m })
+      setPositions(posData.map((p: { market_id: string; direction: string; amount: number }) => ({
+        ...p,
+        ...mktMap[p.market_id],
+      })))
+      setLoading(false)
+    })
   }, [userId])
 
   if (loading) return (
@@ -403,16 +403,15 @@ function PortfolioView({ userId, token, router }: {
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {positions.map((p, i) => {
-          const m = p.markets
-          const prob = calcProb(m.q_yes, m.q_no, m.b)
+          const prob = calcProb(p.q_yes, p.q_no, p.b)
           const isYes = p.direction === 'yes'
           return (
             <div key={i} className="card" style={{ cursor: 'pointer' }}
               onClick={() => router.push(`/markets/${p.market_id}${token}`)}>
               <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 8, color: 'var(--text)' }}>
-                {m.question}
+                {p.question}
               </div>
-              <div style={{ display: 'flex', gap: 16, fontSize: 13 }}>
+              <div style={{ display: 'flex', gap: 16, fontSize: 13, flexWrap: 'wrap' }}>
                 <span style={{ color: 'var(--text-muted)' }}>
                   Position: <strong style={{ color: isYes ? 'var(--yes)' : 'var(--no)' }}>
                     {isYes ? 'Ja' : 'Nein'}
@@ -424,9 +423,9 @@ function PortfolioView({ userId, token, router }: {
                 <span style={{ color: 'var(--text-muted)' }}>
                   Aktuell: <strong style={{ color: 'var(--text)' }}>{prob}%</strong>
                 </span>
-                {m.resolved && (
-                  <span className={`pos-badge ${m.resolution === p.direction ? 'pos-yes' : 'pos-no'}`}>
-                    {m.resolution === p.direction ? 'Gewonnen' : 'Verloren'}
+                {p.resolved && (
+                  <span className={`pos-badge ${p.resolution === p.direction ? 'pos-yes' : 'pos-no'}`}>
+                    {p.resolution === p.direction ? 'Gewonnen' : 'Verloren'}
                   </span>
                 )}
               </div>
