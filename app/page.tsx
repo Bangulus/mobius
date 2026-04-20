@@ -174,7 +174,15 @@ export default function Home() {
        <AdminPanel userId={user.id} openMarkets={markets} onMarketResolved={loadMarkets} />
         )}
         {view === 'profil' && user && (
-        <ProfileView user={user} onUpdate={setUser} />
+        <ProfileView
+  userId={user.id}
+  token={user.id}
+  displayName={user.username}
+  avatarUrl={user.avatar_url ?? ''}
+  balance={user.balance}
+  onUsernameChange={(name) => setUser({ ...user, username: name })}
+  onAvatarChange={(url) => setUser({ ...user, avatar_url: url })}
+/>
         )}
         {view === 'markets' && (
           <>
