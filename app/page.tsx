@@ -171,7 +171,7 @@ export default function Home() {
 
       <main className="page-container">
         {view === 'admin' && user?.id === ADMIN_ID && (
-         <AdminPanel userId={user.id} />
+       <AdminPanel userId={user.id} openMarkets={markets} onMarketResolved={loadMarkets} />
         )}
         {view === 'profil' && user && (
         <ProfileView user={user} onUpdate={setUser} />
