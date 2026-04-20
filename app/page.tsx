@@ -171,10 +171,10 @@ export default function Home() {
 
       <main className="page-container">
         {view === 'admin' && user?.id === ADMIN_ID && (
-          <AdminPanel userId={user.id} onClose={() => setView('markets')} />
+         <AdminPanel userId={user.id} />
         )}
         {view === 'profil' && user && (
-          <ProfileView user={user} onClose={() => setView('markets')} onUpdate={setUser} />
+        <ProfileView user={user} onUpdate={setUser} />
         )}
         {view === 'markets' && (
           <>
