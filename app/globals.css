@@ -128,9 +128,7 @@ a {
   color: var(--accent);
   text-decoration: none;
 }
-a:hover {
-  text-decoration: underline;
-}
+a:hover { text-decoration: underline; }
 
 button {
   font-family: var(--font);
@@ -178,16 +176,12 @@ input:focus, textarea:focus, select:focus {
   font-size: 13px;
   transition: background 0.15s;
 }
-.nav-btn:hover {
-  background: rgba(255,255,255,0.18);
-}
+.nav-btn:hover { background: rgba(255,255,255,0.18); }
 .nav-btn.accent {
   background: var(--accent);
   border-color: var(--accent);
 }
-.nav-btn.accent:hover {
-  background: var(--accent-hover);
-}
+.nav-btn.accent:hover { background: var(--accent-hover); }
 
 .nav-avatar {
   width: 30px;
@@ -203,7 +197,24 @@ input:focus, textarea:focus, select:focus {
   cursor: pointer;
 }
 
-/* ─── Modal ──────────────────────────────────────────────────── */
+/* ─── Hero Logo ──────────────────────────────────────────────── */
+.hero {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 40px 24px 32px;
+  background: var(--bg);
+}
+
+.hero-logo {
+  height: 80px;
+  width: auto;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.hero-logo:hover { opacity: 0.85; }
+
+/* ─── Auth Modal ─────────────────────────────────────────────── */
 .modal-backdrop {
   position: fixed;
   inset: 0;
@@ -220,7 +231,7 @@ input:focus, textarea:focus, select:focus {
   border-radius: var(--radius-xl);
   padding: 28px;
   width: 100%;
-  max-width: 360px;
+  max-width: 380px;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -230,19 +241,48 @@ input:focus, textarea:focus, select:focus {
   font-size: 17px;
   font-weight: 500;
   color: var(--text);
+  margin-bottom: 4px;
 }
 
 .modal-subtitle {
   font-size: 13px;
   color: var(--text-muted);
+}
+
+.auth-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  background: var(--bg);
+  border-radius: var(--radius-md);
+  padding: 3px;
   margin-bottom: 4px;
+}
+
+.auth-tab {
+  padding: 8px;
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: center;
+  color: var(--text-muted);
+  border: none;
+  background: transparent;
+  font-family: var(--font);
+  transition: all 0.15s;
+}
+.auth-tab.active {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
 }
 
 /* ─── Layout ─────────────────────────────────────────────────── */
 .page-container {
   max-width: 1100px;
   margin: 0 auto;
-  padding: 24px 24px 48px;
+  padding: 0 24px 48px;
 }
 
 .page-container-narrow {
@@ -811,6 +851,7 @@ input:focus, textarea:focus, select:focus {
 .submit-btn:active  { transform: scale(0.98); }
 .submit-btn.yes     { background: var(--yes); color: #fff; }
 .submit-btn.no      { background: var(--no);  color: #fff; }
+.submit-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* ─── Kommentare ──────────────────────────────────────────────── */
 .comment {
@@ -873,7 +914,7 @@ input:focus, textarea:focus, select:focus {
   padding: 12px 16px;
   border-radius: var(--radius-md);
   font-size: 13px;
-  margin-bottom: 12px;
+  margin-bottom: 0;
 }
 .alert-success { background: var(--yes-light); color: var(--yes); border: 0.5px solid var(--yes-border); }
 .alert-error   { background: var(--no-light);  color: var(--no);  border: 0.5px solid var(--no-border); }
@@ -906,5 +947,8 @@ input:focus, textarea:focus, select:focus {
   }
   .markets-grid {
     grid-template-columns: 1fr;
+  }
+  .hero-logo {
+    height: 56px;
   }
 }
