@@ -19,10 +19,7 @@ async function dbGet(table: string, params: string) {
 async function supabaseAuth(path: string, body: object) {
   const res = await fetch(`${SUPABASE_URL}/auth/v1/${path}`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      apikey: SUPABASE_KEY,
-    },
+    headers: { 'Content-Type': 'application/json', apikey: SUPABASE_KEY },
     body: JSON.stringify(body),
   })
   return res.json()
@@ -108,21 +105,21 @@ type AuthMode = 'login' | 'register'
 
 export default function Home() {
   const router = useRouter()
-  const [markets, setMarkets]         = useState<Market[]>([])
-  const [user, setUser]               = useState<User | null>(null)
-  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([])
-  const [category, setCategory]       = useState('Alle')
-  const [view, setView]               = useState<'markets' | 'portfolio' | 'admin' | 'profil'>('markets')
-  const [loading, setLoading]         = useState(true)
-  const [darkMode, setDarkMode]       = useState(false)
-  const [showAuth, setShowAuth]       = useState(false)
-  const [authMode, setAuthMode]       = useState<AuthMode>('login')
-  const [authEmail, setAuthEmail]     = useState('')
+  const [markets, setMarkets]           = useState<Market[]>([])
+  const [user, setUser]                 = useState<User | null>(null)
+  const [leaderboard, setLeaderboard]   = useState<LeaderboardEntry[]>([])
+  const [category, setCategory]         = useState('Alle')
+  const [view, setView]                 = useState<'markets' | 'portfolio' | 'admin' | 'profil'>('markets')
+  const [loading, setLoading]           = useState(true)
+  const [darkMode, setDarkMode]         = useState(false)
+  const [showAuth, setShowAuth]         = useState(false)
+  const [authMode, setAuthMode]         = useState<AuthMode>('login')
+  const [authEmail, setAuthEmail]       = useState('')
   const [authPassword, setAuthPassword] = useState('')
   const [authUsername, setAuthUsername] = useState('')
-  const [authError, setAuthError]     = useState('')
-  const [authLoading, setAuthLoading] = useState(false)
-  const [accessToken, setAccessToken] = useState('')
+  const [authError, setAuthError]       = useState('')
+  const [authLoading, setAuthLoading]   = useState(false)
+  const [searchQuery, setSearchQuery]   = useState('')
 
   const ADMIN_ID = 'b75edaf4-141d-41f1-9555-887a8ddbac58'
 
@@ -130,14 +127,12 @@ export default function Home() {
     document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light')
   }, [darkMode])
 
-  // Gespeicherte Session beim Start laden
   useEffect(() => {
     const saved = localStorage.getItem('mobius_session')
     if (!saved) return
     try {
       const session = JSON.parse(saved)
       if (session?.access_token && session?.user_id) {
-        setAccessToken(session.access_token)
         dbGet('users', `id=eq.${session.user_id}&select=*`).then((data) => {
           if (data?.[0]) setUser(data[0])
         })
@@ -178,15 +173,11 @@ export default function Home() {
       password: authPassword,
     })
     setAuthLoading(false)
-    if (res.error || !res.access_token) {
-      setAuthError('E-Mail oder Passwort falsch.')
-      return
-    }
+    if (res.error || !res.access_token) { setAuthError('E-Mail oder Passwort falsch.'); return }
     const userId = res.user?.id
     const userData = await dbGet('users', `id=eq.${userId}&select=*`)
     if (userData?.[0]) {
       setUser(userData[0])
-      setAccessToken(res.access_token)
       localStorage.setItem('mobius_session', JSON.stringify({ access_token: res.access_token, user_id: userId }))
       setShowAuth(false)
       resetAuthForm()
@@ -201,46 +192,18 @@ export default function Home() {
     if (authUsername.length < 3) { setAuthError('Benutzername muss mindestens 3 Zeichen haben.'); return }
     if (authPassword.length < 6) { setAuthError('Passwort muss mindestens 6 Zeichen haben.'); return }
     setAuthLoading(true)
-
-    // Benutzername auf Verfügbarkeit prüfen
     const existing = await dbGet('users', `username=eq.${authUsername}&select=id`)
-    if (existing?.length > 0) {
-      setAuthLoading(false)
-      setAuthError('Dieser Benutzername ist bereits vergeben.')
-      return
-    }
-
-    // Supabase Auth Registrierung
-    const res = await supabaseAuth('signup', {
-      email: authEmail,
-      password: authPassword,
-    })
+    if (existing?.length > 0) { setAuthLoading(false); setAuthError('Benutzername bereits vergeben.'); return }
+    const res = await supabaseAuth('signup', { email: authEmail, password: authPassword })
     setAuthLoading(false)
-
-    if (res.error) {
-      setAuthError(res.error.message ?? 'Registrierung fehlgeschlagen.')
-      return
-    }
-
+    if (res.error) { setAuthError(res.error.message ?? 'Registrierung fehlgeschlagen.'); return }
     const userId = res.user?.id
     const token = res.access_token
-
-    if (!userId) {
-      setAuthError('Registrierung erfolgreich! Bitte bestätige deine E-Mail und melde dich dann an.')
-      return
-    }
-
-    // User in users-Tabelle anlegen
-    await dbPost('users', {
-      id: userId,
-      username: authUsername,
-      balance: 1000,
-    }, token ?? SUPABASE_KEY)
-
+    if (!userId) { setAuthError('Bitte bestätige deine E-Mail und melde dich dann an.'); return }
+    await dbPost('users', { id: userId, username: authUsername, balance: 1000 }, token ?? SUPABASE_KEY)
     const userData = await dbGet('users', `id=eq.${userId}&select=*`)
     if (userData?.[0]) {
       setUser(userData[0])
-      setAccessToken(token)
       localStorage.setItem('mobius_session', JSON.stringify({ access_token: token, user_id: userId }))
       setShowAuth(false)
       resetAuthForm()
@@ -252,7 +215,6 @@ export default function Home() {
 
   const handleLogout = () => {
     setUser(null)
-    setAccessToken('')
     localStorage.removeItem('mobius_session')
     setView('markets')
   }
@@ -270,9 +232,13 @@ export default function Home() {
     setShowAuth(true)
   }
 
-  const filteredMarkets = markets.filter((m) =>
-    category === 'Alle' || m.category === category
-  )
+  const filteredMarkets = markets.filter((m) => {
+    const matchCat = category === 'Alle' || m.category === category
+    const matchSearch = searchQuery === '' ||
+      (m.question ?? '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (m.short_label ?? '').toLowerCase().includes(searchQuery.toLowerCase())
+    return matchCat && matchSearch
+  })
 
   const token = user?.id ? `?token=${user.id}` : ''
 
@@ -285,61 +251,27 @@ export default function Home() {
             <div className="modal-title">
               {authMode === 'login' ? 'Anmelden' : 'Konto erstellen'}
             </div>
-
             <div className="auth-tabs">
-              <button
-                className={`auth-tab ${authMode === 'login' ? 'active' : ''}`}
-                onClick={() => { setAuthMode('login'); setAuthError('') }}
-              >
-                Anmelden
-              </button>
-              <button
-                className={`auth-tab ${authMode === 'register' ? 'active' : ''}`}
-                onClick={() => { setAuthMode('register'); setAuthError('') }}
-              >
-                Registrieren
-              </button>
+              <button className={`auth-tab ${authMode === 'login' ? 'active' : ''}`}
+                onClick={() => { setAuthMode('login'); setAuthError('') }}>Anmelden</button>
+              <button className={`auth-tab ${authMode === 'register' ? 'active' : ''}`}
+                onClick={() => { setAuthMode('register'); setAuthError('') }}>Registrieren</button>
             </div>
-
             {authMode === 'register' && (
-              <input
-                type="text"
-                placeholder="Benutzername"
-                value={authUsername}
-                onChange={(e) => setAuthUsername(e.target.value)}
-                style={{ width: '100%' }}
-              />
+              <input type="text" placeholder="Benutzername" value={authUsername}
+                onChange={(e) => setAuthUsername(e.target.value)} style={{ width: '100%' }} />
             )}
-            <input
-              type="email"
-              placeholder="E-Mail"
-              value={authEmail}
-              onChange={(e) => setAuthEmail(e.target.value)}
-              style={{ width: '100%' }}
-              autoFocus
-            />
-            <input
-              type="password"
-              placeholder="Passwort"
-              value={authPassword}
+            <input type="email" placeholder="E-Mail" value={authEmail}
+              onChange={(e) => setAuthEmail(e.target.value)} style={{ width: '100%' }} autoFocus />
+            <input type="password" placeholder="Passwort" value={authPassword}
               onChange={(e) => setAuthPassword(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && (authMode === 'login' ? handleLogin() : handleRegister())}
-              style={{ width: '100%' }}
-            />
-
-            {authError && (
-              <div className="alert alert-error">{authError}</div>
-            )}
-
-            <button
-              className="submit-btn yes"
-              onClick={authMode === 'login' ? handleLogin : handleRegister}
-              disabled={authLoading}
-              style={{ marginTop: 4 }}
-            >
+              style={{ width: '100%' }} />
+            {authError && <div className="alert alert-error">{authError}</div>}
+            <button className="submit-btn yes" onClick={authMode === 'login' ? handleLogin : handleRegister}
+              disabled={authLoading} style={{ marginTop: 4 }}>
               {authLoading ? 'Laden…' : authMode === 'login' ? 'Anmelden' : 'Konto erstellen'}
             </button>
-
             {authMode === 'register' && (
               <div style={{ fontSize: 12, color: 'var(--text-subtle)', textAlign: 'center' }}>
                 Du startest mit 1.000 ₫ Dukaten.
@@ -351,59 +283,97 @@ export default function Home() {
 
       {/* ── Nav ── */}
       <nav className="nav">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <button className="nav-btn" onClick={() => setView('markets')}>Märkte</button>
-          {user && (
-            <button className="nav-btn" onClick={() => setView('portfolio')}>Portfolio</button>
-          )}
-          {user?.id === ADMIN_ID && (
-            <button className="nav-btn" onClick={() => setView('admin')}
-              style={{ background: 'rgba(124,58,237,0.2)', borderColor: 'rgba(124,58,237,0.4)' }}>
-              Admin
-            </button>
-          )}
+        {/* Links: Logo + Suche */}
+        <div className="nav-left">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/logo-weiss.png"
+            alt="Möbius"
+            className="nav-logo"
+            onClick={() => { setView('markets'); setSearchQuery('') }}
+          />
+          <div className="nav-search-wrap">
+            <span className="nav-search-icon">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+              </svg>
+            </span>
+            <input
+              className="nav-search"
+              type="text"
+              placeholder="Märkte durchsuchen…"
+              value={searchQuery}
+              onChange={(e) => { setSearchQuery(e.target.value); setView('markets') }}
+            />
+          </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <button
-            className="nav-btn"
-            onClick={() => setDarkMode(!darkMode)}
-            title={darkMode ? 'Light Mode' : 'Dark Mode'}
-            style={{ fontSize: 15, padding: '6px 10px' }}
-          >
-            {darkMode ? '☀️' : '🌙'}
-          </button>
+        {/* Rechts: Stats + Auth + Avatar */}
+        <div className="nav-right">
           {user ? (
             <>
-              <div className="nav-avatar" onClick={() => setView('profil')} title={user.username}>
-                {user.avatar_url ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={user.avatar_url} alt={user.username}
-                    style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
-                ) : (
-                  user.username.slice(0, 2).toUpperCase()
-                )}
+              <div className="nav-stat">
+                <div className="nav-stat-label">Portfolio</div>
+                <div className="nav-stat-value">{user.balance.toLocaleString('de')} ₫</div>
               </div>
-              <button className="nav-btn" onClick={handleLogout}>Abmelden</button>
+              <div className="nav-divider" />
+              <div className="nav-stat">
+                <div className="nav-stat-label">Guthaben</div>
+                <div className="nav-stat-value">{user.balance.toLocaleString('de')} ₫</div>
+              </div>
+              {user?.id === ADMIN_ID && (
+                <button className="nav-pill" onClick={() => setView('admin')}
+                  style={{ background: 'rgba(124,58,237,0.25)', borderColor: 'rgba(124,58,237,0.5)', color: '#c4b5fd' }}>
+                  Admin
+                </button>
+              )}
             </>
           ) : (
             <>
-              <button className="nav-btn" onClick={() => openAuth('login')}>Anmelden</button>
-              <button className="nav-btn accent" onClick={() => openAuth('register')}>Registrieren</button>
+              <button className="nav-pill" onClick={() => openAuth('login')}>Anmelden</button>
+              <button className="nav-pill accent" onClick={() => openAuth('register')}>Registrieren</button>
             </>
+          )}
+
+          {/* Dark Mode */}
+          <button className="nav-icon-btn" onClick={() => setDarkMode(!darkMode)}
+            title={darkMode ? 'Light Mode' : 'Dark Mode'}>
+            {darkMode ? '☀️' : '🌙'}
+          </button>
+
+          {/* Avatar */}
+          {user && (
+            <div className="nav-avatar" onClick={() => setView('profil')} title={user.username}>
+              {user.avatar_url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={user.avatar_url} alt={user.username}
+                  style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+              ) : (
+                <span>{user.username.slice(0, 2).toUpperCase()}</span>
+              )}
+            </div>
+          )}
+
+          {user && (
+            <button className="nav-icon-btn" onClick={handleLogout} title="Abmelden"
+              style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)' }}>
+              ✕
+            </button>
           )}
         </div>
       </nav>
 
-      {/* ── Hero Logo ── */}
-      <div className="hero">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={darkMode ? '/logo-weiss.png' : '/logo-schwarz.png'}
-          alt="Möbius"
-          className="hero-logo"
-          onClick={() => setView('markets')}
-        />
+      {/* ── Kategorie-Leiste ── */}
+      <div className="cat-bar">
+        {CATEGORIES.map((cat) => (
+          <button
+            key={cat}
+            className={`cat-bar-btn ${category === cat ? 'active' : ''}`}
+            onClick={() => { setCategory(cat); setView('markets') }}
+          >
+            {cat}
+          </button>
+        ))}
       </div>
 
       <main className="page-container">
@@ -437,20 +407,9 @@ export default function Home() {
                 </div>
               </div>
             )}
-            <div className="pills">
-              {CATEGORIES.map((cat) => (
-                <button
-                  key={cat}
-                  className={`pill ${category === cat ? 'active' : ''}`}
-                  onClick={() => setCategory(cat)}
-                >
-                  {cat}
-                </button>
-              ))}
-            </div>
             <div className="section-head">
               <div className="section-title">
-                {category === 'Alle' ? 'Alle Märkte' : category}
+                {searchQuery ? `Suche: „${searchQuery}"` : category === 'Alle' ? 'Alle Märkte' : category}
               </div>
               <div className="section-link" onClick={loadMarkets}>Aktualisieren</div>
             </div>
@@ -460,7 +419,7 @@ export default function Home() {
               </div>
             ) : filteredMarkets.length === 0 ? (
               <div style={{ color: 'var(--text-muted)', fontSize: 14, padding: '24px 0' }}>
-                Keine Märkte in dieser Kategorie.
+                Keine Märkte gefunden.
               </div>
             ) : (
               <MarketsGrid
@@ -580,8 +539,7 @@ function Leaderboard({ entries, currentUserId }: { entries: LeaderboardEntry[]; 
               ) : initials}
             </div>
             <div className="lb-name">
-              {e.username}
-              {isMe && <span className="lb-badge">Du</span>}
+              {e.username}{isMe && <span className="lb-badge">Du</span>}
             </div>
             <div className="lb-score">{e.total_balance.toLocaleString('de')} ₫</div>
           </div>
@@ -619,16 +577,13 @@ function PortfolioView({ userId, token, router }: {
       const mktMap: Record<string, Market> = {}
       mktData?.forEach((m: Market) => { mktMap[m.id] = m })
       setPositions(posData.map((p: { market_id: string; direction: string; amount: number }) => ({
-        ...p,
-        ...mktMap[p.market_id],
+        ...p, ...mktMap[p.market_id],
       })))
       setLoading(false)
     })
   }, [userId])
 
-  if (loading) return (
-    <div style={{ color: 'var(--text-muted)', padding: '24px 0' }}>Portfolio wird geladen…</div>
-  )
+  if (loading) return <div style={{ color: 'var(--text-muted)', padding: '24px 0' }}>Portfolio wird geladen…</div>
 
   if (positions.length === 0) return (
     <div className="card" style={{ textAlign: 'center', padding: 32 }}>
@@ -649,14 +604,10 @@ function PortfolioView({ userId, token, router }: {
           return (
             <div key={i} className="card" style={{ cursor: 'pointer' }}
               onClick={() => router.push(`/markets/${p.market_id}${token}`)}>
-              <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 8, color: 'var(--text)' }}>
-                {p.question}
-              </div>
+              <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 8, color: 'var(--text)' }}>{p.question}</div>
               <div style={{ display: 'flex', gap: 16, fontSize: 13, flexWrap: 'wrap' }}>
                 <span style={{ color: 'var(--text-muted)' }}>
-                  Position: <strong style={{ color: isYes ? 'var(--yes)' : 'var(--no)' }}>
-                    {isYes ? 'Ja' : 'Nein'}
-                  </strong>
+                  Position: <strong style={{ color: isYes ? 'var(--yes)' : 'var(--no)' }}>{isYes ? 'Ja' : 'Nein'}</strong>
                 </span>
                 <span style={{ color: 'var(--text-muted)' }}>
                   Einsatz: <strong style={{ color: 'var(--text)' }}>{p.amount} ₫</strong>
