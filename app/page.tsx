@@ -136,15 +136,15 @@ export default function Home() {
           <img
             src="/logo-schwarz.png"
             alt="Möbius"
-            style={{ height: 32, width: 'auto', display: 'block' }}
             className="nav-logo-light"
+            style={{ height: 28, width: 'auto', display: 'block' }}
           />
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src="/logo-weiss.png"
             alt="Möbius"
-            style={{ height: 32, width: 'auto', display: 'block' }}
             className="nav-logo-dark"
+            style={{ height: 28, width: 'auto', display: 'block' }}
           />
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
