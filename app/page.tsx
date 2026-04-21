@@ -16,7 +16,6 @@ async function dbGet(table: string, params: string) {
   return res.json()
 }
 
-/* ─── Typen ──────────────────────────────────────────────────── */
 interface Market {
   id: string
   question: string
@@ -50,14 +49,12 @@ interface LeaderboardEntry {
   avatar_url?: string
 }
 
-/* ─── LMSR ───────────────────────────────────────────────────── */
 function calcProb(qYes: number, qNo: number, b: number): number {
   const eYes = Math.exp(qYes / b)
   const eNo  = Math.exp(qNo  / b)
   return Math.round((eYes / (eYes + eNo)) * 100)
 }
 
-/* ─── Kategorien ─────────────────────────────────────────────── */
 const CATEGORIES = ['Alle', 'Politik', 'Sport', 'Krypto', 'Entertainment', 'Wirtschaft']
 
 const CAT_CLASS: Record<string, string> = {
@@ -68,7 +65,6 @@ const CAT_CLASS: Record<string, string> = {
   Wirtschaft:    'cat-wirtschaft',
 }
 
-/* ─── Avatar Farben ──────────────────────────────────────────── */
 const AVATAR_COLORS = [
   { bg: '#eff6ff', color: '#1d4ed8' },
   { bg: '#f0fdf4', color: '#166534' },
@@ -82,7 +78,6 @@ function avatarColor(str: string) {
   return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length]
 }
 
-/* ─── Hauptkomponente ────────────────────────────────────────── */
 export default function Home() {
   const router = useRouter()
   const [markets, setMarkets]         = useState<Market[]>([])
@@ -137,10 +132,20 @@ export default function Home() {
     <>
       <nav className="nav">
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <div className="nav-logo">
-            <div className="nav-logo-mark"><div className="nav-logo-inner" /></div>
-            Möbius
-          </div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/logo-schwarz.png"
+            alt="Möbius"
+            style={{ height: 32, width: 'auto', display: 'block' }}
+            className="nav-logo-light"
+          />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/logo-weiss.png"
+            alt="Möbius"
+            style={{ height: 32, width: 'auto', display: 'block' }}
+            className="nav-logo-dark"
+          />
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <button className="nav-btn" onClick={() => setView('markets')}>Märkte</button>
@@ -171,18 +176,18 @@ export default function Home() {
 
       <main className="page-container">
         {view === 'admin' && user?.id === ADMIN_ID && (
-       <AdminPanel userId={user.id} openMarkets={markets} onMarketResolved={loadMarkets} />
+          <AdminPanel userId={user.id} openMarkets={markets} onMarketResolved={loadMarkets} />
         )}
         {view === 'profil' && user && (
-        <ProfileView
-  userId={user.id}
-  token={user.id}
-  displayName={user.username}
-  avatarUrl={user.avatar_url ?? ''}
-  balance={user.balance}
-  onUsernameChange={(name) => setUser({ ...user, username: name })}
-  onAvatarChange={(url) => setUser({ ...user, avatar_url: url })}
-/>
+          <ProfileView
+            userId={user.id}
+            token={user.id}
+            displayName={user.username}
+            avatarUrl={user.avatar_url ?? ''}
+            balance={user.balance}
+            onUsernameChange={(name) => setUser({ ...user, username: name })}
+            onAvatarChange={(url) => setUser({ ...user, avatar_url: url })}
+          />
         )}
         {view === 'markets' && (
           <>
@@ -245,7 +250,6 @@ export default function Home() {
   )
 }
 
-/* ─── Märkte-Grid ────────────────────────────────────────────── */
 function MarketsGrid({ markets, onOpen }: { markets: Market[]; onOpen: (id: string) => void }) {
   const groups: Record<string, Market[]> = {}
   const ungrouped: Market[] = []
@@ -289,7 +293,6 @@ function MarketsGrid({ markets, onOpen }: { markets: Market[]; onOpen: (id: stri
   )
 }
 
-/* ─── Einzelne Markt-Card ────────────────────────────────────── */
 function MarketCard({ market, onClick }: { market: Market; onClick: () => void }) {
   const prob = calcProb(market.q_yes, market.q_no, market.b)
   const isLow = prob < 50
@@ -325,7 +328,6 @@ function MarketCard({ market, onClick }: { market: Market; onClick: () => void }
   )
 }
 
-/* ─── Leaderboard ────────────────────────────────────────────── */
 function Leaderboard({ entries, currentUserId }: { entries: LeaderboardEntry[]; currentUserId?: string }) {
   const rankClass = (i: number) => i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : ''
 
@@ -357,7 +359,6 @@ function Leaderboard({ entries, currentUserId }: { entries: LeaderboardEntry[]; 
   )
 }
 
-/* ─── Portfolio-Ansicht ──────────────────────────────────────── */
 function PortfolioView({ userId, token, router }: {
   userId: string
   token: string
