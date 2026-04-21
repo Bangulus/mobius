@@ -168,10 +168,7 @@ export default function Home() {
     setAuthError('')
     if (!authEmail || !authPassword) { setAuthError('Bitte alle Felder ausfüllen.'); return }
     setAuthLoading(true)
-    const res = await supabaseAuth('token?grant_type=password', {
-      email: authEmail,
-      password: authPassword,
-    })
+    const res = await supabaseAuth('token?grant_type=password', { email: authEmail, password: authPassword })
     setAuthLoading(false)
     if (res.error || !res.access_token) { setAuthError('E-Mail oder Passwort falsch.'); return }
     const userId = res.user?.id
@@ -294,7 +291,7 @@ export default function Home() {
           />
           <div className="nav-search-wrap">
             <span className="nav-search-icon">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
               </svg>
             </span>
@@ -308,7 +305,7 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Rechts: Stats + Auth + Avatar */}
+        {/* Rechts */}
         <div className="nav-right">
           {user ? (
             <>
@@ -321,6 +318,7 @@ export default function Home() {
                 <div className="nav-stat-label">Guthaben</div>
                 <div className="nav-stat-value">{user.balance.toLocaleString('de')} ₫</div>
               </div>
+              <div className="nav-divider" />
               {user?.id === ADMIN_ID && (
                 <button className="nav-pill" onClick={() => setView('admin')}
                   style={{ background: 'rgba(124,58,237,0.25)', borderColor: 'rgba(124,58,237,0.5)', color: '#c4b5fd' }}>
@@ -335,30 +333,24 @@ export default function Home() {
             </>
           )}
 
-          {/* Dark Mode */}
           <button className="nav-icon-btn" onClick={() => setDarkMode(!darkMode)}
             title={darkMode ? 'Light Mode' : 'Dark Mode'}>
             {darkMode ? '☀️' : '🌙'}
           </button>
 
-          {/* Avatar */}
           {user && (
-            <div className="nav-avatar" onClick={() => setView('profil')} title={user.username}>
-              {user.avatar_url ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={user.avatar_url} alt={user.username}
-                  style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
-              ) : (
-                <span>{user.username.slice(0, 2).toUpperCase()}</span>
-              )}
-            </div>
-          )}
-
-          {user && (
-            <button className="nav-icon-btn" onClick={handleLogout} title="Abmelden"
-              style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)' }}>
-              ✕
-            </button>
+            <>
+              <div className="nav-avatar" onClick={() => setView('profil')} title={user.username}>
+                {user.avatar_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={user.avatar_url} alt={user.username}
+                    style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+                ) : (
+                  <span>{user.username.slice(0, 2).toUpperCase()}</span>
+                )}
+              </div>
+              <button className="nav-pill" onClick={handleLogout}>Abmelden</button>
+            </>
           )}
         </div>
       </nav>
@@ -492,14 +484,10 @@ function MarketCard({ market, onClick }: { market: Market; onClick: () => void }
   return (
     <div className="market-card" onClick={onClick}>
       <div className="market-card-meta">
-        {market.category && (
-          <span className={`cat-badge ${catClass}`}>{market.category}</span>
-        )}
+        {market.category && <span className={`cat-badge ${catClass}`}>{market.category}</span>}
         {market.is_auto && <div className="live-dot" title="Live" />}
       </div>
-      <div className="market-card-question">
-        {market.short_label ?? market.question}
-      </div>
+      <div className="market-card-question">{market.short_label ?? market.question}</div>
       <div className="prob-bar">
         <div className={`prob-bar-fill ${isLow ? 'low' : ''}`} style={{ width: `${prob}%` }} />
       </div>
@@ -508,12 +496,8 @@ function MarketCard({ market, onClick }: { market: Market; onClick: () => void }
         <div className="market-volume">{Math.round(market.q_yes + market.q_no)} ₫ Vol.</div>
       </div>
       <div className="bet-btns">
-        <button className="btn-yes" onClick={(e) => { e.stopPropagation(); onClick() }}>
-          Ja {prob}%
-        </button>
-        <button className="btn-no" onClick={(e) => { e.stopPropagation(); onClick() }}>
-          Nein {100 - prob}%
-        </button>
+        <button className="btn-yes" onClick={(e) => { e.stopPropagation(); onClick() }}>Ja {prob}%</button>
+        <button className="btn-no" onClick={(e) => { e.stopPropagation(); onClick() }}>Nein {100 - prob}%</button>
       </div>
     </div>
   )
@@ -538,9 +522,7 @@ function Leaderboard({ entries, currentUserId }: { entries: LeaderboardEntry[]; 
                   style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
               ) : initials}
             </div>
-            <div className="lb-name">
-              {e.username}{isMe && <span className="lb-badge">Du</span>}
-            </div>
+            <div className="lb-name">{e.username}{isMe && <span className="lb-badge">Du</span>}</div>
             <div className="lb-score">{e.total_balance.toLocaleString('de')} ₫</div>
           </div>
         )
