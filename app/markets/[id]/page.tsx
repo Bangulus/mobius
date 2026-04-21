@@ -59,7 +59,6 @@ function calcProb(qYes: number, qNo: number, b: number): number {
   return Math.round((eYes / (eYes + eNo)) * 100)
 }
 
-// LMSR Kostenfunktion: was kostet es, amount Anteile auf `side` zu kaufen?
 function lmsrCost(qYes: number, qNo: number, b: number, side: 'yes' | 'no', amount: number): number {
   const newQYes = side === 'yes' ? qYes + amount : qYes
   const newQNo  = side === 'no'  ? qNo  + amount : qNo
@@ -68,7 +67,6 @@ function lmsrCost(qYes: number, qNo: number, b: number, side: 'yes' | 'no', amou
   return Math.max(0, costAfter - costBefore)
 }
 
-// LMSR Rückgabewert beim Verkauf
 function lmsrSellReturn(qYes: number, qNo: number, b: number, side: 'yes' | 'no', amount: number): number {
   const newQYes = side === 'yes' ? qYes - amount : qYes
   const newQNo  = side === 'no'  ? qNo  - amount : qNo
@@ -82,8 +80,8 @@ const CAT_CLASS: Record<string, string> = {
   Entertainment: 'cat-entertainment', Wirtschaft: 'cat-wirtschaft',
 }
 
-type Tab      = '7T' | '1M' | 'Gesamt'
-type TradeTab = 'kaufen' | 'verkaufen'
+type Tab       = '7T' | '1M' | 'Gesamt'
+type TradeTab  = 'kaufen' | 'verkaufen'
 type OrderType = 'markt' | 'limit'
 
 export default function MarketPage() {
@@ -97,22 +95,19 @@ export default function MarketPage() {
   const [user, setUser]             = useState<User | null>(null)
   const [loading, setLoading]       = useState(true)
 
-  // Trading state
   const [tradeTab, setTradeTab]     = useState<TradeTab>('kaufen')
   const [orderType, setOrderType]   = useState<OrderType>('markt')
   const [direction, setDirection]   = useState<'yes' | 'no'>('yes')
   const [amount, setAmount]         = useState(100)
-  const [limitPrice, setLimitPrice] = useState(50) // in Cent (0–100)
+  const [limitPrice, setLimitPrice] = useState(50)
   const [betLoading, setBetLoading] = useState(false)
   const [betError, setBetError]     = useState('')
   const [betSuccess, setBetSuccess] = useState('')
 
-  // Chart state
   const [activeTab, setActiveTab]   = useState<Tab>('7T')
   const chartRef                    = useRef<HTMLCanvasElement>(null)
   const chartInstance               = useRef<unknown>(null)
 
-  /* Session */
   useEffect(() => {
     const saved = localStorage.getItem('mobius_session')
     if (!saved) return
@@ -126,7 +121,6 @@ export default function MarketPage() {
     } catch {}
   }, [])
 
-  /* Markt + Trades + Position laden */
   const loadMarket = useCallback(async () => {
     const data = await dbGet('markets', `id=eq.${marketId}&select=*`)
     if (data?.[0]) setMarket(data[0])
@@ -152,7 +146,6 @@ export default function MarketPage() {
     if (user?.id) loadPosition(user.id)
   }, [user, loadPosition])
 
-  /* Preisverlauf */
   const priceHistory = (() => {
     if (!market || trades.length === 0) return []
     let qY = 0, qN = 0
@@ -163,7 +156,6 @@ export default function MarketPage() {
     })
   })()
 
-  /* Chart */
   useEffect(() => {
     if (!chartRef.current || priceHistory.length === 0) return
     const build = async () => {
@@ -175,11 +167,11 @@ export default function MarketPage() {
         : activeTab === '1M'
         ? new Date(now.getTime() - 30 * 24 * 3600 * 1000)
         : new Date(0)
-      const pts = priceHistory.filter((p) => new Date(p.t) >= since)
+      const pts        = priceHistory.filter((p) => new Date(p.t) >= since)
       const dataPoints = pts.length > 0 ? pts : priceHistory.slice(-10)
-      const isDark    = document.documentElement.getAttribute('data-theme') === 'dark'
-      const gridColor = isDark ? '#2a2d3a' : '#e8eaef'
-      const tickColor = isDark ? '#94a3b8' : '#9ca3af'
+      const isDark     = document.documentElement.getAttribute('data-theme') === 'dark'
+      const gridColor  = isDark ? '#2a2d3a' : '#e8eaef'
+      const tickColor  = isDark ? '#94a3b8' : '#9ca3af'
       if (chartInstance.current) (chartInstance.current as { destroy: () => void }).destroy()
       chartInstance.current = new Chart(chartRef.current!, {
         type: 'line',
@@ -210,36 +202,26 @@ export default function MarketPage() {
     return () => { if (chartInstance.current) (chartInstance.current as { destroy: () => void }).destroy() }
   }, [priceHistory, activeTab])
 
-  /* Kaufen */
   async function handleKaufen() {
     if (!user || !market) return
     if (amount <= 0) { setBetError('Ungültiger Betrag.'); return }
-
-    const actualCost = orderType === 'markt'
-      ? lmsrCost(market.q_yes, market.q_no, market.b, direction, amount)
-      : amount // bei Limit: Einsatz = Betrag
-
+    const actualCost = lmsrCost(market.q_yes, market.q_no, market.b, direction, amount)
     if (user.balance < actualCost) { setBetError('Nicht genug Guthaben.'); return }
-
     setBetLoading(true)
     setBetError('')
 
-    const session = JSON.parse(localStorage.getItem('mobius_session') ?? '{}')
-    const token   = session?.access_token ?? SUPABASE_KEY
-
     if (orderType === 'limit') {
-      // Limit-Order: nur speichern, nicht sofort ausführen
-      // Für MVP: als normaler Trade speichern mit Hinweis
-      setBetSuccess(`Limit-Order bei ${limitPrice}¢ platziert. Wird ausgeführt wenn der Kurs erreicht wird.`)
+      setBetSuccess(`Limit-Order bei ${limitPrice}¢ platziert.`)
       setBetLoading(false)
       setTimeout(() => setBetSuccess(''), 4000)
       return
     }
 
+    const session = JSON.parse(localStorage.getItem('mobius_session') ?? '{}')
+    const token   = session?.access_token ?? SUPABASE_KEY
     const newQYes = direction === 'yes' ? market.q_yes + amount : market.q_yes
     const newQNo  = direction === 'no'  ? market.q_no  + amount : market.q_no
 
-    // Trade eintragen
     const tradeRes = await fetch(`${SUPABASE_URL}/rest/v1/trades`, {
       method: 'POST',
       headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
@@ -247,14 +229,12 @@ export default function MarketPage() {
     })
     if (!tradeRes.ok) { setBetError('Fehler beim Platzieren.'); setBetLoading(false); return }
 
-    // Markt updaten
     await fetch(`${SUPABASE_URL}/rest/v1/markets?id=eq.${marketId}`, {
       method: 'PATCH',
       headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
       body: JSON.stringify({ q_yes: newQYes, q_no: newQNo }),
     })
 
-    // Balance abziehen
     const newBalance = user.balance - actualCost
     await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${user.id}`, {
       method: 'PATCH',
@@ -262,7 +242,6 @@ export default function MarketPage() {
       body: JSON.stringify({ balance: Math.round(newBalance) }),
     })
 
-    // Position updaten (upsert)
     const existingPos = await dbGet('positions', `user_id=eq.${user.id}&market_id=eq.${marketId}&select=*`)
     if (existingPos?.[0]) {
       const currentAmount = existingPos[0].direction === direction
@@ -290,37 +269,31 @@ export default function MarketPage() {
     setTimeout(() => setBetSuccess(''), 2500)
   }
 
-  /* Verkaufen */
   async function handleVerkaufen() {
     if (!user || !market || !position) return
     const sellAmount = Math.min(amount, position.amount)
     if (sellAmount <= 0) { setBetError('Keine Anteile zum Verkaufen.'); return }
-
     setBetLoading(true)
     setBetError('')
 
     const session   = JSON.parse(localStorage.getItem('mobius_session') ?? '{}')
     const token     = session?.access_token ?? SUPABASE_KEY
     const returnAmt = lmsrSellReturn(market.q_yes, market.q_no, market.b, position.direction as 'yes' | 'no', sellAmount)
+    const newQYes   = position.direction === 'yes' ? market.q_yes - sellAmount : market.q_yes
+    const newQNo    = position.direction === 'no'  ? market.q_no  - sellAmount : market.q_no
 
-    const newQYes = position.direction === 'yes' ? market.q_yes - sellAmount : market.q_yes
-    const newQNo  = position.direction === 'no'  ? market.q_no  - sellAmount : market.q_no
-
-    // Trade eintragen (negativ = Verkauf)
     await fetch(`${SUPABASE_URL}/rest/v1/trades`, {
       method: 'POST',
       headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
       body: JSON.stringify({ market_id: marketId, user_id: user.id, direction: position.direction, amount: -sellAmount }),
     })
 
-    // Markt updaten
     await fetch(`${SUPABASE_URL}/rest/v1/markets?id=eq.${marketId}`, {
       method: 'PATCH',
       headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
       body: JSON.stringify({ q_yes: Math.max(0, newQYes), q_no: Math.max(0, newQNo) }),
     })
 
-    // Balance gutschreiben
     const newBalance = user.balance + returnAmt
     await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${user.id}`, {
       method: 'PATCH',
@@ -328,7 +301,6 @@ export default function MarketPage() {
       body: JSON.stringify({ balance: Math.round(newBalance) }),
     })
 
-    // Position updaten
     const newPosAmount = position.amount - sellAmount
     if (newPosAmount <= 0) {
       await fetch(`${SUPABASE_URL}/rest/v1/positions?user_id=eq.${user.id}&market_id=eq.${marketId}`, {
@@ -352,7 +324,6 @@ export default function MarketPage() {
     setTimeout(() => setBetSuccess(''), 2500)
   }
 
-  /* ── Render ── */
   if (loading) return <div style={{ padding: 32, color: 'var(--text-muted)', fontSize: 14 }}>Markt wird geladen…</div>
   if (!market) return (
     <div style={{ padding: 32 }}>
@@ -361,21 +332,17 @@ export default function MarketPage() {
     </div>
   )
 
-  const prob    = calcProb(market.q_yes, market.q_no, market.b)
-  const isLow   = prob < 50
-  const catClass = CAT_CLASS[market.category ?? ''] ?? ''
-
-  // Gewinnberechnung (Markt-Order)
-  const actualCost   = market ? lmsrCost(market.q_yes, market.q_no, market.b, direction, amount) : 0
-  const winIfCorrect = amount   // bei Auflösung: amount Anteile × 1₫ = amount ₫ ausgezahlt
-  const profit       = winIfCorrect - actualCost
+  const prob       = calcProb(market.q_yes, market.q_no, market.b)
+  const isLow      = prob < 50
+  const catClass   = CAT_CLASS[market.category ?? ''] ?? ''
+  const actualCost = lmsrCost(market.q_yes, market.q_no, market.b, direction, amount)
+  const profit     = amount - actualCost
   const returnOnSell = position
     ? lmsrSellReturn(market.q_yes, market.q_no, market.b, position.direction as 'yes' | 'no', Math.min(amount, position.amount))
     : 0
 
   return (
     <>
-      {/* ── Nav ── */}
       <nav className="nav">
         <div className="nav-left">
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -399,7 +366,7 @@ export default function MarketPage() {
 
       <div style={{ maxWidth: 980, margin: '0 auto', padding: '24px 16px' }}>
 
-        {/* ── Header ── */}
+        {/* Header */}
         <div style={{ marginBottom: 20 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
             {market.category && <span className={`cat-badge ${catClass}`}>{market.category}</span>}
@@ -427,7 +394,7 @@ export default function MarketPage() {
           )}
         </div>
 
-        {/* ── Wahrscheinlichkeit ── */}
+        {/* Wahrscheinlichkeit */}
         <div className="card" style={{ marginBottom: 20 }}>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 10 }}>
             <span style={{ fontSize: 36, fontWeight: 700, color: isLow ? 'var(--no)' : 'var(--yes)' }}>{prob}%</span>
@@ -438,7 +405,7 @@ export default function MarketPage() {
           </div>
         </div>
 
-        {/* ── Grid: Chart + Panel ── */}
+        {/* Grid */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 20, alignItems: 'start' }}>
 
           {/* Chart */}
@@ -468,7 +435,7 @@ export default function MarketPage() {
             </div>
           </div>
 
-          {/* ── Trading Panel ── */}
+          {/* Trading Panel */}
           <div className="card" style={{ position: 'sticky', top: 'calc(var(--nav-height) + 16px)', padding: 0, overflow: 'hidden' }}>
             {market.resolved ? (
               <div style={{ textAlign: 'center', padding: '24px 16px' }}>
@@ -486,12 +453,11 @@ export default function MarketPage() {
               </div>
             ) : (
               <>
-                {/* ── Tab-Leiste: Kaufen / Verkaufen | Markt / Limit ── */}
+                {/* Tabs */}
                 <div style={{
                   display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                   borderBottom: '1px solid var(--border)', padding: '0 16px',
                 }}>
-                  {/* Kaufen / Verkaufen */}
                   <div style={{ display: 'flex' }}>
                     {(['kaufen', 'verkaufen'] as TradeTab[]).map((t) => (
                       <button key={t} onClick={() => { setTradeTab(t); setBetError(''); setBetSuccess('') }}
@@ -506,24 +472,18 @@ export default function MarketPage() {
                       </button>
                     ))}
                   </div>
-                  {/* Markt / Limit */}
-                  <div style={{ position: 'relative' }}>
-                    <select
-                      value={orderType}
-                      onChange={(e) => setOrderType(e.target.value as OrderType)}
-                      style={{
-                        fontSize: 12, color: 'var(--text-muted)', background: 'transparent',
-                        border: '1px solid var(--border)', borderRadius: 6,
-                        padding: '4px 8px', cursor: 'pointer', appearance: 'none',
-                      }}>
-                      <option value="markt">Markt</option>
-                      <option value="limit">Limit</option>
-                    </select>
-                  </div>
+                  <select value={orderType} onChange={(e) => setOrderType(e.target.value as OrderType)}
+                    style={{
+                      fontSize: 12, color: 'var(--text-muted)', background: 'transparent',
+                      border: '1px solid var(--border)', borderRadius: 6,
+                      padding: '4px 8px', cursor: 'pointer',
+                    }}>
+                    <option value="markt">Markt</option>
+                    <option value="limit">Limit</option>
+                  </select>
                 </div>
 
-                <div style={{ padding: '16px' }}>
-
+                <div style={{ padding: 16 }}>
                   {tradeTab === 'kaufen' && (
                     <>
                       {/* Ja / Nein */}
@@ -547,7 +507,7 @@ export default function MarketPage() {
                         ))}
                       </div>
 
-                      {/* Limit-Preis (nur bei Limit-Order) */}
+                      {/* Limit-Preis */}
                       {orderType === 'limit' && (
                         <div style={{ marginBottom: 14 }}>
                           <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>
@@ -580,20 +540,23 @@ export default function MarketPage() {
                         </div>
                       </div>
 
-                      {/* Gewinn-Anzeige (nur Markt-Order) */}
+                      {/* Einsatz / Auszahlung */}
                       {orderType === 'markt' && (
                         <div style={{
                           background: 'var(--surface)', borderRadius: 10, padding: '14px',
-                          marginBottom: 14, textAlign: 'center',
+                          marginBottom: 14,
                         }}>
-                          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>
-                            Kosten: {Math.round(actualCost)} ₫ · Bei Gewinn erhältst du
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Einsatz</div>
+                            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>{Math.round(actualCost)} ₫</div>
                           </div>
-                          <div style={{ fontSize: 28, fontWeight: 700, color: '#16a34a' }}>
-                            +{Math.round(profit)} ₫
-                          </div>
-                          <div style={{ fontSize: 11, color: 'var(--text-subtle)', marginTop: 2 }}>
-                            Gewinn wenn {direction === 'yes' ? 'Ja' : 'Nein'} eintritt
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 10, borderTop: '1px solid var(--border)' }}>
+                            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                              Auszahlung wenn {direction === 'yes' ? 'Ja' : 'Nein'}
+                            </div>
+                            <div style={{ fontSize: 20, fontWeight: 700, color: '#16a34a' }}>
+                              {Math.round(actualCost + profit)} ₫
+                            </div>
                           </div>
                         </div>
                       )}
@@ -617,7 +580,6 @@ export default function MarketPage() {
                         </div>
                       ) : (
                         <>
-                          {/* Position anzeigen */}
                           <div style={{
                             background: 'var(--surface)', borderRadius: 8, padding: '10px 12px',
                             marginBottom: 14, fontSize: 13,
@@ -628,7 +590,6 @@ export default function MarketPage() {
                             </div>
                           </div>
 
-                          {/* Limit-Preis für Verkauf */}
                           {orderType === 'limit' && (
                             <div style={{ marginBottom: 14 }}>
                               <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>
@@ -640,17 +601,17 @@ export default function MarketPage() {
                             </div>
                           )}
 
-                          {/* Verkaufsmenge */}
                           <div style={{ marginBottom: 14 }}>
                             <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>
-                              Anzahl Anteile verkaufen (max. {position.amount})
+                              Anzahl Anteile (max. {position.amount})
                             </div>
                             <input type="number" min={1} max={position.amount} value={amount}
                               onChange={(e) => setAmount(Math.min(position.amount, Math.max(1, parseInt(e.target.value) || 1)))}
                               style={{ width: '100%', fontSize: 16, fontWeight: 600 }} />
                             <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
                               {[25, 50, 75, 100].map((pct) => (
-                                <button key={pct} onClick={() => setAmount(Math.max(1, Math.round(position.amount * pct / 100)))}
+                                <button key={pct}
+                                  onClick={() => setAmount(Math.max(1, Math.round(position.amount * pct / 100)))}
                                   style={{
                                     flex: 1, fontSize: 11, padding: '4px 0', borderRadius: 6,
                                     border: '1px solid var(--border)', background: 'var(--surface)',
@@ -660,18 +621,20 @@ export default function MarketPage() {
                             </div>
                           </div>
 
-                          {/* Rückgabe-Anzeige */}
                           {orderType === 'markt' && (
                             <div style={{
                               background: 'var(--surface)', borderRadius: 10, padding: '14px',
-                              marginBottom: 14, textAlign: 'center',
+                              marginBottom: 14,
                             }}>
-                              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Du erhältst</div>
-                              <div style={{ fontSize: 28, fontWeight: 700, color: '#16a34a' }}>
-                                +{Math.round(returnOnSell)} ₫
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Anteile</div>
+                                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>{Math.min(amount, position.amount)}</div>
                               </div>
-                              <div style={{ fontSize: 11, color: 'var(--text-subtle)', marginTop: 2 }}>
-                                zum aktuellen Marktpreis
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 10, borderTop: '1px solid var(--border)' }}>
+                                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Du erhältst</div>
+                                <div style={{ fontSize: 20, fontWeight: 700, color: '#16a34a' }}>
+                                  {Math.round(returnOnSell)} ₫
+                                </div>
                               </div>
                             </div>
                           )}
@@ -683,7 +646,6 @@ export default function MarketPage() {
                   {betError  && <div className="alert alert-error"   style={{ marginBottom: 10 }}>{betError}</div>}
                   {betSuccess && <div className="alert alert-success" style={{ marginBottom: 10 }}>{betSuccess}</div>}
 
-                  {/* Action Button */}
                   {tradeTab === 'kaufen' ? (
                     <button
                       className={`submit-btn ${direction === 'yes' ? 'yes' : 'no'}`}
@@ -691,13 +653,11 @@ export default function MarketPage() {
                       disabled={betLoading || amount <= 0}
                       style={{ width: '100%' }}>
                       {betLoading ? 'Wird ausgeführt…'
-                        : orderType === 'limit' ? `Limit-Order: ${direction === 'yes' ? 'Ja' : 'Nein'} @ ${limitPrice}¢`
+                        : orderType === 'limit' ? `Limit: ${direction === 'yes' ? 'Ja' : 'Nein'} @ ${limitPrice}¢`
                         : `${direction === 'yes' ? 'Ja' : 'Nein'} kaufen · ${Math.round(actualCost)} ₫`}
                     </button>
                   ) : (
-                    <button
-                      className="submit-btn no"
-                      onClick={handleVerkaufen}
+                    <button className="submit-btn no" onClick={handleVerkaufen}
                       disabled={betLoading || !position || position.amount <= 0}
                       style={{ width: '100%' }}>
                       {betLoading ? 'Wird verkauft…' : `Verkaufen · ${Math.round(returnOnSell)} ₫ erhalten`}
@@ -713,7 +673,7 @@ export default function MarketPage() {
           </div>
         </div>
 
-        {/* ── Letzte Trades ── */}
+        {/* Letzte Trades */}
         {trades.filter(t => t.amount > 0).length > 0 && (
           <div className="card" style={{ marginTop: 20 }}>
             <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', marginBottom: 14 }}>Letzte Trades</div>
@@ -735,7 +695,6 @@ export default function MarketPage() {
             </div>
           </div>
         )}
-
       </div>
     </>
   )
