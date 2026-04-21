@@ -59,17 +59,25 @@ function calcProb(qYes: number, qNo: number, b: number): number {
   return Math.round((eYes / (eYes + eNo)) * 100)
 }
 
-function lmsrCost(qYes: number, qNo: number, b: number, side: 'yes' | 'no', amount: number): number {
-  const newQYes = side === 'yes' ? qYes + amount : qYes
-  const newQNo  = side === 'no'  ? qNo  + amount : qNo
-  const costBefore = b * Math.log(Math.exp(qYes / b) + Math.exp(qNo / b))
-  const costAfter  = b * Math.log(Math.exp(newQYes / b) + Math.exp(newQNo / b))
-  return Math.max(0, costAfter - costBefore)
+// Was kostet es, `spend` Dukaten in Anteile umzuwandeln → gibt Anteile zurück
+function lmsrSharesForSpend(qYes: number, qNo: number, b: number, side: 'yes' | 'no', spend: number): number {
+  // Binärsuche: Wie viele Anteile bekomme ich für `spend` Dukaten?
+  let lo = 0, hi = spend * 10
+  for (let i = 0; i < 64; i++) {
+    const mid = (lo + hi) / 2
+    const newQYes = side === 'yes' ? qYes + mid : qYes
+    const newQNo  = side === 'no'  ? qNo  + mid : qNo
+    const cost = b * Math.log(Math.exp(newQYes / b) + Math.exp(newQNo / b))
+              - b * Math.log(Math.exp(qYes / b)    + Math.exp(qNo / b))
+    if (cost < spend) lo = mid
+    else hi = mid
+  }
+  return (lo + hi) / 2
 }
 
-function lmsrSellReturn(qYes: number, qNo: number, b: number, side: 'yes' | 'no', amount: number): number {
-  const newQYes = side === 'yes' ? qYes - amount : qYes
-  const newQNo  = side === 'no'  ? qNo  - amount : qNo
+function lmsrSellReturn(qYes: number, qNo: number, b: number, side: 'yes' | 'no', shares: number): number {
+  const newQYes = side === 'yes' ? qYes - shares : qYes
+  const newQNo  = side === 'no'  ? qNo  - shares : qNo
   const costBefore = b * Math.log(Math.exp(qYes / b) + Math.exp(qNo / b))
   const costAfter  = b * Math.log(Math.exp(Math.max(0, newQYes) / b) + Math.exp(Math.max(0, newQNo) / b))
   return Math.max(0, costBefore - costAfter)
@@ -98,7 +106,7 @@ export default function MarketPage() {
   const [tradeTab, setTradeTab]     = useState<TradeTab>('kaufen')
   const [orderType, setOrderType]   = useState<OrderType>('markt')
   const [direction, setDirection]   = useState<'yes' | 'no'>('yes')
-  const [amount, setAmount]         = useState(100)
+  const [spend, setSpend]           = useState(100)
   const [limitPrice, setLimitPrice] = useState(50)
   const [betLoading, setBetLoading] = useState(false)
   const [betError, setBetError]     = useState('')
@@ -137,19 +145,13 @@ export default function MarketPage() {
     setPosition(data?.[0] ?? null)
   }, [marketId])
 
-  useEffect(() => {
-    loadMarket()
-    loadTrades()
-  }, [loadMarket, loadTrades])
-
-  useEffect(() => {
-    if (user?.id) loadPosition(user.id)
-  }, [user, loadPosition])
+  useEffect(() => { loadMarket(); loadTrades() }, [loadMarket, loadTrades])
+  useEffect(() => { if (user?.id) loadPosition(user.id) }, [user, loadPosition])
 
   const priceHistory = (() => {
     if (!market || trades.length === 0) return []
     let qY = 0, qN = 0
-    return trades.map((t) => {
+    return trades.filter(t => t.amount > 0).map((t) => {
       if (t.direction === 'yes') qY += t.amount
       else qN += t.amount
       return { t: t.created_at, prob: calcProb(qY, qN, market.b) }
@@ -204,9 +206,8 @@ export default function MarketPage() {
 
   async function handleKaufen() {
     if (!user || !market) return
-    if (amount <= 0) { setBetError('Ungültiger Betrag.'); return }
-    const actualCost = lmsrCost(market.q_yes, market.q_no, market.b, direction, amount)
-    if (user.balance < actualCost) { setBetError('Nicht genug Guthaben.'); return }
+    if (spend <= 0) { setBetError('Ungültiger Betrag.'); return }
+    if (user.balance < spend) { setBetError('Nicht genug Guthaben.'); return }
     setBetLoading(true)
     setBetError('')
 
@@ -217,15 +218,16 @@ export default function MarketPage() {
       return
     }
 
+    const shares  = lmsrSharesForSpend(market.q_yes, market.q_no, market.b, direction, spend)
     const session = JSON.parse(localStorage.getItem('mobius_session') ?? '{}')
     const token   = session?.access_token ?? SUPABASE_KEY
-    const newQYes = direction === 'yes' ? market.q_yes + amount : market.q_yes
-    const newQNo  = direction === 'no'  ? market.q_no  + amount : market.q_no
+    const newQYes = direction === 'yes' ? market.q_yes + shares : market.q_yes
+    const newQNo  = direction === 'no'  ? market.q_no  + shares : market.q_no
 
     const tradeRes = await fetch(`${SUPABASE_URL}/rest/v1/trades`, {
       method: 'POST',
       headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-      body: JSON.stringify({ market_id: marketId, user_id: user.id, direction, amount }),
+      body: JSON.stringify({ market_id: marketId, user_id: user.id, direction, amount: shares }),
     })
     if (!tradeRes.ok) { setBetError('Fehler beim Platzieren.'); setBetLoading(false); return }
 
@@ -235,7 +237,7 @@ export default function MarketPage() {
       body: JSON.stringify({ q_yes: newQYes, q_no: newQNo }),
     })
 
-    const newBalance = user.balance - actualCost
+    const newBalance = user.balance - spend
     await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${user.id}`, {
       method: 'PATCH',
       headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
@@ -244,19 +246,19 @@ export default function MarketPage() {
 
     const existingPos = await dbGet('positions', `user_id=eq.${user.id}&market_id=eq.${marketId}&select=*`)
     if (existingPos?.[0]) {
-      const currentAmount = existingPos[0].direction === direction
-        ? existingPos[0].amount + amount
-        : existingPos[0].amount - amount
+      const newShares = existingPos[0].direction === direction
+        ? existingPos[0].amount + shares
+        : existingPos[0].amount - shares
       await fetch(`${SUPABASE_URL}/rest/v1/positions?user_id=eq.${user.id}&market_id=eq.${marketId}`, {
         method: 'PATCH',
         headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-        body: JSON.stringify({ direction, amount: Math.max(0, currentAmount) }),
+        body: JSON.stringify({ direction, amount: Math.max(0, newShares) }),
       })
     } else {
       await fetch(`${SUPABASE_URL}/rest/v1/positions`, {
         method: 'POST',
         headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-        body: JSON.stringify({ user_id: user.id, market_id: marketId, direction, amount }),
+        body: JSON.stringify({ user_id: user.id, market_id: marketId, direction, amount: shares }),
       })
     }
 
@@ -271,21 +273,21 @@ export default function MarketPage() {
 
   async function handleVerkaufen() {
     if (!user || !market || !position) return
-    const sellAmount = Math.min(amount, position.amount)
-    if (sellAmount <= 0) { setBetError('Keine Anteile zum Verkaufen.'); return }
+    const sellShares = position.amount
+    if (sellShares <= 0) { setBetError('Keine Anteile zum Verkaufen.'); return }
     setBetLoading(true)
     setBetError('')
 
     const session   = JSON.parse(localStorage.getItem('mobius_session') ?? '{}')
     const token     = session?.access_token ?? SUPABASE_KEY
-    const returnAmt = lmsrSellReturn(market.q_yes, market.q_no, market.b, position.direction as 'yes' | 'no', sellAmount)
-    const newQYes   = position.direction === 'yes' ? market.q_yes - sellAmount : market.q_yes
-    const newQNo    = position.direction === 'no'  ? market.q_no  - sellAmount : market.q_no
+    const returnAmt = lmsrSellReturn(market.q_yes, market.q_no, market.b, position.direction as 'yes' | 'no', sellShares)
+    const newQYes   = position.direction === 'yes' ? market.q_yes - sellShares : market.q_yes
+    const newQNo    = position.direction === 'no'  ? market.q_no  - sellShares : market.q_no
 
     await fetch(`${SUPABASE_URL}/rest/v1/trades`, {
       method: 'POST',
       headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-      body: JSON.stringify({ market_id: marketId, user_id: user.id, direction: position.direction, amount: -sellAmount }),
+      body: JSON.stringify({ market_id: marketId, user_id: user.id, direction: position.direction, amount: -sellShares }),
     })
 
     await fetch(`${SUPABASE_URL}/rest/v1/markets?id=eq.${marketId}`, {
@@ -301,19 +303,10 @@ export default function MarketPage() {
       body: JSON.stringify({ balance: Math.round(newBalance) }),
     })
 
-    const newPosAmount = position.amount - sellAmount
-    if (newPosAmount <= 0) {
-      await fetch(`${SUPABASE_URL}/rest/v1/positions?user_id=eq.${user.id}&market_id=eq.${marketId}`, {
-        method: 'DELETE',
-        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${token}` },
-      })
-    } else {
-      await fetch(`${SUPABASE_URL}/rest/v1/positions?user_id=eq.${user.id}&market_id=eq.${marketId}`, {
-        method: 'PATCH',
-        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-        body: JSON.stringify({ amount: newPosAmount }),
-      })
-    }
+    await fetch(`${SUPABASE_URL}/rest/v1/positions?user_id=eq.${user.id}&market_id=eq.${marketId}`, {
+      method: 'DELETE',
+      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${token}` },
+    })
 
     setUser({ ...user, balance: Math.round(newBalance) })
     setBetSuccess(`${Math.round(returnAmt)} ₫ erhalten ✓`)
@@ -335,10 +328,12 @@ export default function MarketPage() {
   const prob       = calcProb(market.q_yes, market.q_no, market.b)
   const isLow      = prob < 50
   const catClass   = CAT_CLASS[market.category ?? ''] ?? ''
-  const actualCost = lmsrCost(market.q_yes, market.q_no, market.b, direction, amount)
-  const profit     = amount - actualCost
-  const returnOnSell = position
-    ? lmsrSellReturn(market.q_yes, market.q_no, market.b, position.direction as 'yes' | 'no', Math.min(amount, position.amount))
+
+  // Auszahlung = Anzahl Anteile die man für `spend` bekommt × 1₫
+  const sharesForSpend = market ? lmsrSharesForSpend(market.q_yes, market.q_no, market.b, direction, spend) : 0
+  const payout         = Math.round(sharesForSpend)
+  const returnOnSell   = position
+    ? lmsrSellReturn(market.q_yes, market.q_no, market.b, position.direction as 'yes' | 'no', position.amount)
     : 0
 
   return (
@@ -484,6 +479,8 @@ export default function MarketPage() {
                 </div>
 
                 <div style={{ padding: 16 }}>
+
+                  {/* ── KAUFEN ── */}
                   {tradeTab === 'kaufen' && (
                     <>
                       {/* Ja / Nein */}
@@ -523,40 +520,37 @@ export default function MarketPage() {
                       )}
 
                       {/* Betrag */}
-                      <div style={{ marginBottom: 14 }}>
+                      <div style={{ marginBottom: 12 }}>
                         <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>Betrag (₫)</div>
-                        <input type="number" min={1} max={user.balance} value={amount}
-                          onChange={(e) => setAmount(Math.max(1, parseInt(e.target.value) || 1))}
-                          style={{ width: '100%', fontSize: 16, fontWeight: 600 }} />
+                        <input
+                          type="number" min={1} max={user.balance} value={spend}
+                          onChange={(e) => setSpend(Math.max(1, parseInt(e.target.value) || 1))}
+                          style={{ width: '100%', fontSize: 22, fontWeight: 700 }}
+                        />
                         <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
                           {[50, 100, 200, 500].map((v) => (
-                            <button key={v} onClick={() => setAmount(v)} style={{
+                            <button key={v} onClick={() => setSpend(v)} style={{
                               flex: 1, fontSize: 11, padding: '4px 0', borderRadius: 6,
                               border: '1px solid var(--border)',
-                              background: amount === v ? 'var(--accent)' : 'var(--surface)',
-                              color: amount === v ? '#fff' : 'var(--text-muted)', cursor: 'pointer',
+                              background: spend === v ? 'var(--accent)' : 'var(--surface)',
+                              color: spend === v ? '#fff' : 'var(--text-muted)', cursor: 'pointer',
                             }}>+{v}</button>
                           ))}
                         </div>
                       </div>
 
-                      {/* Einsatz / Auszahlung */}
+                      {/* Auszahlung — das Einzige was zählt */}
                       {orderType === 'markt' && (
                         <div style={{
-                          background: 'var(--surface)', borderRadius: 10, padding: '14px',
-                          marginBottom: 14,
+                          background: 'rgba(22,163,74,0.07)', borderRadius: 10,
+                          padding: '14px', marginBottom: 14, textAlign: 'center',
+                          border: '1px solid rgba(22,163,74,0.2)',
                         }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Einsatz</div>
-                            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>{Math.round(actualCost)} ₫</div>
+                          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>
+                            Auszahlung wenn {direction === 'yes' ? 'Ja' : 'Nein'} eintritt
                           </div>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 10, borderTop: '1px solid var(--border)' }}>
-                            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                              Auszahlung wenn {direction === 'yes' ? 'Ja' : 'Nein'}
-                            </div>
-                            <div style={{ fontSize: 20, fontWeight: 700, color: '#16a34a' }}>
-                              {Math.round(actualCost + profit)} ₫
-                            </div>
+                          <div style={{ fontSize: 32, fontWeight: 800, color: '#16a34a', letterSpacing: '-0.5px' }}>
+                            {payout} ₫
                           </div>
                         </div>
                       )}
@@ -572,24 +566,27 @@ export default function MarketPage() {
                     </>
                   )}
 
+                  {/* ── VERKAUFEN ── */}
                   {tradeTab === 'verkaufen' && (
                     <>
                       {!position || position.amount <= 0 ? (
-                        <div style={{ textAlign: 'center', padding: '16px 0', fontSize: 13, color: 'var(--text-muted)' }}>
+                        <div style={{ textAlign: 'center', padding: '24px 0', fontSize: 13, color: 'var(--text-muted)' }}>
                           Du hast keine Anteile in diesem Markt.
                         </div>
                       ) : (
                         <>
+                          {/* Position */}
                           <div style={{
-                            background: 'var(--surface)', borderRadius: 8, padding: '10px 12px',
-                            marginBottom: 14, fontSize: 13,
+                            background: 'var(--surface)', borderRadius: 8, padding: '12px',
+                            marginBottom: 16, fontSize: 13,
                           }}>
-                            <div style={{ color: 'var(--text-muted)', marginBottom: 2 }}>Deine Position</div>
-                            <div style={{ fontWeight: 600, color: position.direction === 'yes' ? 'var(--yes)' : 'var(--no)' }}>
-                              {position.direction === 'yes' ? 'Ja' : 'Nein'} · {position.amount} Anteile
+                            <div style={{ color: 'var(--text-muted)', marginBottom: 4, fontSize: 12 }}>Deine Position</div>
+                            <div style={{ fontWeight: 700, fontSize: 15, color: position.direction === 'yes' ? 'var(--yes)' : 'var(--no)' }}>
+                              {position.direction === 'yes' ? 'Ja' : 'Nein'} · {Math.round(position.amount)} Anteile
                             </div>
                           </div>
 
+                          {/* Limit-Preis für Verkauf */}
                           {orderType === 'limit' && (
                             <div style={{ marginBottom: 14 }}>
                               <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>
@@ -601,40 +598,21 @@ export default function MarketPage() {
                             </div>
                           )}
 
-                          <div style={{ marginBottom: 14 }}>
-                            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>
-                              Anzahl Anteile (max. {position.amount})
-                            </div>
-                            <input type="number" min={1} max={position.amount} value={amount}
-                              onChange={(e) => setAmount(Math.min(position.amount, Math.max(1, parseInt(e.target.value) || 1)))}
-                              style={{ width: '100%', fontSize: 16, fontWeight: 600 }} />
-                            <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
-                              {[25, 50, 75, 100].map((pct) => (
-                                <button key={pct}
-                                  onClick={() => setAmount(Math.max(1, Math.round(position.amount * pct / 100)))}
-                                  style={{
-                                    flex: 1, fontSize: 11, padding: '4px 0', borderRadius: 6,
-                                    border: '1px solid var(--border)', background: 'var(--surface)',
-                                    color: 'var(--text-muted)', cursor: 'pointer',
-                                  }}>{pct}%</button>
-                              ))}
-                            </div>
-                          </div>
-
+                          {/* Rückgabe */}
                           {orderType === 'markt' && (
                             <div style={{
-                              background: 'var(--surface)', borderRadius: 10, padding: '14px',
-                              marginBottom: 14,
+                              background: 'rgba(22,163,74,0.07)', borderRadius: 10,
+                              padding: '14px', marginBottom: 14, textAlign: 'center',
+                              border: '1px solid rgba(22,163,74,0.2)',
                             }}>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Anteile</div>
-                                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>{Math.min(amount, position.amount)}</div>
+                              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>
+                                Du erhältst jetzt
                               </div>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 10, borderTop: '1px solid var(--border)' }}>
-                                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Du erhältst</div>
-                                <div style={{ fontSize: 20, fontWeight: 700, color: '#16a34a' }}>
-                                  {Math.round(returnOnSell)} ₫
-                                </div>
+                              <div style={{ fontSize: 32, fontWeight: 800, color: '#16a34a', letterSpacing: '-0.5px' }}>
+                                {Math.round(returnOnSell)} ₫
+                              </div>
+                              <div style={{ fontSize: 11, color: 'var(--text-subtle)', marginTop: 4 }}>
+                                alle {Math.round(position.amount)} Anteile verkaufen
                               </div>
                             </div>
                           )}
@@ -650,17 +628,17 @@ export default function MarketPage() {
                     <button
                       className={`submit-btn ${direction === 'yes' ? 'yes' : 'no'}`}
                       onClick={handleKaufen}
-                      disabled={betLoading || amount <= 0}
+                      disabled={betLoading || spend <= 0}
                       style={{ width: '100%' }}>
                       {betLoading ? 'Wird ausgeführt…'
                         : orderType === 'limit' ? `Limit: ${direction === 'yes' ? 'Ja' : 'Nein'} @ ${limitPrice}¢`
-                        : `${direction === 'yes' ? 'Ja' : 'Nein'} kaufen · ${Math.round(actualCost)} ₫`}
+                        : `${direction === 'yes' ? 'Ja' : 'Nein'} kaufen · ${spend} ₫`}
                     </button>
                   ) : (
                     <button className="submit-btn no" onClick={handleVerkaufen}
                       disabled={betLoading || !position || position.amount <= 0}
                       style={{ width: '100%' }}>
-                      {betLoading ? 'Wird verkauft…' : `Verkaufen · ${Math.round(returnOnSell)} ₫ erhalten`}
+                      {betLoading ? 'Wird verkauft…' : `Alle Anteile verkaufen · ${Math.round(returnOnSell)} ₫`}
                     </button>
                   )}
 
@@ -686,7 +664,7 @@ export default function MarketPage() {
                   <span style={{ color: t.direction === 'yes' ? 'var(--yes)' : 'var(--no)', fontWeight: 600 }}>
                     {t.direction === 'yes' ? 'Ja' : 'Nein'}
                   </span>
-                  <span style={{ color: 'var(--text)' }}>{t.amount} ₫</span>
+                  <span style={{ color: 'var(--text)' }}>{Math.round(t.amount)} ₫</span>
                   <span style={{ color: 'var(--text-subtle)' }}>
                     {new Date(t.created_at).toLocaleDateString('de', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
                   </span>
