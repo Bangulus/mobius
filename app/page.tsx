@@ -16,6 +16,32 @@ async function dbGet(table: string, params: string) {
   return res.json()
 }
 
+async function supabaseAuth(path: string, body: object) {
+  const res = await fetch(`${SUPABASE_URL}/auth/v1/${path}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: SUPABASE_KEY,
+    },
+    body: JSON.stringify(body),
+  })
+  return res.json()
+}
+
+async function dbPost(table: string, body: object, token: string) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${token}`,
+      Prefer: 'return=representation',
+    },
+    body: JSON.stringify(body),
+  })
+  return res.json()
+}
+
 interface Market {
   id: string
   question: string
@@ -78,6 +104,8 @@ function avatarColor(str: string) {
   return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length]
 }
 
+type AuthMode = 'login' | 'register'
+
 export default function Home() {
   const router = useRouter()
   const [markets, setMarkets]         = useState<Market[]>([])
@@ -87,24 +115,35 @@ export default function Home() {
   const [view, setView]               = useState<'markets' | 'portfolio' | 'admin' | 'profil'>('markets')
   const [loading, setLoading]         = useState(true)
   const [darkMode, setDarkMode]       = useState(false)
-  const [showLogin, setShowLogin]     = useState(false)
-  const [loginInput, setLoginInput]   = useState('')
-  const [loginError, setLoginError]   = useState('')
+  const [showAuth, setShowAuth]       = useState(false)
+  const [authMode, setAuthMode]       = useState<AuthMode>('login')
+  const [authEmail, setAuthEmail]     = useState('')
+  const [authPassword, setAuthPassword] = useState('')
+  const [authUsername, setAuthUsername] = useState('')
+  const [authError, setAuthError]     = useState('')
+  const [authLoading, setAuthLoading] = useState(false)
+  const [accessToken, setAccessToken] = useState('')
 
   const ADMIN_ID = 'b75edaf4-141d-41f1-9555-887a8ddbac58'
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    const token = params.get('token')
-    if (!token) return
-    dbGet('users', `id=eq.${token}&select=*`).then((data) => {
-      if (data?.[0]) setUser(data[0])
-    })
-  }, [])
-
-  useEffect(() => {
     document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light')
   }, [darkMode])
+
+  // Gespeicherte Session beim Start laden
+  useEffect(() => {
+    const saved = localStorage.getItem('mobius_session')
+    if (!saved) return
+    try {
+      const session = JSON.parse(saved)
+      if (session?.access_token && session?.user_id) {
+        setAccessToken(session.access_token)
+        dbGet('users', `id=eq.${session.user_id}&select=*`).then((data) => {
+          if (data?.[0]) setUser(data[0])
+        })
+      }
+    } catch {}
+  }, [])
 
   const loadMarkets = useCallback(async () => {
     setLoading(true)
@@ -131,22 +170,104 @@ export default function Home() {
   }, [loadMarkets, loadLeaderboard])
 
   const handleLogin = async () => {
-    setLoginError('')
-    const id = loginInput.trim()
-    if (!id) { setLoginError('Bitte User-ID eingeben.'); return }
-    const data = await dbGet('users', `id=eq.${id}&select=*`)
-    if (data?.[0]) {
-      setUser(data[0])
-      setShowLogin(false)
-      setLoginInput('')
+    setAuthError('')
+    if (!authEmail || !authPassword) { setAuthError('Bitte alle Felder ausfüllen.'); return }
+    setAuthLoading(true)
+    const res = await supabaseAuth('token?grant_type=password', {
+      email: authEmail,
+      password: authPassword,
+    })
+    setAuthLoading(false)
+    if (res.error || !res.access_token) {
+      setAuthError('E-Mail oder Passwort falsch.')
+      return
+    }
+    const userId = res.user?.id
+    const userData = await dbGet('users', `id=eq.${userId}&select=*`)
+    if (userData?.[0]) {
+      setUser(userData[0])
+      setAccessToken(res.access_token)
+      localStorage.setItem('mobius_session', JSON.stringify({ access_token: res.access_token, user_id: userId }))
+      setShowAuth(false)
+      resetAuthForm()
     } else {
-      setLoginError('Kein Benutzer mit dieser ID gefunden.')
+      setAuthError('Benutzer nicht gefunden.')
+    }
+  }
+
+  const handleRegister = async () => {
+    setAuthError('')
+    if (!authEmail || !authPassword || !authUsername) { setAuthError('Bitte alle Felder ausfüllen.'); return }
+    if (authUsername.length < 3) { setAuthError('Benutzername muss mindestens 3 Zeichen haben.'); return }
+    if (authPassword.length < 6) { setAuthError('Passwort muss mindestens 6 Zeichen haben.'); return }
+    setAuthLoading(true)
+
+    // Benutzername auf Verfügbarkeit prüfen
+    const existing = await dbGet('users', `username=eq.${authUsername}&select=id`)
+    if (existing?.length > 0) {
+      setAuthLoading(false)
+      setAuthError('Dieser Benutzername ist bereits vergeben.')
+      return
+    }
+
+    // Supabase Auth Registrierung
+    const res = await supabaseAuth('signup', {
+      email: authEmail,
+      password: authPassword,
+    })
+    setAuthLoading(false)
+
+    if (res.error) {
+      setAuthError(res.error.message ?? 'Registrierung fehlgeschlagen.')
+      return
+    }
+
+    const userId = res.user?.id
+    const token = res.access_token
+
+    if (!userId) {
+      setAuthError('Registrierung erfolgreich! Bitte bestätige deine E-Mail und melde dich dann an.')
+      return
+    }
+
+    // User in users-Tabelle anlegen
+    await dbPost('users', {
+      id: userId,
+      username: authUsername,
+      balance: 1000,
+    }, token ?? SUPABASE_KEY)
+
+    const userData = await dbGet('users', `id=eq.${userId}&select=*`)
+    if (userData?.[0]) {
+      setUser(userData[0])
+      setAccessToken(token)
+      localStorage.setItem('mobius_session', JSON.stringify({ access_token: token, user_id: userId }))
+      setShowAuth(false)
+      resetAuthForm()
+      loadLeaderboard()
+    } else {
+      setAuthError('Konto erstellt! Bitte melde dich jetzt an.')
     }
   }
 
   const handleLogout = () => {
     setUser(null)
+    setAccessToken('')
+    localStorage.removeItem('mobius_session')
     setView('markets')
+  }
+
+  const resetAuthForm = () => {
+    setAuthEmail('')
+    setAuthPassword('')
+    setAuthUsername('')
+    setAuthError('')
+  }
+
+  const openAuth = (mode: AuthMode) => {
+    resetAuthForm()
+    setAuthMode(mode)
+    setShowAuth(true)
   }
 
   const filteredMarkets = markets.filter((m) =>
@@ -157,41 +278,79 @@ export default function Home() {
 
   return (
     <>
-      {/* ── Login Modal ── */}
-      {showLogin && (
-        <div className="modal-backdrop" onClick={() => setShowLogin(false)}>
+      {/* ── Auth Modal ── */}
+      {showAuth && (
+        <div className="modal-backdrop" onClick={() => setShowAuth(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-title">Anmelden</div>
-            <div className="modal-subtitle">Gib deine User-ID ein um fortzufahren.</div>
+            <div className="modal-title">
+              {authMode === 'login' ? 'Anmelden' : 'Konto erstellen'}
+            </div>
+
+            <div className="auth-tabs">
+              <button
+                className={`auth-tab ${authMode === 'login' ? 'active' : ''}`}
+                onClick={() => { setAuthMode('login'); setAuthError('') }}
+              >
+                Anmelden
+              </button>
+              <button
+                className={`auth-tab ${authMode === 'register' ? 'active' : ''}`}
+                onClick={() => { setAuthMode('register'); setAuthError('') }}
+              >
+                Registrieren
+              </button>
+            </div>
+
+            {authMode === 'register' && (
+              <input
+                type="text"
+                placeholder="Benutzername"
+                value={authUsername}
+                onChange={(e) => setAuthUsername(e.target.value)}
+                style={{ width: '100%' }}
+              />
+            )}
             <input
-              type="text"
-              placeholder="User-ID"
-              value={loginInput}
-              onChange={(e) => setLoginInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
-              style={{ width: '100%', marginBottom: 8 }}
+              type="email"
+              placeholder="E-Mail"
+              value={authEmail}
+              onChange={(e) => setAuthEmail(e.target.value)}
+              style={{ width: '100%' }}
               autoFocus
             />
-            {loginError && (
-              <div className="alert alert-error" style={{ marginBottom: 8 }}>{loginError}</div>
+            <input
+              type="password"
+              placeholder="Passwort"
+              value={authPassword}
+              onChange={(e) => setAuthPassword(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && (authMode === 'login' ? handleLogin() : handleRegister())}
+              style={{ width: '100%' }}
+            />
+
+            {authError && (
+              <div className="alert alert-error">{authError}</div>
             )}
-            <button className="submit-btn yes" onClick={handleLogin}>
-              Anmelden
+
+            <button
+              className="submit-btn yes"
+              onClick={authMode === 'login' ? handleLogin : handleRegister}
+              disabled={authLoading}
+              style={{ marginTop: 4 }}
+            >
+              {authLoading ? 'Laden…' : authMode === 'login' ? 'Anmelden' : 'Konto erstellen'}
             </button>
+
+            {authMode === 'register' && (
+              <div style={{ fontSize: 12, color: 'var(--text-subtle)', textAlign: 'center' }}>
+                Du startest mit 1.000 ₫ Dukaten.
+              </div>
+            )}
           </div>
         </div>
       )}
 
+      {/* ── Nav ── */}
       <nav className="nav">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src="/logo-weiss.png"
-            alt="Möbius"
-            style={{ height: 28, width: 'auto', display: 'block', cursor: 'pointer' }}
-            onClick={() => setView('markets')}
-          />
-        </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <button className="nav-btn" onClick={() => setView('markets')}>Märkte</button>
           {user && (
@@ -203,12 +362,14 @@ export default function Home() {
               Admin
             </button>
           )}
-          {/* Dark Mode Toggle */}
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <button
             className="nav-btn"
             onClick={() => setDarkMode(!darkMode)}
             title={darkMode ? 'Light Mode' : 'Dark Mode'}
-            style={{ fontSize: 16, padding: '6px 10px' }}
+            style={{ fontSize: 15, padding: '6px 10px' }}
           >
             {darkMode ? '☀️' : '🌙'}
           </button>
@@ -226,10 +387,24 @@ export default function Home() {
               <button className="nav-btn" onClick={handleLogout}>Abmelden</button>
             </>
           ) : (
-            <button className="nav-btn accent" onClick={() => setShowLogin(true)}>Anmelden</button>
+            <>
+              <button className="nav-btn" onClick={() => openAuth('login')}>Anmelden</button>
+              <button className="nav-btn accent" onClick={() => openAuth('register')}>Registrieren</button>
+            </>
           )}
         </div>
       </nav>
+
+      {/* ── Hero Logo ── */}
+      <div className="hero">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={darkMode ? '/logo-weiss.png' : '/logo-schwarz.png'}
+          alt="Möbius"
+          className="hero-logo"
+          onClick={() => setView('markets')}
+        />
+      </div>
 
       <main className="page-container">
         {view === 'admin' && user?.id === ADMIN_ID && (
