@@ -86,6 +86,10 @@ export default function Home() {
   const [category, setCategory]       = useState('Alle')
   const [view, setView]               = useState<'markets' | 'portfolio' | 'admin' | 'profil'>('markets')
   const [loading, setLoading]         = useState(true)
+  const [darkMode, setDarkMode]       = useState(false)
+  const [showLogin, setShowLogin]     = useState(false)
+  const [loginInput, setLoginInput]   = useState('')
+  const [loginError, setLoginError]   = useState('')
 
   const ADMIN_ID = 'b75edaf4-141d-41f1-9555-887a8ddbac58'
 
@@ -97,6 +101,10 @@ export default function Home() {
       if (data?.[0]) setUser(data[0])
     })
   }, [])
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light')
+  }, [darkMode])
 
   const loadMarkets = useCallback(async () => {
     setLoading(true)
@@ -122,6 +130,25 @@ export default function Home() {
     loadLeaderboard()
   }, [loadMarkets, loadLeaderboard])
 
+  const handleLogin = async () => {
+    setLoginError('')
+    const id = loginInput.trim()
+    if (!id) { setLoginError('Bitte User-ID eingeben.'); return }
+    const data = await dbGet('users', `id=eq.${id}&select=*`)
+    if (data?.[0]) {
+      setUser(data[0])
+      setShowLogin(false)
+      setLoginInput('')
+    } else {
+      setLoginError('Kein Benutzer mit dieser ID gefunden.')
+    }
+  }
+
+  const handleLogout = () => {
+    setUser(null)
+    setView('markets')
+  }
+
   const filteredMarkets = markets.filter((m) =>
     category === 'Alle' || m.category === category
   )
@@ -130,21 +157,39 @@ export default function Home() {
 
   return (
     <>
+      {/* ── Login Modal ── */}
+      {showLogin && (
+        <div className="modal-backdrop" onClick={() => setShowLogin(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-title">Anmelden</div>
+            <div className="modal-subtitle">Gib deine User-ID ein um fortzufahren.</div>
+            <input
+              type="text"
+              placeholder="User-ID"
+              value={loginInput}
+              onChange={(e) => setLoginInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
+              style={{ width: '100%', marginBottom: 8 }}
+              autoFocus
+            />
+            {loginError && (
+              <div className="alert alert-error" style={{ marginBottom: 8 }}>{loginError}</div>
+            )}
+            <button className="submit-btn yes" onClick={handleLogin}>
+              Anmelden
+            </button>
+          </div>
+        </div>
+      )}
+
       <nav className="nav">
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src="/logo-schwarz.png"
-            alt="Möbius"
-            className="nav-logo-light"
-            style={{ height: 28, width: 'auto', display: 'block' }}
-          />
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
             src="/logo-weiss.png"
             alt="Möbius"
-            className="nav-logo-dark"
-            style={{ height: 28, width: 'auto', display: 'block' }}
+            style={{ height: 28, width: 'auto', display: 'block', cursor: 'pointer' }}
+            onClick={() => setView('markets')}
           />
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -158,18 +203,30 @@ export default function Home() {
               Admin
             </button>
           )}
+          {/* Dark Mode Toggle */}
+          <button
+            className="nav-btn"
+            onClick={() => setDarkMode(!darkMode)}
+            title={darkMode ? 'Light Mode' : 'Dark Mode'}
+            style={{ fontSize: 16, padding: '6px 10px' }}
+          >
+            {darkMode ? '☀️' : '🌙'}
+          </button>
           {user ? (
-            <div className="nav-avatar" onClick={() => setView('profil')} title={user.username}>
-              {user.avatar_url ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={user.avatar_url} alt={user.username}
-                  style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
-              ) : (
-                user.username.slice(0, 2).toUpperCase()
-              )}
-            </div>
+            <>
+              <div className="nav-avatar" onClick={() => setView('profil')} title={user.username}>
+                {user.avatar_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={user.avatar_url} alt={user.username}
+                    style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+                ) : (
+                  user.username.slice(0, 2).toUpperCase()
+                )}
+              </div>
+              <button className="nav-btn" onClick={handleLogout}>Abmelden</button>
+            </>
           ) : (
-            <button className="nav-btn accent">Anmelden</button>
+            <button className="nav-btn accent" onClick={() => setShowLogin(true)}>Anmelden</button>
           )}
         </div>
       </nav>
