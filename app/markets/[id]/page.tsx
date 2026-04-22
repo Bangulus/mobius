@@ -88,15 +88,11 @@ function lmsrSellReturn(qYes: number, qNo: number, b: number, side: 'yes' | 'no'
   return Math.max(0, costBefore - costAfter)
 }
 
-// Bulletproof UTC-Parser — funktioniert mit allen Supabase-Formaten
 function parseUTC(raw: string): Date {
   if (!raw) return new Date(0)
-  // Bereits mit Z oder Offset → direkt parsen
   if (raw.endsWith('Z') || raw.match(/[+-]\d{2}:\d{2}$/)) return new Date(raw)
-  // Supabase gibt manchmal "+00" statt "+00:00" zurück
   if (raw.match(/[+-]\d{2}$/)) return new Date(raw + ':00')
-  // Kein Offset → als UTC behandeln
-  return new Date(raw + 'Z')
+  return new Date(raw.replace(' ', 'T') + 'Z')
 }
 
 async function fetchCoinbasePrice(coin: string): Promise<number | null> {
@@ -107,7 +103,6 @@ async function fetchCoinbasePrice(coin: string): Promise<number | null> {
   } catch { return null }
 }
 
-// Krypto-Chart: festes Zeitfenster, Graph wächst von links, rechts = Zukunft
 function drawCryptoChart(
   canvas: HTMLCanvasElement,
   history: PricePoint[],
@@ -121,48 +116,35 @@ function drawCryptoChart(
   const W = canvas.width, H = canvas.height
   const padL = 72, padR = 96, padT = 20, padB = 28
 
-  const now      = Date.now()
-  const duration = marketEndMs - marketStartMs
-  // Y-Achse: sehr kleinteilig — nur ±0.25% Spanne rund um die sichtbaren Preise
   const visiblePrices = history.length > 0 ? history.map(p => p.price) : [targetPrice]
   const midPrice = visiblePrices[visiblePrices.length - 1] ?? targetPrice
   const spread   = midPrice * 0.0025
   const allVals  = [...visiblePrices, targetPrice]
   const rawMin   = Math.min(...allVals)
   const rawMax   = Math.max(...allVals)
-  // Spanne: mindestens ±spread, aber auch genug um alle Punkte zu zeigen
   const minP     = Math.min(rawMin, midPrice - spread)
   const maxP     = Math.max(rawMax, midPrice + spread)
+  const duration = marketEndMs - marketStartMs
 
-  // Hilfsfunktionen
-  const xScale = (ms: number) =>
-    padL + ((ms - marketStartMs) / duration) * (W - padL - padR)
-  const yScale = (p: number) =>
-    padT + ((maxP - p) / (maxP - minP)) * (H - padT - padB)
+  const xScale = (ms: number) => padL + ((ms - marketStartMs) / duration) * (W - padL - padR)
+  const yScale = (p: number)  => padT + ((maxP - p) / (maxP - minP)) * (H - padT - padB)
 
   ctx.clearRect(0, 0, W, H)
   ctx.fillStyle = '#ffffff'
   ctx.fillRect(0, 0, W, H)
 
-  // Zukunftsbereich (rechts vom aktuellen Zeitpunkt) — leicht grau
-  const nowX = Math.min(xScale(now), W - padR)
+  const nowX = Math.min(xScale(Date.now()), W - padR)
   ctx.fillStyle = 'rgba(0,0,0,0.02)'
   ctx.fillRect(nowX, padT, W - padR - nowX, H - padT - padB)
 
-  // Y-Gitter-Linien (6 Linien)
   ctx.strokeStyle = '#e8eaef'
   ctx.lineWidth   = 1
   ctx.setLineDash([])
   for (let i = 0; i <= 5; i++) {
-    const val = minP + (maxP - minP) * (i / 5)
-    const y   = yScale(val)
-    ctx.beginPath()
-    ctx.moveTo(padL, y)
-    ctx.lineTo(W - padR, y)
-    ctx.stroke()
+    const y = yScale(minP + (maxP - minP) * (i / 5))
+    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W - padR, y); ctx.stroke()
   }
 
-  // Target-Linie
   const targetY = yScale(targetPrice)
   ctx.beginPath()
   ctx.setLineDash([5, 4])
@@ -173,10 +155,10 @@ function drawCryptoChart(
   ctx.stroke()
   ctx.setLineDash([])
 
-  // Target-Label
-  ctx.fillStyle    = '#ffffff'
+  ctx.fillStyle = '#fffbeb'
   ctx.beginPath()
-  ctx.roundRect(W - padR + 4, targetY - 10, 88, 20, 4)
+  if (ctx.roundRect) ctx.roundRect(W - padR + 4, targetY - 11, 88, 22, 4)
+  else ctx.rect(W - padR + 4, targetY - 11, 88, 22)
   ctx.fill()
   ctx.fillStyle = '#92400e'
   ctx.font      = 'bold 10px Inter, sans-serif'
@@ -187,11 +169,9 @@ function drawCryptoChart(
   ctx.fillText(`$${targetPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, W - padR + 8, targetY + 10)
 
   if (history.length > 1) {
-    // Fläche unter Kurslinie
     ctx.beginPath()
     history.forEach((p, i) => {
-      const x = xScale(p.t), y = yScale(p.price)
-      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)
+      i === 0 ? ctx.moveTo(xScale(p.t), yScale(p.price)) : ctx.lineTo(xScale(p.t), yScale(p.price))
     })
     const lastX = xScale(history[history.length - 1].t)
     ctx.lineTo(lastX, H - padB)
@@ -203,51 +183,43 @@ function drawCryptoChart(
     ctx.fillStyle = grad
     ctx.fill()
 
-    // Kurslinie
     ctx.beginPath()
     history.forEach((p, i) => {
-      const x = xScale(p.t), y = yScale(p.price)
-      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)
+      i === 0 ? ctx.moveTo(xScale(p.t), yScale(p.price)) : ctx.lineTo(xScale(p.t), yScale(p.price))
     })
     ctx.strokeStyle = '#f97316'
     ctx.lineWidth   = 2.5
     ctx.lineJoin    = 'round'
     ctx.stroke()
 
-    // Aktueller Punkt
-    const last  = history[history.length - 1]
-    const lastY = yScale(last.price)
+    const last = history[history.length - 1]
     ctx.beginPath()
-    ctx.arc(xScale(last.t), lastY, 4.5, 0, Math.PI * 2)
-    ctx.fillStyle = '#f97316'
+    ctx.arc(xScale(last.t), yScale(last.price), 4.5, 0, Math.PI * 2)
+    ctx.fillStyle   = '#f97316'
     ctx.fill()
     ctx.strokeStyle = '#fff'
     ctx.lineWidth   = 1.5
     ctx.stroke()
   }
 
-  // Y-Achse Beschriftungen
   ctx.fillStyle = '#94a3b8'
   ctx.font      = '10px Inter, sans-serif'
   ctx.textAlign = 'right'
   for (let i = 0; i <= 5; i++) {
     const val = minP + (maxP - minP) * (1 - i / 5)
-    const y   = yScale(val)
     ctx.fillText(
       `$${val.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`,
-      padL - 6, y + 4
+      padL - 6, yScale(val) + 4
     )
   }
 
-  // X-Achse: 4 feste Zeitpunkte über das gesamte Markt-Fenster
   ctx.textAlign = 'center'
   for (let i = 0; i <= 3; i++) {
     const ms = marketStartMs + (duration * i / 3)
-    const x  = xScale(ms)
     const d  = new Date(ms)
     ctx.fillText(
       `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`,
-      x, H - padB + 16
+      xScale(ms), H - padB + 16
     )
   }
 }
@@ -291,7 +263,6 @@ export default function MarketPage() {
   const cryptoCanvasRef                 = useRef<HTMLCanvasElement>(null)
   const priceHistoryRef                 = useRef<PricePoint[]>([])
   const lastRealPrice                   = useRef<number | null>(null)
-  const marketRef                       = useRef<Market | null>(null)
 
   useEffect(() => {
     const saved = localStorage.getItem('mobius_session')
@@ -304,10 +275,7 @@ export default function MarketPage() {
 
   const loadMarket = useCallback(async () => {
     const data = await dbGet('markets', `id=eq.${marketId}&select=*`)
-    if (data?.[0]) {
-      setMarket(data[0])
-      marketRef.current = data[0]
-    }
+    if (data?.[0]) setMarket(data[0])
     setLoading(false)
   }, [marketId])
 
@@ -324,7 +292,6 @@ export default function MarketPage() {
   useEffect(() => { loadMarket(); loadTrades() }, [loadMarket, loadTrades])
   useEffect(() => { if (user?.id) loadPosition(user.id) }, [user, loadPosition])
 
-  // Krypto: Coinbase alle 10s, sekündliche Interpolation mit Jitter
   useEffect(() => {
     if (!market?.is_auto || !market?.coin) return
     const coin = market.coin
@@ -342,13 +309,11 @@ export default function MarketPage() {
     fetchReal()
     const fetchInterval = setInterval(fetchReal, 10000)
 
-    // Sekündliche Interpolation mit minimalem Jitter für lebendigen Chart
     const interpInterval = setInterval(() => {
       if (lastRealPrice.current === null) return
-      const hist    = priceHistoryRef.current
-      const last    = hist.length > 0 ? hist[hist.length - 1].price : lastRealPrice.current
-      // ±0.008% Jitter — sichtbar aber realistisch
-      const jitter  = last * 0.00008 * (Math.random() * 2 - 1)
+      const hist     = priceHistoryRef.current
+      const last     = hist.length > 0 ? hist[hist.length - 1].price : lastRealPrice.current
+      const jitter   = last * 0.00008 * (Math.random() * 2 - 1)
       const newPrice = last + jitter
       const point: PricePoint = { t: Date.now(), price: newPrice }
       priceHistoryRef.current = [...priceHistoryRef.current, point].slice(-300)
@@ -359,27 +324,17 @@ export default function MarketPage() {
     return () => { clearInterval(fetchInterval); clearInterval(interpInterval) }
   }, [market?.is_auto, market?.coin])
 
-  // Canvas neu zeichnen — sekündlich durch priceHistory-Änderung getriggert
   useEffect(() => {
     if (!market?.is_auto || !cryptoCanvasRef.current || !market?.start_price || !market?.closes_at) return
-    const closesAt     = parseUTC(market.closes_at)
-    const marketEndMs  = closesAt.getTime()
-    // Marktstart = closes_at minus Marktdauer (3 Minuten)
+    const closesAt      = parseUTC(market.closes_at)
+    const marketEndMs   = closesAt.getTime()
     const marketStartMs = marketEndMs - 3 * 60 * 1000
     drawCryptoChart(cryptoCanvasRef.current, priceHistory, market.start_price, marketStartMs, marketEndMs)
   }, [priceHistory, market?.is_auto, market?.start_price, market?.closes_at])
 
-  // Countdown — bulletproof UTC
   useEffect(() => {
     if (!market?.closes_at) return
     const closesAt = parseUTC(market.closes_at)
-
-    // Debug: in Konsole ausgeben damit wir sehen was passiert
-    console.log('closes_at raw:', market.closes_at)
-    console.log('closes_at parsed:', closesAt.toISOString())
-    console.log('now:', new Date().toISOString())
-    console.log('diff ms:', closesAt.getTime() - Date.now())
-
     const tick = () => {
       const diff = closesAt.getTime() - Date.now()
       if (diff <= 0) { setCountdown('00:00'); return }
@@ -392,7 +347,6 @@ export default function MarketPage() {
     return () => clearInterval(id)
   }, [market?.closes_at])
 
-  // Normaler Markt-Chart
   const tradeHistory = (() => {
     if (!market || trades.length === 0) return []
     let qY = 0, qN = 0
@@ -463,7 +417,8 @@ export default function MarketPage() {
       return
     }
 
-    const shares  = lmsrSharesForSpend(market.q_yes, market.q_no, market.b, direction, spend)
+    // Gerundet auf Integer — verhindert Dezimalfehler in Supabase
+    const shares  = Math.round(lmsrSharesForSpend(market.q_yes, market.q_no, market.b, direction, spend))
     const session = JSON.parse(localStorage.getItem('mobius_session') ?? '{}')
     const token   = session?.access_token ?? SUPABASE_KEY
     const newQYes = direction === 'yes' ? market.q_yes + shares : market.q_yes
@@ -595,7 +550,6 @@ export default function MarketPage() {
 
       <div style={{ maxWidth: 980, margin: '0 auto', padding: '24px 16px' }}>
 
-        {/* Krypto-Header */}
         {isKrypto && (
           <div className="card" style={{ marginBottom: 20 }}>
             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 16 }}>
@@ -616,22 +570,18 @@ export default function MarketPage() {
                   </div>
                 </div>
               </div>
-
-              {/* Countdown */}
               <div style={{ textAlign: 'right', flexShrink: 0 }}>
                 <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>Verbleibend</div>
                 <div style={{
                   fontSize: 40, fontWeight: 900, letterSpacing: '-2px',
                   fontVariantNumeric: 'tabular-nums',
-                  color: countdownRed ? '#dc2626' : 'var(--text)',
-                  lineHeight: 1,
+                  color: countdownRed ? '#dc2626' : 'var(--text)', lineHeight: 1,
                 }}>
                   {countdown || '--:--'}
                 </div>
               </div>
             </div>
 
-            {/* Preise */}
             <div style={{ display: 'flex', gap: 40, marginBottom: 16 }}>
               <div>
                 <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>Zielpreis</div>
@@ -649,23 +599,16 @@ export default function MarketPage() {
                   )}
                 </div>
                 <div style={{ fontSize: 22, fontWeight: 700, color: '#f97316' }}>
-                  {livePrice
-                    ? `$${livePrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                    : 'Lädt…'}
+                  {livePrice ? `$${livePrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'Lädt…'}
                 </div>
               </div>
             </div>
 
-            {/* Canvas */}
             <div style={{ position: 'relative', width: '100%', height: 240 }}>
               <canvas ref={cryptoCanvasRef} width={860} height={240}
                 style={{ width: '100%', height: '100%', display: 'block' }} />
               {priceHistory.length < 2 && (
-                <div style={{
-                  position: 'absolute', inset: 0, display: 'flex',
-                  alignItems: 'center', justifyContent: 'center',
-                  color: 'var(--text-muted)', fontSize: 13,
-                }}>
+                <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
                   Chart wird aufgebaut…
                 </div>
               )}
@@ -673,7 +616,6 @@ export default function MarketPage() {
           </div>
         )}
 
-        {/* Normaler Header */}
         {!isKrypto && (
           <div style={{ marginBottom: 20 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
@@ -753,7 +695,6 @@ export default function MarketPage() {
             </div>
           )}
 
-          {/* Trading Panel */}
           <div className="card" style={{ position: 'sticky', top: 'calc(var(--nav-height) + 16px)', padding: 0, overflow: 'hidden' }}>
             {market.resolved ? (
               <div style={{ textAlign: 'center', padding: '24px 16px' }}>
@@ -771,10 +712,7 @@ export default function MarketPage() {
               </div>
             ) : (
               <>
-                <div style={{
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                  borderBottom: '1px solid var(--border)', padding: '0 16px',
-                }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border)', padding: '0 16px' }}>
                   <div style={{ display: 'flex' }}>
                     {(['kaufen', 'verkaufen'] as TradeTab[]).map(t => (
                       <button key={t} onClick={() => { setTradeTab(t); setBetError(''); setBetSuccess('') }}
@@ -790,10 +728,7 @@ export default function MarketPage() {
                     ))}
                   </div>
                   <select value={orderType} onChange={e => setOrderType(e.target.value as OrderType)}
-                    style={{
-                      fontSize: 12, color: 'var(--text-muted)', background: 'transparent',
-                      border: '1px solid var(--border)', borderRadius: 6, padding: '4px 8px', cursor: 'pointer',
-                    }}>
+                    style={{ fontSize: 12, color: 'var(--text-muted)', background: 'transparent', border: '1px solid var(--border)', borderRadius: 6, padding: '4px 8px', cursor: 'pointer' }}>
                     <option value="markt">Markt</option>
                     <option value="limit">Limit</option>
                   </select>
@@ -807,15 +742,11 @@ export default function MarketPage() {
                           <button key={d} onClick={() => setDirection(d)} style={{
                             padding: '10px 0', borderRadius: 8, border: 'none', cursor: 'pointer',
                             fontWeight: 600, fontSize: 14,
-                            background: direction === d
-                              ? (d === 'yes' ? 'rgba(22,163,74,0.15)' : 'rgba(220,38,38,0.15)')
-                              : 'var(--surface)',
+                            background: direction === d ? (d === 'yes' ? 'rgba(22,163,74,0.15)' : 'rgba(220,38,38,0.15)') : 'var(--surface)',
                             color: direction === d ? (d === 'yes' ? 'var(--yes)' : 'var(--no)') : 'var(--text-muted)',
                             outline: direction === d ? `2px solid ${d === 'yes' ? 'var(--yes)' : 'var(--no)'}` : '2px solid transparent',
                           }}>
-                            {isKrypto
-                              ? (d === 'yes' ? `Up · ${prob}¢` : `Down · ${100 - prob}¢`)
-                              : (d === 'yes' ? `Ja · ${prob}¢` : `Nein · ${100 - prob}¢`)}
+                            {isKrypto ? (d === 'yes' ? `Up · ${prob}¢` : `Down · ${100 - prob}¢`) : (d === 'yes' ? `Ja · ${prob}¢` : `Nein · ${100 - prob}¢`)}
                           </button>
                         ))}
                       </div>
@@ -826,9 +757,7 @@ export default function MarketPage() {
                           <input type="number" min={1} max={99} value={limitPrice}
                             onChange={e => setLimitPrice(Math.min(99, Math.max(1, parseInt(e.target.value) || 1)))}
                             style={{ width: '100%', fontSize: 16, fontWeight: 600 }} />
-                          <div style={{ fontSize: 11, color: 'var(--text-subtle)', marginTop: 4 }}>
-                            Aktuell: {direction === 'yes' ? prob : 100 - prob}¢
-                          </div>
+                          <div style={{ fontSize: 11, color: 'var(--text-subtle)', marginTop: 4 }}>Aktuell: {direction === 'yes' ? prob : 100 - prob}¢</div>
                         </div>
                       )}
 
@@ -850,24 +779,16 @@ export default function MarketPage() {
                       </div>
 
                       {orderType === 'markt' && (
-                        <div style={{
-                          background: 'rgba(22,163,74,0.07)', borderRadius: 10, padding: '14px',
-                          marginBottom: 14, textAlign: 'center', border: '1px solid rgba(22,163,74,0.2)',
-                        }}>
+                        <div style={{ background: 'rgba(22,163,74,0.07)', borderRadius: 10, padding: '14px', marginBottom: 14, textAlign: 'center', border: '1px solid rgba(22,163,74,0.2)' }}>
                           <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>
                             Auszahlung wenn {isKrypto ? (direction === 'yes' ? 'Up' : 'Down') : (direction === 'yes' ? 'Ja' : 'Nein')} eintritt
                           </div>
-                          <div style={{ fontSize: 32, fontWeight: 800, color: '#16a34a', letterSpacing: '-0.5px' }}>
-                            {payout} ₫
-                          </div>
+                          <div style={{ fontSize: 32, fontWeight: 800, color: '#16a34a', letterSpacing: '-0.5px' }}>{payout} ₫</div>
                         </div>
                       )}
 
                       {orderType === 'limit' && (
-                        <div style={{
-                          background: 'var(--surface)', borderRadius: 10, padding: '12px',
-                          marginBottom: 14, fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.6,
-                        }}>
+                        <div style={{ background: 'var(--surface)', borderRadius: 10, padding: '12px', marginBottom: 14, fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.6 }}>
                           Order wird ausgeführt wenn der Kurs {limitPrice}¢ erreicht.
                         </div>
                       )}
@@ -897,17 +818,10 @@ export default function MarketPage() {
                             </div>
                           )}
                           {orderType === 'markt' && (
-                            <div style={{
-                              background: 'rgba(22,163,74,0.07)', borderRadius: 10, padding: '14px',
-                              marginBottom: 14, textAlign: 'center', border: '1px solid rgba(22,163,74,0.2)',
-                            }}>
+                            <div style={{ background: 'rgba(22,163,74,0.07)', borderRadius: 10, padding: '14px', marginBottom: 14, textAlign: 'center', border: '1px solid rgba(22,163,74,0.2)' }}>
                               <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Du erhältst jetzt</div>
-                              <div style={{ fontSize: 32, fontWeight: 800, color: '#16a34a', letterSpacing: '-0.5px' }}>
-                                {Math.round(returnOnSell)} ₫
-                              </div>
-                              <div style={{ fontSize: 11, color: 'var(--text-subtle)', marginTop: 4 }}>
-                                alle {Math.round(position.amount)} Anteile
-                              </div>
+                              <div style={{ fontSize: 32, fontWeight: 800, color: '#16a34a', letterSpacing: '-0.5px' }}>{Math.round(returnOnSell)} ₫</div>
+                              <div style={{ fontSize: 11, color: 'var(--text-subtle)', marginTop: 4 }}>alle {Math.round(position.amount)} Anteile</div>
                             </div>
                           )}
                         </>
@@ -946,10 +860,7 @@ export default function MarketPage() {
             <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', marginBottom: 14 }}>Letzte Trades</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {[...trades].filter(t => t.amount > 0).reverse().slice(0, 10).map(t => (
-                <div key={t.id} style={{
-                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                  fontSize: 13, padding: '6px 0', borderBottom: '1px solid var(--border)',
-                }}>
+                <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, padding: '6px 0', borderBottom: '1px solid var(--border)' }}>
                   <span style={{ color: t.direction === 'yes' ? 'var(--yes)' : 'var(--no)', fontWeight: 600 }}>
                     {isKrypto ? (t.direction === 'yes' ? 'Up' : 'Down') : (t.direction === 'yes' ? 'Ja' : 'Nein')}
                   </span>
