@@ -88,14 +88,15 @@ function lmsrSellReturn(qYes: number, qNo: number, b: number, side: 'yes' | 'no'
   return Math.max(0, costBefore - costAfter)
 }
 
-// closes_at korrekt parsen — Supabase gibt manchmal kein 'Z' am Ende zurück
-function parseClosesAt(raw: string): Date {
+// Bulletproof UTC-Parser — funktioniert mit allen Supabase-Formaten
+function parseUTC(raw: string): Date {
   if (!raw) return new Date(0)
-  // Falls kein Z und kein +offset → als UTC behandeln
-  if (!raw.endsWith('Z') && !raw.includes('+')) {
-    return new Date(raw + 'Z')
-  }
-  return new Date(raw)
+  // Bereits mit Z oder Offset → direkt parsen
+  if (raw.endsWith('Z') || raw.match(/[+-]\d{2}:\d{2}$/)) return new Date(raw)
+  // Supabase gibt manchmal "+00" statt "+00:00" zurück
+  if (raw.match(/[+-]\d{2}$/)) return new Date(raw + ':00')
+  // Kein Offset → als UTC behandeln
+  return new Date(raw + 'Z')
 }
 
 async function fetchCoinbasePrice(coin: string): Promise<number | null> {
@@ -106,93 +107,131 @@ async function fetchCoinbasePrice(coin: string): Promise<number | null> {
   } catch { return null }
 }
 
-// Canvas-Krypto-Chart zeichnen
+// Krypto-Chart: festes Zeitfenster, Graph wächst von links, rechts = Zukunft
 function drawCryptoChart(
   canvas: HTMLCanvasElement,
   history: PricePoint[],
-  targetPrice: number
+  targetPrice: number,
+  marketStartMs: number,
+  marketEndMs: number,
 ) {
   const ctx = canvas.getContext('2d')
-  if (!ctx || history.length < 1) return
+  if (!ctx) return
 
-  const prices = history.map(p => p.price)
-  const times  = history.map(p => p.t)
-  const allVals = [...prices, targetPrice]
-  const minP   = Math.min(...allVals) * 0.9995
-  const maxP   = Math.max(...allVals) * 1.0005
   const W = canvas.width, H = canvas.height
-  const padL = 70, padR = 90, padT = 20, padB = 30
+  const padL = 72, padR = 96, padT = 20, padB = 28
 
-  const xScale = (i: number) =>
-    prices.length === 1
-      ? padL + (W - padL - padR) / 2
-      : padL + (i / (prices.length - 1)) * (W - padL - padR)
-  const yScale = (p: number) => padT + ((maxP - p) / (maxP - minP)) * (H - padT - padB)
+  const now      = Date.now()
+  const duration = marketEndMs - marketStartMs
+  // Y-Achse: sehr kleinteilig — nur ±0.25% Spanne rund um die sichtbaren Preise
+  const visiblePrices = history.length > 0 ? history.map(p => p.price) : [targetPrice]
+  const midPrice = visiblePrices[visiblePrices.length - 1] ?? targetPrice
+  const spread   = midPrice * 0.0025
+  const allVals  = [...visiblePrices, targetPrice]
+  const rawMin   = Math.min(...allVals)
+  const rawMax   = Math.max(...allVals)
+  // Spanne: mindestens ±spread, aber auch genug um alle Punkte zu zeigen
+  const minP     = Math.min(rawMin, midPrice - spread)
+  const maxP     = Math.max(rawMax, midPrice + spread)
+
+  // Hilfsfunktionen
+  const xScale = (ms: number) =>
+    padL + ((ms - marketStartMs) / duration) * (W - padL - padR)
+  const yScale = (p: number) =>
+    padT + ((maxP - p) / (maxP - minP)) * (H - padT - padB)
 
   ctx.clearRect(0, 0, W, H)
   ctx.fillStyle = '#ffffff'
   ctx.fillRect(0, 0, W, H)
 
-  // Target-Linie gestrichelt
+  // Zukunftsbereich (rechts vom aktuellen Zeitpunkt) — leicht grau
+  const nowX = Math.min(xScale(now), W - padR)
+  ctx.fillStyle = 'rgba(0,0,0,0.02)'
+  ctx.fillRect(nowX, padT, W - padR - nowX, H - padT - padB)
+
+  // Y-Gitter-Linien (6 Linien)
+  ctx.strokeStyle = '#e8eaef'
+  ctx.lineWidth   = 1
+  ctx.setLineDash([])
+  for (let i = 0; i <= 5; i++) {
+    const val = minP + (maxP - minP) * (i / 5)
+    const y   = yScale(val)
+    ctx.beginPath()
+    ctx.moveTo(padL, y)
+    ctx.lineTo(W - padR, y)
+    ctx.stroke()
+  }
+
+  // Target-Linie
   const targetY = yScale(targetPrice)
   ctx.beginPath()
-  ctx.setLineDash([6, 4])
-  ctx.strokeStyle = '#94a3b8'
+  ctx.setLineDash([5, 4])
+  ctx.strokeStyle = '#f59e0b'
   ctx.lineWidth   = 1.5
   ctx.moveTo(padL, targetY)
-  ctx.lineTo(W - padR + 10, targetY)
+  ctx.lineTo(W - padR, targetY)
   ctx.stroke()
   ctx.setLineDash([])
 
-  // Target Label
-  ctx.fillStyle = '#475569'
-  ctx.font      = 'bold 11px Inter, sans-serif'
+  // Target-Label
+  ctx.fillStyle    = '#ffffff'
+  ctx.beginPath()
+  ctx.roundRect(W - padR + 4, targetY - 10, 88, 20, 4)
+  ctx.fill()
+  ctx.fillStyle = '#92400e'
+  ctx.font      = 'bold 10px Inter, sans-serif'
   ctx.textAlign = 'left'
-  ctx.fillText('Target', W - padR + 14, targetY - 4)
-  ctx.fillStyle = '#94a3b8'
-  ctx.font      = '10px Inter, sans-serif'
-  ctx.fillText(`$${targetPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, W - padR + 14, targetY + 8)
+  ctx.fillText('Target', W - padR + 8, targetY - 1)
+  ctx.fillStyle = '#b45309'
+  ctx.font      = '9px Inter, sans-serif'
+  ctx.fillText(`$${targetPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, W - padR + 8, targetY + 10)
 
-  // Fläche unter Kurslinie
-  if (prices.length > 1) {
+  if (history.length > 1) {
+    // Fläche unter Kurslinie
     ctx.beginPath()
-    prices.forEach((p, i) => {
-      i === 0 ? ctx.moveTo(xScale(i), yScale(p)) : ctx.lineTo(xScale(i), yScale(p))
+    history.forEach((p, i) => {
+      const x = xScale(p.t), y = yScale(p.price)
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)
     })
-    ctx.lineTo(xScale(prices.length - 1), H - padB)
-    ctx.lineTo(xScale(0), H - padB)
+    const lastX = xScale(history[history.length - 1].t)
+    ctx.lineTo(lastX, H - padB)
+    ctx.lineTo(xScale(history[0].t), H - padB)
     ctx.closePath()
     const grad = ctx.createLinearGradient(0, padT, 0, H - padB)
-    grad.addColorStop(0, 'rgba(251,146,60,0.25)')
+    grad.addColorStop(0, 'rgba(251,146,60,0.22)')
     grad.addColorStop(1, 'rgba(251,146,60,0.0)')
     ctx.fillStyle = grad
     ctx.fill()
+
+    // Kurslinie
+    ctx.beginPath()
+    history.forEach((p, i) => {
+      const x = xScale(p.t), y = yScale(p.price)
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)
+    })
+    ctx.strokeStyle = '#f97316'
+    ctx.lineWidth   = 2.5
+    ctx.lineJoin    = 'round'
+    ctx.stroke()
+
+    // Aktueller Punkt
+    const last  = history[history.length - 1]
+    const lastY = yScale(last.price)
+    ctx.beginPath()
+    ctx.arc(xScale(last.t), lastY, 4.5, 0, Math.PI * 2)
+    ctx.fillStyle = '#f97316'
+    ctx.fill()
+    ctx.strokeStyle = '#fff'
+    ctx.lineWidth   = 1.5
+    ctx.stroke()
   }
 
-  // Kurslinie
-  ctx.beginPath()
-  prices.forEach((p, i) => {
-    i === 0 ? ctx.moveTo(xScale(i), yScale(p)) : ctx.lineTo(xScale(i), yScale(p))
-  })
-  ctx.strokeStyle = '#f97316'
-  ctx.lineWidth   = 2.5
-  ctx.lineJoin    = 'round'
-  ctx.stroke()
-
-  // Aktueller Punkt (Kreis)
-  const lastX = xScale(prices.length - 1)
-  const lastY = yScale(prices[prices.length - 1])
-  ctx.beginPath()
-  ctx.arc(lastX, lastY, 4, 0, Math.PI * 2)
-  ctx.fillStyle = '#f97316'
-  ctx.fill()
-
-  // Y-Achse
+  // Y-Achse Beschriftungen
   ctx.fillStyle = '#94a3b8'
   ctx.font      = '10px Inter, sans-serif'
   ctx.textAlign = 'right'
-  for (let i = 0; i <= 4; i++) {
-    const val = minP + (maxP - minP) * (1 - i / 4)
+  for (let i = 0; i <= 5; i++) {
+    const val = minP + (maxP - minP) * (1 - i / 5)
     const y   = yScale(val)
     ctx.fillText(
       `$${val.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`,
@@ -200,17 +239,17 @@ function drawCryptoChart(
     )
   }
 
-  // X-Achse Zeitstempel
+  // X-Achse: 4 feste Zeitpunkte über das gesamte Markt-Fenster
   ctx.textAlign = 'center'
-  const showEvery = Math.max(1, Math.floor(times.length / 4))
-  times.forEach((t, i) => {
-    if (i % showEvery !== 0 && i !== times.length - 1) return
-    const d = new Date(t)
+  for (let i = 0; i <= 3; i++) {
+    const ms = marketStartMs + (duration * i / 3)
+    const x  = xScale(ms)
+    const d  = new Date(ms)
     ctx.fillText(
       `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`,
-      xScale(i), H - padB + 16
+      x, H - padB + 16
     )
-  })
+  }
 }
 
 const CAT_CLASS: Record<string, string> = {
@@ -246,16 +285,14 @@ export default function MarketPage() {
   const chartRef                  = useRef<HTMLCanvasElement>(null)
   const chartInstance             = useRef<unknown>(null)
 
-  // Krypto Live-State
   const [livePrice, setLivePrice]       = useState<number | null>(null)
   const [priceHistory, setPriceHistory] = useState<PricePoint[]>([])
   const [countdown, setCountdown]       = useState('')
   const cryptoCanvasRef                 = useRef<HTMLCanvasElement>(null)
-  const priceHistoryRef                 = useRef<PricePoint[]>([])  // Ref für Interval-Zugriff
+  const priceHistoryRef                 = useRef<PricePoint[]>([])
   const lastRealPrice                   = useRef<number | null>(null)
-  const lastRealTime                    = useRef<number>(0)
+  const marketRef                       = useRef<Market | null>(null)
 
-  // Session laden
   useEffect(() => {
     const saved = localStorage.getItem('mobius_session')
     if (!saved) return
@@ -267,7 +304,10 @@ export default function MarketPage() {
 
   const loadMarket = useCallback(async () => {
     const data = await dbGet('markets', `id=eq.${marketId}&select=*`)
-    if (data?.[0]) setMarket(data[0])
+    if (data?.[0]) {
+      setMarket(data[0])
+      marketRef.current = data[0]
+    }
     setLoading(false)
   }, [marketId])
 
@@ -284,57 +324,61 @@ export default function MarketPage() {
   useEffect(() => { loadMarket(); loadTrades() }, [loadMarket, loadTrades])
   useEffect(() => { if (user?.id) loadPosition(user.id) }, [user, loadPosition])
 
-  // Krypto: Coinbase alle 10s, sekündliche Interpolation dazwischen
+  // Krypto: Coinbase alle 10s, sekündliche Interpolation mit Jitter
   useEffect(() => {
     if (!market?.is_auto || !market?.coin) return
-
     const coin = market.coin
 
     const fetchReal = async () => {
       const price = await fetchCoinbasePrice(coin)
       if (price === null) return
       lastRealPrice.current = price
-      lastRealTime.current  = Date.now()
       const point: PricePoint = { t: Date.now(), price }
       priceHistoryRef.current = [...priceHistoryRef.current, point].slice(-300)
       setPriceHistory([...priceHistoryRef.current])
       setLivePrice(price)
     }
 
-    // Sofort starten
     fetchReal()
     const fetchInterval = setInterval(fetchReal, 10000)
 
-    // Sekündliche Interpolation: fügt interpolierten Punkt zwischen echten Preisen ein
+    // Sekündliche Interpolation mit minimalem Jitter für lebendigen Chart
     const interpInterval = setInterval(() => {
       if (lastRealPrice.current === null) return
-      const now     = Date.now()
-      const elapsed = (now - lastRealTime.current) / 1000
-      // Leichte Simulation: ±0.01% random walk für lebendigen Chart
-      const lastPrice = priceHistoryRef.current.length > 0
-        ? priceHistoryRef.current[priceHistoryRef.current.length - 1].price
-        : lastRealPrice.current
-      const jitter    = lastPrice * 0.0001 * (Math.random() * 2 - 1)
-      const interpPrice = lastPrice + jitter
-      const point: PricePoint = { t: now, price: interpPrice }
+      const hist    = priceHistoryRef.current
+      const last    = hist.length > 0 ? hist[hist.length - 1].price : lastRealPrice.current
+      // ±0.008% Jitter — sichtbar aber realistisch
+      const jitter  = last * 0.00008 * (Math.random() * 2 - 1)
+      const newPrice = last + jitter
+      const point: PricePoint = { t: Date.now(), price: newPrice }
       priceHistoryRef.current = [...priceHistoryRef.current, point].slice(-300)
       setPriceHistory([...priceHistoryRef.current])
-      setLivePrice(interpPrice)
+      setLivePrice(newPrice)
     }, 1000)
 
     return () => { clearInterval(fetchInterval); clearInterval(interpInterval) }
   }, [market?.is_auto, market?.coin])
 
-  // Canvas neu zeichnen wenn priceHistory sich ändert
+  // Canvas neu zeichnen — sekündlich durch priceHistory-Änderung getriggert
   useEffect(() => {
-    if (!market?.is_auto || !cryptoCanvasRef.current || !market?.start_price) return
-    drawCryptoChart(cryptoCanvasRef.current, priceHistory, market.start_price)
-  }, [priceHistory, market?.is_auto, market?.start_price])
+    if (!market?.is_auto || !cryptoCanvasRef.current || !market?.start_price || !market?.closes_at) return
+    const closesAt     = parseUTC(market.closes_at)
+    const marketEndMs  = closesAt.getTime()
+    // Marktstart = closes_at minus Marktdauer (3 Minuten)
+    const marketStartMs = marketEndMs - 3 * 60 * 1000
+    drawCryptoChart(cryptoCanvasRef.current, priceHistory, market.start_price, marketStartMs, marketEndMs)
+  }, [priceHistory, market?.is_auto, market?.start_price, market?.closes_at])
 
-  // Countdown — korrekte UTC-Behandlung
+  // Countdown — bulletproof UTC
   useEffect(() => {
     if (!market?.closes_at) return
-    const closesAt = parseClosesAt(market.closes_at)
+    const closesAt = parseUTC(market.closes_at)
+
+    // Debug: in Konsole ausgeben damit wir sehen was passiert
+    console.log('closes_at raw:', market.closes_at)
+    console.log('closes_at parsed:', closesAt.toISOString())
+    console.log('now:', new Date().toISOString())
+    console.log('diff ms:', closesAt.getTime() - Date.now())
 
     const tick = () => {
       const diff = closesAt.getTime() - Date.now()
@@ -348,7 +392,7 @@ export default function MarketPage() {
     return () => clearInterval(id)
   }, [market?.closes_at])
 
-  // Normaler Markt-Chart (Chart.js)
+  // Normaler Markt-Chart
   const tradeHistory = (() => {
     if (!market || trades.length === 0) return []
     let qY = 0, qN = 0
@@ -406,7 +450,6 @@ export default function MarketPage() {
     return () => { if (chartInstance.current) (chartInstance.current as { destroy: () => void }).destroy() }
   }, [tradeHistory, activeTab, market?.is_auto])
 
-  // Kaufen
   async function handleKaufen() {
     if (!user || !market) return
     if (spend <= 0) { setBetError('Ungültiger Betrag.'); return }
@@ -467,7 +510,6 @@ export default function MarketPage() {
     setTimeout(() => setBetSuccess(''), 2500)
   }
 
-  // Verkaufen
   async function handleVerkaufen() {
     if (!user || !market || !position) return
     const sellShares = position.amount
@@ -506,7 +548,6 @@ export default function MarketPage() {
     setTimeout(() => setBetSuccess(''), 2500)
   }
 
-  // Render
   if (loading) return <div style={{ padding: 32, color: 'var(--text-muted)', fontSize: 14 }}>Markt wird geladen…</div>
   if (!market) return (
     <div style={{ padding: 32 }}>
@@ -523,11 +564,11 @@ export default function MarketPage() {
   const returnOnSell   = position
     ? lmsrSellReturn(market.q_yes, market.q_no, market.b, position.direction as 'yes' | 'no', position.amount)
     : 0
-  const isKrypto       = !!market.is_auto
-  const delta          = livePrice && market.start_price ? livePrice - market.start_price : null
-  const isUp           = delta !== null ? delta >= 0 : true
-  const closesAt       = parseClosesAt(market.closes_at)
-  const countdownRed   = countdown === '00:00' || parseInt(countdown.split(':')[0]) === 0
+  const isKrypto     = !!market.is_auto
+  const closesAt     = parseUTC(market.closes_at)
+  const delta        = livePrice && market.start_price ? livePrice - market.start_price : null
+  const isUp         = delta !== null ? delta >= 0 : true
+  const countdownRed = countdown === '00:00' || (countdown !== '' && parseInt(countdown.split(':')[0]) === 0 && parseInt(countdown.split(':')[1]) <= 30)
 
   return (
     <>
@@ -562,7 +603,7 @@ export default function MarketPage() {
                 <span style={{
                   width: 40, height: 40, borderRadius: 10, background: '#f97316',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 18, fontWeight: 800, color: '#fff', flexShrink: 0,
+                  fontSize: 20, fontWeight: 800, color: '#fff', flexShrink: 0,
                 }}>
                   {market.coin?.charAt(0) ?? '₿'}
                 </span>
@@ -615,14 +656,10 @@ export default function MarketPage() {
               </div>
             </div>
 
-            {/* Canvas Chart */}
+            {/* Canvas */}
             <div style={{ position: 'relative', width: '100%', height: 240 }}>
-              <canvas
-                ref={cryptoCanvasRef}
-                width={860}
-                height={240}
-                style={{ width: '100%', height: '100%', display: 'block' }}
-              />
+              <canvas ref={cryptoCanvasRef} width={860} height={240}
+                style={{ width: '100%', height: '100%', display: 'block' }} />
               {priceHistory.length < 2 && (
                 <div style={{
                   position: 'absolute', inset: 0, display: 'flex',
@@ -660,7 +697,6 @@ export default function MarketPage() {
           </div>
         )}
 
-        {/* Wahrscheinlichkeit (nur normale Märkte) */}
         {!isKrypto && (
           <div className="card" style={{ marginBottom: 20 }}>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 10 }}>
@@ -673,10 +709,8 @@ export default function MarketPage() {
           </div>
         )}
 
-        {/* Grid */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 20, alignItems: 'start' }}>
 
-          {/* Chart (normale Märkte) */}
           {!isKrypto && (
             <div className="card">
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
@@ -705,7 +739,6 @@ export default function MarketPage() {
             </div>
           )}
 
-          {/* Krypto: Marktinfo-Karte links */}
           {isKrypto && (
             <div className="card">
               <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', marginBottom: 12 }}>Marktregeln</div>
@@ -713,7 +746,7 @@ export default function MarketPage() {
                 <div>Volumen: <strong style={{ color: 'var(--text)' }}>{Math.round(market.q_yes + market.q_no).toLocaleString('de')} ₫</strong></div>
                 <div>Trades: <strong style={{ color: 'var(--text)' }}>{trades.filter(t => t.amount > 0).length}</strong></div>
                 <div style={{ marginTop: 12, padding: '12px', background: 'var(--surface)', borderRadius: 8, fontSize: 12, lineHeight: 1.7 }}>
-                  Ist der {market.coin}-Preis bei Ablauf des Timers <strong style={{ color: 'var(--yes)' }}>höher</strong> als der Zielpreis → <strong style={{ color: 'var(--yes)' }}>Up gewinnt</strong>.<br />
+                  Ist der {market.coin}-Preis bei Ablauf <strong style={{ color: 'var(--yes)' }}>höher</strong> als der Zielpreis → <strong style={{ color: 'var(--yes)' }}>Up gewinnt</strong>.<br />
                   Ist er <strong style={{ color: 'var(--no)' }}>niedriger</strong> → <strong style={{ color: 'var(--no)' }}>Down gewinnt</strong>.
                 </div>
               </div>
@@ -908,7 +941,6 @@ export default function MarketPage() {
           </div>
         </div>
 
-        {/* Letzte Trades */}
         {trades.filter(t => t.amount > 0).length > 0 && (
           <div className="card" style={{ marginTop: 20 }}>
             <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', marginBottom: 14 }}>Letzte Trades</div>
