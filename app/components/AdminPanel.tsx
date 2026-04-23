@@ -71,16 +71,16 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
     const res = await fetch('/api/resolve-crypto-market', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ marketId }),
+      body: JSON.stringify({ market_id: marketId }), // ✅ market_id
     });
     const data = await res.json();
     if (data.success) {
       const dir = data.resolution === 'yes' ? '📈 GESTIEGEN' : '📉 GEFALLEN';
-      setBtcMessage(`✅ Aufgelöst: $${Number(data.startPrice).toLocaleString()} → $${Number(data.endPrice).toLocaleString()} · ${dir}`);
+      setBtcMessage(`✅ Aufgelöst: $${Number(data.start_price).toLocaleString()} → $${Number(data.end_price).toLocaleString()} · ${dir}`);
       loadBtcMarkets();
       onMarketResolved();
     } else {
-      setBtcMessage(`❌ Fehler: ${data.error}`);
+      setBtcMessage(`❌ Fehler: ${data.error ?? data.message}`);
     }
     setResolvingBtc(null);
   }
@@ -121,7 +121,7 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
 
   async function loadResolvedMarketDetails() {
     const closedMarketsResponse = await fetch(
-      `${supabaseUrl}/rest/v1/markets?status=eq.closed&select=*`,
+      `${supabaseUrl}/rest/v1/markets?resolved=eq.true&select=*&order=created_at.desc`,
       { headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` } }
     );
     const closedMarkets = await closedMarketsResponse.json();
@@ -145,7 +145,7 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
         type: t.type,
         cost: t.cost,
         won: t.type === winningType,
-        payout: t.type === winningType ? t.cost * 2 : 0,
+        payout: t.type === winningType ? t.shares : 0,
       }));
       return { ...market, tradeDetails };
     });
@@ -193,7 +193,7 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
           <h3 style={{ fontSize: '1rem', marginBottom: '0.75rem' }}>Laufende & vergangene Krypto-Märkte</h3>
           {btcMarkets.length === 0 && <p style={{ color: '#666', fontSize: '0.9rem' }}>Noch keine Krypto-Märkte erstellt.</p>}
           {btcMarkets.map((market: any) => {
-            const isOpen = market.status === 'open';
+            const isOpen = !market.resolved;
             const expired = new Date(market.closes_at).getTime() < now;
             const coinData = COINS.find(c => c.id === (market.coin ?? 'BTC'));
             return (
@@ -278,11 +278,13 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
                     <div key={i} style={{ padding: '0.6rem 1rem', borderBottom: '1px solid #f3f4f6', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                         <span style={{ fontWeight: '500', fontSize: '0.9rem' }}>{t.username}</span>
-                        <span style={{ background: t.type === 'buy_yes' ? '#16a34a' : '#dc2626', color: 'white', padding: '0.1rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem' }}>{t.type === 'buy_yes' ? 'YES' : 'NO'}</span>
+                        <span style={{ background: t.type === 'buy_yes' ? '#16a34a' : '#dc2626', color: 'white', padding: '0.1rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem' }}>
+                          {t.type === 'buy_yes' ? 'UP' : t.type === 'buy_no' ? 'DOWN' : t.type === 'sell_yes' ? 'SELL UP' : 'SELL DOWN'}
+                        </span>
                       </div>
                       <div style={{ textAlign: 'right', fontSize: '0.85rem' }}>
-                        <div style={{ color: '#666' }}>Einsatz: {Number(t.cost).toFixed(2)} D</div>
-                        {t.won ? <div style={{ color: '#16a34a', fontWeight: 'bold' }}>+{Number(t.payout).toFixed(2)} D 🎉</div> : <div style={{ color: '#dc2626' }}>Verloren</div>}
+                        <div style={{ color: '#666' }}>Einsatz: {Number(Math.abs(t.cost)).toFixed(0)} ₫</div>
+                        {t.won ? <div style={{ color: '#16a34a', fontWeight: 'bold' }}>+{Number(t.payout).toFixed(0)} ₫ 🎉</div> : <div style={{ color: '#dc2626' }}>Verloren</div>}
                       </div>
                     </div>
                   ))}
