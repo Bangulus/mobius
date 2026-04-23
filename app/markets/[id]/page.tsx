@@ -48,8 +48,9 @@ interface Position {
   id: string
   user_id: string
   market_id: string
-  direction: string
-  amount: number
+  shares_yes: number
+  shares_no: number
+  updated_at: string
 }
 
 interface User {
@@ -82,17 +83,16 @@ function lmsrSharesForSpend(qYes: number, qNo: number, b: number, side: 'yes' | 
   let lo = 0, hi = spend * 10
   for (let i = 0; i < 64; i++) {
     const mid = (lo + hi) / 2
-    const cost = lmsrCost(qYes, qNo, b, side, mid)
-    if (cost < spend) lo = mid; else hi = mid
+    if (lmsrCost(qYes, qNo, b, side, mid) < spend) lo = mid; else hi = mid
   }
   return (lo + hi) / 2
 }
 
 function lmsrSellReturn(qYes: number, qNo: number, b: number, side: 'yes' | 'no', shares: number): number {
-  const newQYes = side === 'yes' ? qYes - shares : qYes
-  const newQNo  = side === 'no'  ? qNo  - shares : qNo
+  const newQYes = side === 'yes' ? Math.max(0, qYes - shares) : qYes
+  const newQNo  = side === 'no'  ? Math.max(0, qNo  - shares) : qNo
   const before  = b * Math.log(Math.exp(qYes / b) + Math.exp(qNo / b))
-  const after   = b * Math.log(Math.exp(Math.max(0, newQYes) / b) + Math.exp(Math.max(0, newQNo) / b))
+  const after   = b * Math.log(Math.exp(newQYes / b) + Math.exp(newQNo / b))
   return Math.max(0, before - after)
 }
 
@@ -269,6 +269,7 @@ export default function MarketPage() {
   const priceHistoryRef                 = useRef<PricePoint[]>([])
   const lastRealPrice                   = useRef<number | null>(null)
 
+  // Session
   useEffect(() => {
     const saved = localStorage.getItem('mobius_session')
     if (!saved) return
@@ -297,6 +298,7 @@ export default function MarketPage() {
   useEffect(() => { loadMarket(); loadTrades() }, [loadMarket, loadTrades])
   useEffect(() => { if (user?.id) loadPosition(user.id) }, [user, loadPosition])
 
+  // Krypto Live-Preis
   useEffect(() => {
     if (!market?.is_auto || !market?.coin) return
     const coin = market.coin
@@ -312,22 +314,22 @@ export default function MarketPage() {
     }
 
     fetchReal()
-    const fetchInterval = setInterval(fetchReal, 10000)
+    const fetchInterval  = setInterval(fetchReal, 10000)
     const interpInterval = setInterval(() => {
       if (lastRealPrice.current === null) return
       const hist     = priceHistoryRef.current
       const last     = hist.length > 0 ? hist[hist.length - 1].price : lastRealPrice.current
       const jitter   = last * 0.00008 * (Math.random() * 2 - 1)
-      const newPrice = last + jitter
-      const point: PricePoint = { t: Date.now(), price: newPrice }
+      const point: PricePoint = { t: Date.now(), price: last + jitter }
       priceHistoryRef.current = [...priceHistoryRef.current, point].slice(-300)
       setPriceHistory([...priceHistoryRef.current])
-      setLivePrice(newPrice)
+      setLivePrice(last + jitter)
     }, 1000)
 
     return () => { clearInterval(fetchInterval); clearInterval(interpInterval) }
   }, [market?.is_auto, market?.coin])
 
+  // Canvas zeichnen
   useEffect(() => {
     if (!market?.is_auto || !cryptoCanvasRef.current || !market?.start_price || !market?.closes_at) return
     const closesAt      = parseUTC(market.closes_at)
@@ -336,6 +338,7 @@ export default function MarketPage() {
     drawCryptoChart(cryptoCanvasRef.current, priceHistory, market.start_price, marketStartMs, marketEndMs)
   }, [priceHistory, market?.is_auto, market?.start_price, market?.closes_at])
 
+  // Countdown
   useEffect(() => {
     if (!market?.closes_at) return
     const closesAt = parseUTC(market.closes_at)
@@ -351,12 +354,12 @@ export default function MarketPage() {
     return () => clearInterval(id)
   }, [market?.closes_at])
 
+  // Normaler Chart
   const tradeHistory = (() => {
     if (!market || trades.length === 0) return []
     let qY = 0, qN = 0
-    return trades.filter(t => t.shares > 0).map(t => {
-      const isYes = t.type === 'buy_yes'
-      if (isYes) qY += t.shares; else qN += t.shares
+    return trades.filter(t => t.shares > 0 && (t.type === 'buy_yes' || t.type === 'buy_no')).map(t => {
+      if (t.type === 'buy_yes') qY += t.shares; else qN += t.shares
       return { t: t.created_at, prob: calcProb(qY, qN, market.b) }
     })
   })()
@@ -390,7 +393,8 @@ export default function MarketPage() {
           }),
           datasets: [{
             data: dataPoints.map(p => p.prob),
-            borderColor: '#12b76a', backgroundColor: isDark ? 'rgba(18,183,106,0.08)' : 'rgba(18,183,106,0.10)',
+            borderColor: '#12b76a',
+            backgroundColor: isDark ? 'rgba(18,183,106,0.08)' : 'rgba(18,183,106,0.10)',
             fill: true, borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, tension: 0.4,
           }],
         },
@@ -408,6 +412,7 @@ export default function MarketPage() {
     return () => { if (chartInstance.current) (chartInstance.current as { destroy: () => void }).destroy() }
   }, [tradeHistory, activeTab, market?.is_auto])
 
+  // Kaufen
   async function handleKaufen() {
     if (!user || !market) return
     if (spend <= 0) { setBetError('Ungültiger Betrag.'); return }
@@ -428,76 +433,89 @@ export default function MarketPage() {
     const newQYes    = direction === 'yes' ? market.q_yes + shares : market.q_yes
     const newQNo     = direction === 'no'  ? market.q_no  + shares : market.q_no
     const probAfter  = calcProb(newQYes, newQNo, market.b) / 100
-    const tradeType  = direction === 'yes' ? 'buy_yes' : 'buy_no'
 
+    // Trade eintragen
     const tradeRes = await fetch(`${SUPABASE_URL}/rest/v1/trades`, {
       method: 'POST',
       headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
       body: JSON.stringify({
-        market_id:   marketId,
-        user_id:     user.id,
-        type:        tradeType,
-        shares:      shares,
-        cost:        spend,
+        market_id:    marketId,
+        user_id:      user.id,
+        type:         direction === 'yes' ? 'buy_yes' : 'buy_no',
+        shares:       shares,
+        cost:         spend,
         price_before: probBefore,
         price_after:  probAfter,
       }),
     })
     if (!tradeRes.ok) { setBetError('Fehler beim Platzieren.'); setBetLoading(false); return }
 
+    // Markt updaten
     await fetch(`${SUPABASE_URL}/rest/v1/markets?id=eq.${marketId}`, {
       method: 'PATCH',
       headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
       body: JSON.stringify({ q_yes: newQYes, q_no: newQNo }),
     })
 
-    const newBalance = user.balance - spend
+    // Balance abziehen
     await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${user.id}`, {
       method: 'PATCH',
       headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-      body: JSON.stringify({ balance: Math.round(newBalance) }),
+      body: JSON.stringify({ balance: Math.round(user.balance - spend) }),
     })
 
-    // Position upsert
+    // Position upsert — shares_yes / shares_no
     const existingPos = await dbGet('positions', `user_id=eq.${user.id}&market_id=eq.${marketId}&select=*`)
     if (existingPos?.[0]) {
-      const newShares = existingPos[0].direction === direction
-        ? existingPos[0].amount + shares
-        : existingPos[0].amount - shares
+      const pos = existingPos[0]
       await fetch(`${SUPABASE_URL}/rest/v1/positions?user_id=eq.${user.id}&market_id=eq.${marketId}`, {
         method: 'PATCH',
         headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-        body: JSON.stringify({ direction, amount: Math.max(0, newShares) }),
+        body: JSON.stringify({
+          shares_yes: direction === 'yes' ? (pos.shares_yes ?? 0) + shares : (pos.shares_yes ?? 0),
+          shares_no:  direction === 'no'  ? (pos.shares_no  ?? 0) + shares : (pos.shares_no  ?? 0),
+          updated_at: new Date().toISOString(),
+        }),
       })
     } else {
       await fetch(`${SUPABASE_URL}/rest/v1/positions`, {
         method: 'POST',
         headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-        body: JSON.stringify({ user_id: user.id, market_id: marketId, direction, amount: shares }),
+        body: JSON.stringify({
+          user_id:    user.id,
+          market_id:  marketId,
+          shares_yes: direction === 'yes' ? shares : 0,
+          shares_no:  direction === 'no'  ? shares : 0,
+          updated_at: new Date().toISOString(),
+        }),
       })
     }
 
-    setUser({ ...user, balance: Math.round(newBalance) })
+    setUser({ ...user, balance: Math.round(user.balance - spend) })
     setBetSuccess('Wette platziert ✓')
     setBetLoading(false)
     loadMarket(); loadTrades(); loadPosition(user.id)
     setTimeout(() => setBetSuccess(''), 2500)
   }
 
+  // Verkaufen
   async function handleVerkaufen() {
     if (!user || !market || !position) return
-    const sellShares = position.amount
-    if (sellShares <= 0) { setBetError('Keine Anteile.'); return }
+    const sharesYes = position.shares_yes ?? 0
+    const sharesNo  = position.shares_no  ?? 0
+    // Verkaufe die dominante Seite
+    const sellSide   = sharesYes >= sharesNo ? 'yes' : 'no'
+    const sellShares = sellSide === 'yes' ? sharesYes : sharesNo
+    if (sellShares <= 0) { setBetError('Keine Anteile zum Verkaufen.'); return }
     setBetLoading(true); setBetError('')
 
     const session    = JSON.parse(localStorage.getItem('mobius_session') ?? '{}')
     const token      = session?.access_token ?? SUPABASE_KEY
     const probBefore = calcProb(market.q_yes, market.q_no, market.b) / 100
-    const returnAmt  = lmsrSellReturn(market.q_yes, market.q_no, market.b, position.direction as 'yes' | 'no', sellShares)
-    const newQYes    = position.direction === 'yes' ? market.q_yes - sellShares : market.q_yes
-    const newQNo     = position.direction === 'no'  ? market.q_no  - sellShares : market.q_no
-    const probAfter  = calcProb(Math.max(0, newQYes), Math.max(0, newQNo), market.b) / 100
-    const tradeType  = position.direction === 'yes' ? 'sell_yes' : 'sell_no'
+    const returnAmt  = lmsrSellReturn(market.q_yes, market.q_no, market.b, sellSide, sellShares)
+    const newQYes    = sellSide === 'yes' ? Math.max(0, market.q_yes - sellShares) : market.q_yes
+    const newQNo     = sellSide === 'no'  ? Math.max(0, market.q_no  - sellShares) : market.q_no
+    const probAfter  = calcProb(newQYes, newQNo, market.b) / 100
 
     await fetch(`${SUPABASE_URL}/rest/v1/trades`, {
       method: 'POST',
@@ -505,7 +523,7 @@ export default function MarketPage() {
       body: JSON.stringify({
         market_id:    marketId,
         user_id:      user.id,
-        type:         tradeType,
+        type:         sellSide === 'yes' ? 'sell_yes' : 'sell_no',
         shares:       sellShares,
         cost:         -returnAmt,
         price_before: probBefore,
@@ -516,22 +534,22 @@ export default function MarketPage() {
     await fetch(`${SUPABASE_URL}/rest/v1/markets?id=eq.${marketId}`, {
       method: 'PATCH',
       headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-      body: JSON.stringify({ q_yes: Math.max(0, newQYes), q_no: Math.max(0, newQNo) }),
+      body: JSON.stringify({ q_yes: newQYes, q_no: newQNo }),
     })
 
-    const newBalance = user.balance + returnAmt
     await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${user.id}`, {
       method: 'PATCH',
       headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-      body: JSON.stringify({ balance: Math.round(newBalance) }),
+      body: JSON.stringify({ balance: Math.round(user.balance + returnAmt) }),
     })
 
+    // Position löschen
     await fetch(`${SUPABASE_URL}/rest/v1/positions?user_id=eq.${user.id}&market_id=eq.${marketId}`, {
       method: 'DELETE',
       headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${token}` },
     })
 
-    setUser({ ...user, balance: Math.round(newBalance) })
+    setUser({ ...user, balance: Math.round(user.balance + returnAmt) })
     setBetSuccess(`${Math.round(returnAmt)} ₫ erhalten ✓`)
     setBetLoading(false)
     loadMarket(); loadTrades(); loadPosition(user.id)
@@ -546,13 +564,17 @@ export default function MarketPage() {
     </div>
   )
 
-  const prob           = calcProb(market.q_yes, market.q_no, market.b)
-  const isLow          = prob < 50
-  const catClass       = CAT_CLASS[market.category ?? ''] ?? ''
-  const sharesForSpend = lmsrSharesForSpend(market.q_yes, market.q_no, market.b, direction, spend)
-  const payout         = Math.round(sharesForSpend)
-  const returnOnSell   = position
-    ? lmsrSellReturn(market.q_yes, market.q_no, market.b, position.direction as 'yes' | 'no', position.amount)
+  const prob         = calcProb(market.q_yes, market.q_no, market.b)
+  const isLow        = prob < 50
+  const catClass     = CAT_CLASS[market.category ?? ''] ?? ''
+  const payout       = Math.round(lmsrSharesForSpend(market.q_yes, market.q_no, market.b, direction, spend))
+  const sharesYes    = position?.shares_yes ?? 0
+  const sharesNo     = position?.shares_no  ?? 0
+  const hasPosition  = sharesYes > 0 || sharesNo > 0
+  const sellSide     = sharesYes >= sharesNo ? 'yes' : 'no'
+  const sellShares   = sellSide === 'yes' ? sharesYes : sharesNo
+  const returnOnSell = hasPosition
+    ? lmsrSellReturn(market.q_yes, market.q_no, market.b, sellSide, sellShares)
     : 0
   const isKrypto     = !!market.is_auto
   const closesAt     = parseUTC(market.closes_at)
@@ -832,7 +854,7 @@ export default function MarketPage() {
 
                   {tradeTab === 'verkaufen' && (
                     <>
-                      {!position || position.amount <= 0 ? (
+                      {!hasPosition ? (
                         <div style={{ textAlign: 'center', padding: '24px 0', fontSize: 13, color: 'var(--text-muted)' }}>
                           Du hast keine Anteile in diesem Markt.
                         </div>
@@ -840,23 +862,23 @@ export default function MarketPage() {
                         <>
                           <div style={{ background: 'var(--surface)', borderRadius: 8, padding: '12px', marginBottom: 16, fontSize: 13 }}>
                             <div style={{ color: 'var(--text-muted)', marginBottom: 4, fontSize: 12 }}>Deine Position</div>
-                            <div style={{ fontWeight: 700, fontSize: 15, color: position.direction === 'yes' ? 'var(--yes)' : 'var(--no)' }}>
-                              {isKrypto ? (position.direction === 'yes' ? 'Up' : 'Down') : (position.direction === 'yes' ? 'Ja' : 'Nein')} · {Math.round(position.amount)} Anteile
-                            </div>
+                            {sharesYes > 0 && (
+                              <div style={{ fontWeight: 700, color: 'var(--yes)' }}>
+                                {isKrypto ? 'Up' : 'Ja'} · {Math.round(sharesYes)} Anteile
+                              </div>
+                            )}
+                            {sharesNo > 0 && (
+                              <div style={{ fontWeight: 700, color: 'var(--no)' }}>
+                                {isKrypto ? 'Down' : 'Nein'} · {Math.round(sharesNo)} Anteile
+                              </div>
+                            )}
                           </div>
-                          {orderType === 'limit' && (
-                            <div style={{ marginBottom: 14 }}>
-                              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>Mindestpreis (¢)</div>
-                              <input type="number" min={1} max={99} value={limitPrice}
-                                onChange={e => setLimitPrice(Math.min(99, Math.max(1, parseInt(e.target.value) || 1)))}
-                                style={{ width: '100%', fontSize: 16, fontWeight: 600 }} />
-                            </div>
-                          )}
+
                           {orderType === 'markt' && (
                             <div style={{ background: 'rgba(22,163,74,0.07)', borderRadius: 10, padding: '14px', marginBottom: 14, textAlign: 'center', border: '1px solid rgba(22,163,74,0.2)' }}>
                               <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Du erhältst jetzt</div>
                               <div style={{ fontSize: 32, fontWeight: 800, color: '#16a34a', letterSpacing: '-0.5px' }}>{Math.round(returnOnSell)} ₫</div>
-                              <div style={{ fontSize: 11, color: 'var(--text-subtle)', marginTop: 4 }}>alle {Math.round(position.amount)} Anteile</div>
+                              <div style={{ fontSize: 11, color: 'var(--text-subtle)', marginTop: 4 }}>alle Anteile verkaufen</div>
                             </div>
                           )}
                         </>
@@ -876,7 +898,7 @@ export default function MarketPage() {
                     </button>
                   ) : (
                     <button className="submit-btn no" onClick={handleVerkaufen}
-                      disabled={betLoading || !position || position.amount <= 0} style={{ width: '100%' }}>
+                      disabled={betLoading || !hasPosition} style={{ width: '100%' }}>
                       {betLoading ? 'Wird verkauft…' : `Verkaufen · ${Math.round(returnOnSell)} ₫`}
                     </button>
                   )}
@@ -899,7 +921,7 @@ export default function MarketPage() {
                   <span style={{ color: t.type.includes('yes') ? 'var(--yes)' : 'var(--no)', fontWeight: 600 }}>
                     {isKrypto ? (t.type.includes('yes') ? 'Up' : 'Down') : (t.type.includes('yes') ? 'Ja' : 'Nein')}
                   </span>
-                  <span style={{ color: 'var(--text)' }}>{Math.round(t.cost)} ₫</span>
+                  <span style={{ color: 'var(--text)' }}>{Math.round(Math.abs(t.cost))} ₫</span>
                   <span style={{ color: 'var(--text-subtle)' }}>
                     {new Date(t.created_at).toLocaleDateString('de', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
                   </span>
