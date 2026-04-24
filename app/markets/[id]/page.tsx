@@ -14,6 +14,20 @@ async function dbGet(table: string, params: string) {
   return res.json()
 }
 
+async function dbWrite(method: 'POST' | 'PATCH' | 'DELETE', table: string, query: string, body?: object) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}${query ? '?' + query : ''}`, {
+    method,
+    headers: {
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${SUPABASE_KEY}`,
+      'Content-Type': 'application/json',
+      Prefer: 'return=minimal',
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  })
+  return res
+}
+
 interface Market {
   id: string
   question: string
@@ -136,8 +150,9 @@ function drawCryptoChart(
   ctx.fillStyle = '#ffffff'
   ctx.fillRect(0, 0, W, H)
 
-  if (Date.now() < marketEndMs) {
-    const nowX = Math.min(xScale(Date.now()), W - padR)
+  const nowMs = Date.now()
+  if (nowMs < marketEndMs) {
+    const nowX = Math.min(xScale(nowMs), W - padR)
     ctx.fillStyle = 'rgba(0,0,0,0.02)'
     ctx.fillRect(nowX, padT, W - padR - nowX, H - padT - padB)
   }
@@ -157,18 +172,21 @@ function drawCryptoChart(
   ctx.fillStyle = '#b45309'; ctx.font = '9px Inter, sans-serif'
   ctx.fillText(`$${targetPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, W - padR + 8, targetY + 10)
 
-  if (history.length > 1) {
+  // Nur Punkte bis Marktende zeichnen
+  const filteredHistory = history.filter(p => p.t <= marketEndMs)
+
+  if (filteredHistory.length > 1) {
     ctx.beginPath()
-    history.forEach((p, i) => { i === 0 ? ctx.moveTo(xScale(p.t), yScale(p.price)) : ctx.lineTo(xScale(p.t), yScale(p.price)) })
-    const lastX = xScale(history[history.length - 1].t)
-    ctx.lineTo(lastX, H - padB); ctx.lineTo(xScale(history[0].t), H - padB); ctx.closePath()
+    filteredHistory.forEach((p, i) => { i === 0 ? ctx.moveTo(xScale(p.t), yScale(p.price)) : ctx.lineTo(xScale(p.t), yScale(p.price)) })
+    const lastX = xScale(filteredHistory[filteredHistory.length - 1].t)
+    ctx.lineTo(lastX, H - padB); ctx.lineTo(xScale(filteredHistory[0].t), H - padB); ctx.closePath()
     const grad = ctx.createLinearGradient(0, padT, 0, H - padB)
     grad.addColorStop(0, 'rgba(251,146,60,0.22)'); grad.addColorStop(1, 'rgba(251,146,60,0.0)')
     ctx.fillStyle = grad; ctx.fill()
     ctx.beginPath()
-    history.forEach((p, i) => { i === 0 ? ctx.moveTo(xScale(p.t), yScale(p.price)) : ctx.lineTo(xScale(p.t), yScale(p.price)) })
+    filteredHistory.forEach((p, i) => { i === 0 ? ctx.moveTo(xScale(p.t), yScale(p.price)) : ctx.lineTo(xScale(p.t), yScale(p.price)) })
     ctx.strokeStyle = '#f97316'; ctx.lineWidth = 2.5; ctx.lineJoin = 'round'; ctx.stroke()
-    const last = history[history.length - 1]
+    const last = filteredHistory[filteredHistory.length - 1]
     ctx.beginPath(); ctx.arc(xScale(last.t), yScale(last.price), 4.5, 0, Math.PI * 2)
     ctx.fillStyle = '#f97316'; ctx.fill(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.stroke()
   }
@@ -227,6 +245,8 @@ export default function MarketPage() {
   const priceHistoryRef                 = useRef<PricePoint[]>([])
   const lastRealPrice                   = useRef<number | null>(null)
   const marketRef                       = useRef<Market | null>(null)
+  // Für "Zum Live-Markt" aggressives Polling nach Marktende
+  const liveMarketPollRef               = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => {
     const saved = localStorage.getItem('mobius_session')
@@ -259,6 +279,7 @@ export default function MarketPage() {
   }, [])
 
   // Auto-Refresh: 10s normal, 5s letzte 30s, 2s nach Ablauf
+  // + aggressives Live-Market-Polling sobald Markt abgelaufen
   useEffect(() => {
     loadMarket(); loadTrades(); loadLiveMarkets()
 
@@ -275,10 +296,26 @@ export default function MarketPage() {
 
     const watchdog = setInterval(() => {
       const m = marketRef.current
-      if (!m || m.resolved) { startInterval(10000); return }
+      if (!m) return
+
       const diff = parseUTC(m.closes_at).getTime() - Date.now()
-      if (diff <= 0) {
+
+      if (m.resolved) {
+        // Markt aufgelöst: Live-Märkte jede Sekunde pollen bis nextLiveMarket gefunden
+        startInterval(10000)
+        if (!liveMarketPollRef.current) {
+          liveMarketPollRef.current = setInterval(() => {
+            loadLiveMarkets()
+          }, 1000)
+        }
+      } else if (diff <= 0) {
+        // Abgelaufen, noch nicht aufgelöst: schnell pollen
         startInterval(2000)
+        if (!liveMarketPollRef.current) {
+          liveMarketPollRef.current = setInterval(() => {
+            loadLiveMarkets(); loadMarket()
+          }, 1000)
+        }
       } else if (diff <= 30000) {
         startInterval(5000)
       } else {
@@ -286,8 +323,23 @@ export default function MarketPage() {
       }
     }, 1000)
 
-    return () => { clearInterval(interval); clearInterval(watchdog) }
+    return () => {
+      clearInterval(interval)
+      clearInterval(watchdog)
+      if (liveMarketPollRef.current) clearInterval(liveMarketPollRef.current)
+    }
   }, [loadMarket, loadTrades, loadLiveMarkets])
+
+  // Live-Market-Poll stoppen sobald nextLiveMarket gefunden
+  useEffect(() => {
+    if (!market?.resolved) return
+    const coin = market.coin
+    const found = liveMarkets.find(m => m.coin === coin && m.id !== marketId)
+    if (found && liveMarketPollRef.current) {
+      clearInterval(liveMarketPollRef.current)
+      liveMarketPollRef.current = null
+    }
+  }, [liveMarkets, market, marketId])
 
   useEffect(() => {
     if (user?.id) loadPosition(user.id)
@@ -302,33 +354,40 @@ export default function MarketPage() {
     loadPosition(user.id)
   }, [market?.resolved, user?.id, loadPosition])
 
-  // Krypto Live-Preis — nur wenn nicht aufgelöst
+  // Krypto Live-Preis — stoppt nach Marktende
   useEffect(() => {
     if (!market?.is_auto || !market?.coin || market?.resolved) return
-    const coin = market.coin
+    const coin        = market.coin
+    const marketEndMs = parseUTC(market.closes_at).getTime()
+
     const fetchReal = async () => {
+      if (Date.now() > marketEndMs) return
       const price = await fetchCoinbasePrice(coin)
       if (price === null) return
       lastRealPrice.current = price
-      const point: PricePoint = { t: Date.now(), price }
+      const point: PricePoint = { t: Math.min(Date.now(), marketEndMs), price }
       priceHistoryRef.current = [...priceHistoryRef.current, point].slice(-300)
       setPriceHistory([...priceHistoryRef.current])
       setLivePrice(price)
     }
     fetchReal()
-    const fetchInterval  = setInterval(fetchReal, 10000)
+    const fetchInterval  = setInterval(() => {
+      if (Date.now() > marketEndMs) { clearInterval(fetchInterval); clearInterval(interpInterval); return }
+      fetchReal()
+    }, 10000)
     const interpInterval = setInterval(() => {
+      if (Date.now() > marketEndMs) return // keine neuen Punkte nach Marktende
       if (lastRealPrice.current === null) return
       const hist   = priceHistoryRef.current
       const last   = hist.length > 0 ? hist[hist.length - 1].price : lastRealPrice.current
       const jitter = last * 0.00008 * (Math.random() * 2 - 1)
-      const point: PricePoint = { t: Date.now(), price: last + jitter }
+      const point: PricePoint = { t: Math.min(Date.now(), marketEndMs), price: last + jitter }
       priceHistoryRef.current = [...priceHistoryRef.current, point].slice(-300)
       setPriceHistory([...priceHistoryRef.current])
       setLivePrice(last + jitter)
     }, 1000)
     return () => { clearInterval(fetchInterval); clearInterval(interpInterval) }
-  }, [market?.is_auto, market?.coin, market?.resolved])
+  }, [market?.is_auto, market?.coin, market?.resolved, market?.closes_at])
 
   // Canvas
   useEffect(() => {
@@ -408,48 +467,61 @@ export default function MarketPage() {
     if (spend <= 0) { setBetError('Ungültiger Betrag.'); return }
     if (user.balance < spend) { setBetError('Nicht genug Guthaben.'); return }
     setBetLoading(true); setBetError('')
+
     if (orderType === 'limit') {
       setBetSuccess(`Limit-Order bei ${limitPrice}¢ platziert.`)
       setBetLoading(false); setTimeout(() => setBetSuccess(''), 4000); return
     }
-    const session    = JSON.parse(localStorage.getItem('mobius_session') ?? '{}')
-    const token      = session?.access_token ?? SUPABASE_KEY
+
     const probBefore = calcProb(market.q_yes, market.q_no, market.b) / 100
     const shares     = lmsrSharesForSpend(market.q_yes, market.q_no, market.b, direction, spend)
     const newQYes    = direction === 'yes' ? market.q_yes + shares : market.q_yes
     const newQNo     = direction === 'no'  ? market.q_no  + shares : market.q_no
     const probAfter  = calcProb(newQYes, newQNo, market.b) / 100
-    const tradeRes = await fetch(`${SUPABASE_URL}/rest/v1/trades`, {
-      method: 'POST',
-      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-      body: JSON.stringify({ market_id: marketId, user_id: user.id, type: direction === 'yes' ? 'buy_yes' : 'buy_no', shares, cost: spend, price_before: probBefore, price_after: probAfter }),
+
+    // Trade einfügen
+    const tradeRes = await dbWrite('POST', 'trades', '', {
+      market_id: marketId,
+      user_id: user.id,
+      type: direction === 'yes' ? 'buy_yes' : 'buy_no',
+      shares,
+      cost: spend,
+      price_before: probBefore,
+      price_after: probAfter,
     })
-    if (!tradeRes.ok) { setBetError('Fehler beim Platzieren.'); setBetLoading(false); return }
-    await fetch(`${SUPABASE_URL}/rest/v1/markets?id=eq.${marketId}`, {
-      method: 'PATCH',
-      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-      body: JSON.stringify({ q_yes: newQYes, q_no: newQNo }),
-    })
-    await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${user.id}`, {
-      method: 'PATCH',
-      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-      body: JSON.stringify({ balance: Math.round(user.balance - spend) }),
-    })
+    if (!tradeRes.ok) {
+      const errText = await tradeRes.text()
+      console.error('Trade error:', tradeRes.status, errText)
+      setBetError('Fehler beim Platzieren.')
+      setBetLoading(false)
+      return
+    }
+
+    // Markt updaten
+    await dbWrite('PATCH', 'markets', `id=eq.${marketId}`, { q_yes: newQYes, q_no: newQNo })
+
+    // Balance updaten
+    await dbWrite('PATCH', 'users', `id=eq.${user.id}`, { balance: Math.round(user.balance - spend) })
+
+    // Position updaten
     const existingPos = await dbGet('positions', `user_id=eq.${user.id}&market_id=eq.${marketId}&select=*`)
     if (existingPos?.[0]) {
       const pos = existingPos[0]
-      await fetch(`${SUPABASE_URL}/rest/v1/positions?user_id=eq.${user.id}&market_id=eq.${marketId}`, {
-        method: 'PATCH',
-        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-        body: JSON.stringify({ shares_yes: direction === 'yes' ? (pos.shares_yes ?? 0) + shares : (pos.shares_yes ?? 0), shares_no: direction === 'no' ? (pos.shares_no ?? 0) + shares : (pos.shares_no ?? 0), updated_at: new Date().toISOString() }),
+      await dbWrite('PATCH', 'positions', `user_id=eq.${user.id}&market_id=eq.${marketId}`, {
+        shares_yes: direction === 'yes' ? (pos.shares_yes ?? 0) + shares : (pos.shares_yes ?? 0),
+        shares_no:  direction === 'no'  ? (pos.shares_no  ?? 0) + shares : (pos.shares_no  ?? 0),
+        updated_at: new Date().toISOString(),
       })
     } else {
-      await fetch(`${SUPABASE_URL}/rest/v1/positions`, {
-        method: 'POST',
-        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-        body: JSON.stringify({ user_id: user.id, market_id: marketId, shares_yes: direction === 'yes' ? shares : 0, shares_no: direction === 'no' ? shares : 0, updated_at: new Date().toISOString() }),
+      await dbWrite('POST', 'positions', '', {
+        user_id:    user.id,
+        market_id:  marketId,
+        shares_yes: direction === 'yes' ? shares : 0,
+        shares_no:  direction === 'no'  ? shares : 0,
+        updated_at: new Date().toISOString(),
       })
     }
+
     setUser({ ...user, balance: Math.round(user.balance - spend) })
     setBetSuccess('Wette platziert ✓')
     setBetLoading(false)
@@ -465,32 +537,26 @@ export default function MarketPage() {
     const sellShares = sellSide === 'yes' ? sharesYes : sharesNo
     if (sellShares <= 0) { setBetError('Keine Anteile.'); return }
     setBetLoading(true); setBetError('')
-    const session    = JSON.parse(localStorage.getItem('mobius_session') ?? '{}')
-    const token      = session?.access_token ?? SUPABASE_KEY
+
     const probBefore = calcProb(market.q_yes, market.q_no, market.b) / 100
     const returnAmt  = lmsrSellReturn(market.q_yes, market.q_no, market.b, sellSide, sellShares)
     const newQYes    = sellSide === 'yes' ? Math.max(0, market.q_yes - sellShares) : market.q_yes
     const newQNo     = sellSide === 'no'  ? Math.max(0, market.q_no  - sellShares) : market.q_no
     const probAfter  = calcProb(newQYes, newQNo, market.b) / 100
-    await fetch(`${SUPABASE_URL}/rest/v1/trades`, {
-      method: 'POST',
-      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-      body: JSON.stringify({ market_id: marketId, user_id: user.id, type: sellSide === 'yes' ? 'sell_yes' : 'sell_no', shares: sellShares, cost: -returnAmt, price_before: probBefore, price_after: probAfter }),
+
+    await dbWrite('POST', 'trades', '', {
+      market_id:   marketId,
+      user_id:     user.id,
+      type:        sellSide === 'yes' ? 'sell_yes' : 'sell_no',
+      shares:      sellShares,
+      cost:        -returnAmt,
+      price_before: probBefore,
+      price_after:  probAfter,
     })
-    await fetch(`${SUPABASE_URL}/rest/v1/markets?id=eq.${marketId}`, {
-      method: 'PATCH',
-      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-      body: JSON.stringify({ q_yes: newQYes, q_no: newQNo }),
-    })
-    await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${user.id}`, {
-      method: 'PATCH',
-      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-      body: JSON.stringify({ balance: Math.round(user.balance + returnAmt) }),
-    })
-    await fetch(`${SUPABASE_URL}/rest/v1/positions?user_id=eq.${user.id}&market_id=eq.${marketId}`, {
-      method: 'DELETE',
-      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${token}` },
-    })
+    await dbWrite('PATCH', 'markets', `id=eq.${marketId}`, { q_yes: newQYes, q_no: newQNo })
+    await dbWrite('PATCH', 'users', `id=eq.${user.id}`, { balance: Math.round(user.balance + returnAmt) })
+    await dbWrite('DELETE', 'positions', `user_id=eq.${user.id}&market_id=eq.${marketId}`)
+
     setUser({ ...user, balance: Math.round(user.balance + returnAmt) })
     setBetSuccess(`${Math.round(returnAmt)} ₫ erhalten ✓`)
     setBetLoading(false)
@@ -527,6 +593,9 @@ export default function MarketPage() {
   const userWon = market.resolved && hasPosition &&
     ((market.resolution === 'yes' && sharesYes > 0) || (market.resolution === 'no' && sharesNo > 0))
 
+  // Banner: zeigen wenn Markt abgelaufen (countdown 00:00) oder resolved
+  const showEndedBanner = market.resolved || countdown === '00:00'
+
   return (
     <>
       <nav className="nav">
@@ -549,6 +618,56 @@ export default function MarketPage() {
 
       <div style={{ maxWidth: 980, margin: '0 auto', padding: '24px 16px' }}>
 
+        {/* Ergebnis-Banner — erscheint sobald Markt abläuft */}
+        {isKrypto && showEndedBanner && (
+          <div style={{
+            marginBottom: 20,
+            padding: '16px 20px',
+            borderRadius: 14,
+            background: market.resolved
+              ? (market.resolution === 'yes' ? 'rgba(22,163,74,0.12)' : 'rgba(220,38,38,0.12)')
+              : 'rgba(245,158,11,0.12)',
+            border: `1px solid ${market.resolved
+              ? (market.resolution === 'yes' ? 'rgba(22,163,74,0.3)' : 'rgba(220,38,38,0.3)')
+              : 'rgba(245,158,11,0.3)'}`,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: 12,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <span style={{ fontSize: 28 }}>
+                {market.resolved ? (market.resolution === 'yes' ? '↑' : '↓') : '⏳'}
+              </span>
+              <div>
+                <div style={{ fontSize: 16, fontWeight: 800, color: market.resolved ? (market.resolution === 'yes' ? '#16a34a' : '#dc2626') : '#b45309' }}>
+                  {market.resolved
+                    ? `Ergebnis: ${market.resolution === 'yes' ? 'Up ↑' : 'Down ↓'}`
+                    : 'Markt läuft ab — Auflösung folgt…'}
+                </div>
+                {market.resolved && market.start_price && market.end_price && (
+                  <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 2 }}>
+                    {market.coin}: ${market.start_price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} → ${market.end_price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
+                )}
+              </div>
+            </div>
+            {nextLiveMarket ? (
+              <button onClick={() => router.push(`/markets/${nextLiveMarket.id}`)}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 20px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: 20, cursor: 'pointer', fontSize: 14, fontWeight: 700, whiteSpace: 'nowrap' }}>
+                <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#fff', display: 'inline-block', animation: 'pulse 1.5s infinite' }} />
+                Zum Live-Markt →
+              </button>
+            ) : (
+              <div style={{ fontSize: 13, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: '#f59e0b' }} />
+                Nächster Markt wird erstellt…
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Krypto Header */}
         {isKrypto && (
           <div className="card" style={{ marginBottom: 20 }}>
@@ -565,15 +684,7 @@ export default function MarketPage() {
                 </div>
               </div>
               <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                {market.resolved ? (
-                  nextLiveMarket && (
-                    <button onClick={() => router.push(`/markets/${nextLiveMarket.id}`)}
-                      style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 20, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>
-                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#22c55e', display: 'inline-block', boxShadow: '0 0 6px #22c55e' }} />
-                      Zum Live-Markt →
-                    </button>
-                  )
-                ) : (
+                {!market.resolved && (
                   <div>
                     <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>Verbleibend</div>
                     <div style={{ fontSize: 40, fontWeight: 900, letterSpacing: '-2px', fontVariantNumeric: 'tabular-nums', color: countdownRed ? '#dc2626' : 'var(--text)', lineHeight: 1 }}>
@@ -774,6 +885,11 @@ export default function MarketPage() {
                     <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#fff' }} />
                     Zum Live-Markt →
                   </button>
+                )}
+                {!nextLiveMarket && (
+                  <div style={{ textAlign: 'center', fontSize: 12, color: 'var(--text-muted)', marginTop: 8 }}>
+                    Nächster Markt wird erstellt…
+                  </div>
                 )}
               </div>
             ) : !user ? (
