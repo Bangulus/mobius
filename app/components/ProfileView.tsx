@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 
 const SUPABASE_URL = 'https://zrujclkigcrlrvpgxrqx.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpydWpjbGtpZ2NybHJ2cGd4cnF4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU4MjQ0NTEsImV4cCI6MjA5MTQwMDQ1MX0.JpuZxskptogAKtw5cUR3gJOAcnh3BFh1NSvfVEtN8IQ';
@@ -47,46 +47,42 @@ interface PortfolioEntry {
   market: MarketRow;
   einsatz: number;
   direction: 'yes' | 'no';
-  auszahlung: number | null; // null = offen
+  auszahlung: number | null;
 }
 
 const COIN_COLORS: Record<string, string> = {
   BTC: '#f59e0b', ETH: '#6366f1', SOL: '#9945ff', XRP: '#00aae4',
 };
 
-export default function ProfileView({ userId, token, displayName, avatarUrl, balance, onUsernameChange, onAvatarChange }: Props) {
-  const [newUsername, setNewUsername]     = useState(displayName);
+export default function ProfileView({ userId, displayName, avatarUrl, balance, onUsernameChange, onAvatarChange }: Props) {
+  const [newUsername, setNewUsername]         = useState(displayName);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [savingUsername, setSavingUsername]   = useState(false);
   const [profileMessage, setProfileMessage]   = useState('');
 
-  const [kryptoRows, setKryptoRows]   = useState<PortfolioEntry[]>([]);
-  const [manuelleRows, setManuelleRows] = useState<PortfolioEntry[]>([]);
+  const [kryptoRows, setKryptoRows]         = useState<PortfolioEntry[]>([]);
+  const [manuelleRows, setManuelleRows]     = useState<PortfolioEntry[]>([]);
   const [portfolioLoading, setPortfolioLoading] = useState(true);
 
-  // Kennzahlen
-  const allRows     = [...kryptoRows, ...manuelleRows];
+  const allRows      = [...kryptoRows, ...manuelleRows];
   const totalEinsatz = allRows.reduce((s, r) => s + r.einsatz, 0);
   const totalAusbe   = allRows.filter(r => r.auszahlung !== null && r.auszahlung > 0).reduce((s, r) => s + (r.auszahlung ?? 0), 0);
   const offene       = allRows.filter(r => r.auszahlung === null).length;
 
-  useEffect(() => {
-    if (!userId) return;
-    loadPortfolio();
-  }, [userId]);
-
-  async function loadPortfolio() {
+  const loadPortfolio = useCallback(async () => {
     setPortfolioLoading(true);
-    // Alle Trades des Users laden
     const trades: TradeRow[] = await dbGet('trades', `user_id=eq.${userId}&select=*&order=created_at.desc`);
     if (!trades || trades.length === 0) { setPortfolioLoading(false); return; }
 
-    // Eindeutige Market-IDs
-    const marketIds = [...new Set(trades.map(t => t.market_id))];
-    const markets: MarketRow[] = await dbGet('markets', `id=in.(${marketIds.join(',')})&select=*`);
-    const marketMap = Object.fromEntries(markets.map(m => [m.id, m]));
+    // Set-Spread vermeiden: Array.from statt [...new Set()]
+    const seen: Record<string, boolean> = {};
+    const marketIds: string[] = [];
+    trades.forEach(t => { if (!seen[t.market_id]) { seen[t.market_id] = true; marketIds.push(t.market_id); } });
 
-    // Pro Markt: letzten Kauf aggregieren
+    const markets: MarketRow[] = await dbGet('markets', `id=in.(${marketIds.join(',')})&select=*`);
+    const marketMap: Record<string, MarketRow> = {};
+    markets.forEach(m => { marketMap[m.id] = m; });
+
     const entryMap: Record<string, PortfolioEntry> = {};
 
     for (const trade of trades) {
@@ -98,54 +94,41 @@ export default function ProfileView({ userId, token, displayName, avatarUrl, bal
       const dir: 'yes' | 'no' = trade.type.includes('yes') ? 'yes' : 'no';
 
       if (!entryMap[trade.market_id]) {
-        entryMap[trade.market_id] = {
-          market,
-          einsatz: 0,
-          direction: dir,
-          auszahlung: null,
-        };
+        entryMap[trade.market_id] = { market, einsatz: 0, direction: dir, auszahlung: null };
       }
 
       const entry = entryMap[trade.market_id];
-
-      if (isBuy)  entry.einsatz += Math.abs(trade.cost);
-      if (isSell) {
-        // Verkauf während Markt offen: Rückgabe als Auszahlung
-        entry.auszahlung = (entry.auszahlung ?? 0) + Math.abs(trade.cost);
-      }
-
-      // Letzter Trade bestimmt Richtung
-      if (isBuy) entry.direction = dir;
+      if (isBuy)  { entry.einsatz += Math.abs(trade.cost); entry.direction = dir; }
+      if (isSell) { entry.auszahlung = (entry.auszahlung ?? 0) + Math.abs(trade.cost); }
     }
 
-    // Gewinn-Auszahlung: shares aus buy_yes/buy_no wenn Markt resolved
     for (const entry of Object.values(entryMap)) {
       const m = entry.market;
       if (!m.resolved) continue;
-      if (entry.auszahlung !== null) continue; // bereits Verkauf verbucht
+      if (entry.auszahlung !== null) continue;
 
-      // Gewonnen?
       const won = (m.resolution === 'yes' && entry.direction === 'yes') ||
                   (m.resolution === 'no'  && entry.direction === 'no');
 
       if (won) {
-        // Shares aus Trades berechnen
         const mTrades = trades.filter(t => t.market_id === m.id && (t.type === 'buy_yes' || t.type === 'buy_no'));
         const totalShares = mTrades.reduce((s, t) => s + (t.shares ?? 0), 0);
         entry.auszahlung = Math.round(totalShares);
       } else {
-        entry.auszahlung = 0; // verloren
+        entry.auszahlung = 0;
       }
     }
 
-    const allEntries = Object.values(entryMap).sort((a, b) =>
-      new Date(b.market.id).getTime() - new Date(a.market.id).getTime()
-    );
-
+    const allEntries = Object.values(entryMap);
     setKryptoRows(allEntries.filter(e => e.market.is_auto));
     setManuelleRows(allEntries.filter(e => !e.market.is_auto));
     setPortfolioLoading(false);
-  }
+  }, [userId]);
+
+  useEffect(() => {
+    if (!userId) return;
+    loadPortfolio();
+  }, [userId, loadPortfolio]);
 
   async function saveUsername() {
     if (!newUsername.trim()) return;
@@ -155,12 +138,8 @@ export default function ProfileView({ userId, token, displayName, avatarUrl, bal
       headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
       body: JSON.stringify({ username: newUsername.trim() }),
     });
-    if (res.ok) {
-      onUsernameChange(newUsername.trim());
-      setProfileMessage('Gespeichert ✓');
-    } else {
-      setProfileMessage('Fehler beim Speichern.');
-    }
+    if (res.ok) { onUsernameChange(newUsername.trim()); setProfileMessage('Gespeichert ✓'); }
+    else { setProfileMessage('Fehler beim Speichern.'); }
     setSavingUsername(false);
     setTimeout(() => setProfileMessage(''), 3000);
   }
@@ -188,20 +167,17 @@ export default function ProfileView({ userId, token, displayName, avatarUrl, bal
   }
 
   function AuszahlungCell({ entry }: { entry: PortfolioEntry }) {
-    if (!entry.market.resolved && entry.auszahlung === null) {
+    if (!entry.market.resolved && entry.auszahlung === null)
       return <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>ausstehend</span>;
-    }
-    if (entry.auszahlung === null || entry.auszahlung === 0) {
+    if (entry.auszahlung === null || entry.auszahlung === 0)
       return <span style={{ color: 'var(--no)', fontWeight: 600 }}>–{Math.round(entry.einsatz)} ₫</span>;
-    }
     return <span style={{ color: 'var(--yes)', fontWeight: 600 }}>+{Math.round(entry.auszahlung)} ₫</span>;
   }
 
   function ErgebnisCell({ entry }: { entry: PortfolioEntry }) {
     const m = entry.market;
-    if (!m.resolved) {
+    if (!m.resolved)
       return <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 20, background: 'rgba(245,158,11,0.12)', color: '#b45309', fontWeight: 600 }}>Läuft</span>;
-    }
     const label = m.is_auto
       ? (m.resolution === 'yes' ? 'Up ↑' : 'Down ↓')
       : (m.resolution === 'yes' ? 'Ja' : 'Nein');
@@ -240,6 +216,7 @@ export default function ProfileView({ userId, token, displayName, avatarUrl, bal
       {/* Profil-Card */}
       <div className="card" style={{ marginBottom: 20 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 20 }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
           {avatarUrl ? (
             <img src={avatarUrl} alt="Avatar" style={{ width: 72, height: 72, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
           ) : (
@@ -289,8 +266,8 @@ export default function ProfileView({ userId, token, displayName, avatarUrl, bal
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 20 }}>
         {[
           { label: 'Gesamt eingesetzt', value: `${Math.round(totalEinsatz).toLocaleString('de')} ₫`, color: 'var(--text)' },
-          { label: 'Ausbezahlt', value: `+${Math.round(totalAusbe).toLocaleString('de')} ₫`, color: 'var(--yes)' },
-          { label: 'Offene Positionen', value: String(offene), color: 'var(--text)' },
+          { label: 'Ausbezahlt',        value: `+${Math.round(totalAusbe).toLocaleString('de')} ₫`,  color: 'var(--yes)' },
+          { label: 'Offene Positionen', value: String(offene),                                        color: 'var(--text)' },
         ].map(s => (
           <div key={s.label} style={{ background: 'var(--surface)', borderRadius: 10, padding: '12px 14px' }}>
             <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>{s.label}</div>
@@ -307,7 +284,7 @@ export default function ProfileView({ userId, token, displayName, avatarUrl, bal
         </div>
       ) : (
         <>
-          {/* Krypto */}
+          {/* Krypto-Tabelle */}
           {kryptoRows.length > 0 && (
             <div className="card" style={{ marginBottom: 16 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
@@ -330,7 +307,7 @@ export default function ProfileView({ userId, token, displayName, avatarUrl, bal
                     <tr key={entry.market.id}>
                       <td style={tdStyle}>
                         <span style={{ width: 8, height: 8, borderRadius: '50%', background: COIN_COLORS[entry.market.coin ?? ''] ?? '#f97316', display: 'inline-block', marginRight: 6 }} />
-                        <span style={{ fontWeight: 600 }}>{entry.market.coin}</span>
+                        <strong>{entry.market.coin}</strong>
                         <span style={{ color: 'var(--text-muted)', marginLeft: 4, fontSize: 12 }}>3min</span>
                       </td>
                       <td style={{ ...tdStyle, textAlign: 'right' }}>{Math.round(entry.einsatz)} ₫</td>
@@ -344,7 +321,7 @@ export default function ProfileView({ userId, token, displayName, avatarUrl, bal
             </div>
           )}
 
-          {/* Manuelle */}
+          {/* Manuelle Märkte */}
           {manuelleRows.length > 0 && (
             <div className="card">
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
