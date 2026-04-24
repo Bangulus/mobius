@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import AdminPanel from './components/AdminPanel'
 import ProfileView from './components/ProfileView'
@@ -72,6 +72,15 @@ interface LeaderboardEntry {
   avatar_url?: string
 }
 
+interface WinToast {
+  id: string
+  coin?: string
+  question: string
+  amount: number
+  isKrypto: boolean
+  direction: 'yes' | 'no'
+}
+
 function calcProb(qYes: number, qNo: number, b: number): number {
   const eYes = Math.exp(qYes / b)
   const eNo  = Math.exp(qNo  / b)
@@ -86,6 +95,10 @@ const CAT_CLASS: Record<string, string> = {
   Krypto:        'cat-krypto',
   Entertainment: 'cat-entertainment',
   Wirtschaft:    'cat-wirtschaft',
+}
+
+const COIN_COLORS: Record<string, string> = {
+  BTC: '#f59e0b', ETH: '#6366f1', SOL: '#9945ff', XRP: '#00aae4',
 }
 
 const AVATAR_COLORS = [
@@ -120,6 +133,9 @@ export default function Home() {
   const [authError, setAuthError]       = useState('')
   const [authLoading, setAuthLoading]   = useState(false)
   const [searchQuery, setSearchQuery]   = useState('')
+  const [winToasts, setWinToasts]       = useState<WinToast[]>([])
+  const shownToastsRef                  = useRef<Set<string>>(new Set())
+  const userRef                         = useRef<User | null>(null)
 
   const ADMIN_ID = 'b75edaf4-141d-41f1-9555-887a8ddbac58'
 
@@ -134,7 +150,7 @@ export default function Home() {
       const session = JSON.parse(saved)
       if (session?.access_token && session?.user_id) {
         dbGet('users', `id=eq.${session.user_id}&select=*`).then((data) => {
-          if (data?.[0]) setUser(data[0])
+          if (data?.[0]) { setUser(data[0]); userRef.current = data[0] }
         })
       }
     } catch {}
@@ -164,6 +180,76 @@ export default function Home() {
     loadLeaderboard()
   }, [loadMarkets, loadLeaderboard])
 
+  // Gewinn-Checker: alle 15s prüfen ob neue Auszahlungen für den User vorliegen
+  const checkWins = useCallback(async (userId: string) => {
+    // Letzte 10 Minuten: aufgelöste Märkte wo der User eine Position hatte
+    const since = new Date(Date.now() - 10 * 60 * 1000).toISOString()
+    const trades = await dbGet('trades', `user_id=eq.${userId}&type=in.(buy_yes,buy_no)&created_at=gte.${since}&select=market_id,type,shares`)
+    if (!trades || trades.length === 0) return
+
+    const seen: Record<string, boolean> = {}
+    const marketIds: string[] = []
+    trades.forEach((t: { market_id: string }) => {
+      if (!seen[t.market_id]) { seen[t.market_id] = true; marketIds.push(t.market_id) }
+    })
+
+    const resolvedMarkets = await dbGet('markets', `id=in.(${marketIds.join(',')})&resolved=eq.true&select=id,question,resolution,is_auto,coin`)
+    if (!resolvedMarkets || resolvedMarkets.length === 0) return
+
+    const newToasts: WinToast[] = []
+
+    for (const market of resolvedMarkets) {
+      // Bereits angezeigt?
+      if (shownToastsRef.current.has(market.id)) continue
+
+      // Hat der User auf die richtige Seite gesetzt?
+      const marketTrades = trades.filter((t: { market_id: string; type: string; shares: number }) => t.market_id === market.id)
+      const wonTrades = marketTrades.filter((t: { type: string }) =>
+        (market.resolution === 'yes' && t.type === 'buy_yes') ||
+        (market.resolution === 'no'  && t.type === 'buy_no')
+      )
+      if (wonTrades.length === 0) continue
+
+      const totalShares = wonTrades.reduce((s: number, t: { shares: number }) => s + (t.shares ?? 0), 0)
+      const amount = Math.round(totalShares)
+      if (amount <= 0) continue
+
+      shownToastsRef.current.add(market.id)
+      newToasts.push({
+        id: market.id,
+        coin: market.coin,
+        question: market.question,
+        amount,
+        isKrypto: !!market.is_auto,
+        direction: market.resolution as 'yes' | 'no',
+      })
+    }
+
+    if (newToasts.length > 0) {
+      setWinToasts(prev => [...prev, ...newToasts])
+      // Balance neu laden
+      const freshUser = await dbGet('users', `id=eq.${userId}&select=balance`)
+      if (freshUser?.[0]) {
+        setUser(prev => prev ? { ...prev, balance: freshUser[0].balance } : prev)
+        userRef.current = { ...userRef.current!, balance: freshUser[0].balance }
+      }
+      // Toasts nach 6s ausblenden
+      newToasts.forEach(toast => {
+        setTimeout(() => {
+          setWinToasts(prev => prev.filter(t => t.id !== toast.id))
+        }, 6000)
+      })
+    }
+  }, [])
+
+  // Gewinn-Checker starten sobald User eingeloggt
+  useEffect(() => {
+    if (!user?.id) return
+    const id = setInterval(() => checkWins(user.id), 15000)
+    checkWins(user.id) // sofort beim Login prüfen
+    return () => clearInterval(id)
+  }, [user?.id, checkWins])
+
   const handleLogin = async () => {
     setAuthError('')
     if (!authEmail || !authPassword) { setAuthError('Bitte alle Felder ausfüllen.'); return }
@@ -175,6 +261,7 @@ export default function Home() {
     const userData = await dbGet('users', `id=eq.${userId}&select=*`)
     if (userData?.[0]) {
       setUser(userData[0])
+      userRef.current = userData[0]
       localStorage.setItem('mobius_session', JSON.stringify({ access_token: res.access_token, user_id: userId }))
       setShowAuth(false)
       resetAuthForm()
@@ -201,6 +288,7 @@ export default function Home() {
     const userData = await dbGet('users', `id=eq.${userId}&select=*`)
     if (userData?.[0]) {
       setUser(userData[0])
+      userRef.current = userData[0]
       localStorage.setItem('mobius_session', JSON.stringify({ access_token: token, user_id: userId }))
       setShowAuth(false)
       resetAuthForm()
@@ -212,8 +300,11 @@ export default function Home() {
 
   const handleLogout = () => {
     setUser(null)
+    userRef.current = null
     localStorage.removeItem('mobius_session')
     setView('markets')
+    setWinToasts([])
+    shownToastsRef.current = new Set()
   }
 
   const resetAuthForm = () => {
@@ -241,6 +332,45 @@ export default function Home() {
 
   return (
     <>
+      {/* ── Win Toasts ── */}
+      <div style={{ position: 'fixed', top: 80, right: 16, zIndex: 9999, display: 'flex', flexDirection: 'column', gap: 10, pointerEvents: 'none' }}>
+        {winToasts.map(toast => (
+          <div key={toast.id} style={{
+            pointerEvents: 'all',
+            background: '#fff',
+            border: '1px solid rgba(22,163,74,0.3)',
+            borderLeft: '4px solid #16a34a',
+            borderRadius: 12,
+            padding: '14px 16px',
+            minWidth: 260,
+            maxWidth: 320,
+            boxShadow: '0 4px 24px rgba(0,0,0,0.10)',
+            animation: 'slideInRight 0.3s ease',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                {toast.isKrypto && toast.coin && (
+                  <span style={{ width: 24, height: 24, borderRadius: 6, background: COIN_COLORS[toast.coin] ?? '#f97316', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, color: '#fff', flexShrink: 0 }}>
+                    {toast.coin.charAt(0)}
+                  </span>
+                )}
+                <span style={{ fontSize: 13, fontWeight: 700, color: '#16a34a' }}>🎉 Gewonnen!</span>
+              </div>
+              <button onClick={() => setWinToasts(prev => prev.filter(t => t.id !== toast.id))}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, color: '#9ca3af', padding: 0, lineHeight: 1 }}>×</button>
+            </div>
+            <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 8, lineHeight: 1.4 }}>
+              {toast.isKrypto
+                ? `${toast.coin} ${toast.direction === 'yes' ? 'Up ↑' : 'Down ↓'}`
+                : toast.question.length > 50 ? toast.question.slice(0, 50) + '…' : toast.question}
+            </div>
+            <div style={{ fontSize: 28, fontWeight: 800, color: '#16a34a', letterSpacing: '-0.5px', lineHeight: 1 }}>
+              +{toast.amount.toLocaleString('de')} ₫
+            </div>
+          </div>
+        ))}
+      </div>
+
       {/* ── Auth Modal ── */}
       {showAuth && (
         <div className="modal-backdrop" onClick={() => setShowAuth(false)}>
@@ -280,7 +410,6 @@ export default function Home() {
 
       {/* ── Nav ── */}
       <nav className="nav">
-        {/* Links: Logo + Suche */}
         <div className="nav-left">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
@@ -305,15 +434,9 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Rechts */}
         <div className="nav-right">
           {user ? (
             <>
-              <div className="nav-stat">
-                <div className="nav-stat-label">Portfolio</div>
-                <div className="nav-stat-value">{user.balance.toLocaleString('de')} ₫</div>
-              </div>
-              <div className="nav-divider" />
               <div className="nav-stat">
                 <div className="nav-stat-label">Guthaben</div>
                 <div className="nav-stat-value">{user.balance.toLocaleString('de')} ₫</div>
@@ -388,7 +511,7 @@ export default function Home() {
             {user && (
               <div className="stats-grid">
                 <div className="stat-card">
-                  <div className="stat-label">Portfolio</div>
+                  <div className="stat-label">Guthaben</div>
                   <div className="stat-value">{user.balance.toLocaleString('de')} ₫</div>
                   <div className="stat-delta delta-neu">Deine Dukaten</div>
                 </div>
@@ -429,6 +552,14 @@ export default function Home() {
           <PortfolioView userId={user.id} token={token} router={router} />
         )}
       </main>
+
+      {/* ── Toast Animation ── */}
+      <style>{`
+        @keyframes slideInRight {
+          from { transform: translateX(120%); opacity: 0; }
+          to   { transform: translateX(0);    opacity: 1; }
+        }
+      `}</style>
     </>
   )
 }
