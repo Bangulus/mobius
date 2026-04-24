@@ -129,19 +129,25 @@ function drawCryptoChart(
   const minP     = Math.min(Math.min(...allVals), midPrice - spread)
   const maxP     = Math.max(Math.max(...allVals), midPrice + spread)
   const duration = marketEndMs - marketStartMs
-  const xScale = (ms: number) => padL + ((ms - marketStartMs) / duration) * (W - padL - padR)
-  const yScale = (p: number)  => padT + ((maxP - p) / (maxP - minP)) * (H - padT - padB)
+  const xScale   = (ms: number) => padL + ((Math.min(ms, marketEndMs) - marketStartMs) / duration) * (W - padL - padR)
+  const yScale   = (p: number)  => padT + ((maxP - p) / (maxP - minP)) * (H - padT - padB)
+
   ctx.clearRect(0, 0, W, H)
   ctx.fillStyle = '#ffffff'
   ctx.fillRect(0, 0, W, H)
-  const nowX = Math.min(xScale(Date.now()), W - padR)
-  ctx.fillStyle = 'rgba(0,0,0,0.02)'
-  ctx.fillRect(nowX, padT, W - padR - nowX, H - padT - padB)
+
+  if (Date.now() < marketEndMs) {
+    const nowX = Math.min(xScale(Date.now()), W - padR)
+    ctx.fillStyle = 'rgba(0,0,0,0.02)'
+    ctx.fillRect(nowX, padT, W - padR - nowX, H - padT - padB)
+  }
+
   ctx.strokeStyle = '#e8eaef'; ctx.lineWidth = 1; ctx.setLineDash([])
   for (let i = 0; i <= 5; i++) {
     const y = yScale(minP + (maxP - minP) * (i / 5))
     ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W - padR, y); ctx.stroke()
   }
+
   const targetY = yScale(targetPrice)
   ctx.beginPath(); ctx.setLineDash([5, 4]); ctx.strokeStyle = '#f59e0b'; ctx.lineWidth = 1.5
   ctx.moveTo(padL, targetY); ctx.lineTo(W - padR, targetY); ctx.stroke(); ctx.setLineDash([])
@@ -150,6 +156,7 @@ function drawCryptoChart(
   ctx.fillText('Target', W - padR + 8, targetY - 1)
   ctx.fillStyle = '#b45309'; ctx.font = '9px Inter, sans-serif'
   ctx.fillText(`$${targetPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, W - padR + 8, targetY + 10)
+
   if (history.length > 1) {
     ctx.beginPath()
     history.forEach((p, i) => { i === 0 ? ctx.moveTo(xScale(p.t), yScale(p.price)) : ctx.lineTo(xScale(p.t), yScale(p.price)) })
@@ -165,6 +172,7 @@ function drawCryptoChart(
     ctx.beginPath(); ctx.arc(xScale(last.t), yScale(last.price), 4.5, 0, Math.PI * 2)
     ctx.fillStyle = '#f97316'; ctx.fill(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.stroke()
   }
+
   ctx.fillStyle = '#94a3b8'; ctx.font = '10px Inter, sans-serif'; ctx.textAlign = 'right'
   for (let i = 0; i <= 5; i++) {
     const val = minP + (maxP - minP) * (1 - i / 5)
@@ -182,6 +190,7 @@ const CAT_CLASS: Record<string, string> = {
   Politik: 'cat-politik', Sport: 'cat-sport', Krypto: 'cat-krypto',
   Entertainment: 'cat-entertainment', Wirtschaft: 'cat-wirtschaft',
 }
+const COIN_COLORS: Record<string, string> = { BTC: '#f59e0b', ETH: '#6366f1', SOL: '#9945ff', XRP: '#00aae4' }
 
 type Tab       = '7T' | '1M' | 'Gesamt'
 type TradeTab  = 'kaufen' | 'verkaufen'
@@ -192,11 +201,11 @@ export default function MarketPage() {
   const router   = useRouter()
   const marketId = params?.id as string
 
-  const [market, setMarket]       = useState<Market | null>(null)
-  const [trades, setTrades]       = useState<Trade[]>([])
-  const [position, setPosition]   = useState<Position | null>(null)
-  const [user, setUser]           = useState<User | null>(null)
-  const [loading, setLoading]     = useState(true)
+  const [market, setMarket]           = useState<Market | null>(null)
+  const [trades, setTrades]           = useState<Trade[]>([])
+  const [position, setPosition]       = useState<Position | null>(null)
+  const [user, setUser]               = useState<User | null>(null)
+  const [loading, setLoading]         = useState(true)
   const [liveMarkets, setLiveMarkets] = useState<Market[]>([])
 
   const [tradeTab, setTradeTab]     = useState<TradeTab>('kaufen')
@@ -208,16 +217,16 @@ export default function MarketPage() {
   const [betError, setBetError]     = useState('')
   const [betSuccess, setBetSuccess] = useState('')
 
-  const [activeTab, setActiveTab] = useState<Tab>('7T')
-  const chartRef                  = useRef<HTMLCanvasElement>(null)
-  const chartInstance             = useRef<unknown>(null)
-
+  const [activeTab, setActiveTab]       = useState<Tab>('7T')
+  const chartRef                        = useRef<HTMLCanvasElement>(null)
+  const chartInstance                   = useRef<unknown>(null)
   const [livePrice, setLivePrice]       = useState<number | null>(null)
   const [priceHistory, setPriceHistory] = useState<PricePoint[]>([])
   const [countdown, setCountdown]       = useState('')
   const cryptoCanvasRef                 = useRef<HTMLCanvasElement>(null)
   const priceHistoryRef                 = useRef<PricePoint[]>([])
   const lastRealPrice                   = useRef<number | null>(null)
+  const marketRef                       = useRef<Market | null>(null)
 
   useEffect(() => {
     const saved = localStorage.getItem('mobius_session')
@@ -230,7 +239,7 @@ export default function MarketPage() {
 
   const loadMarket = useCallback(async () => {
     const data = await dbGet('markets', `id=eq.${marketId}&select=*`)
-    if (data?.[0]) setMarket(data[0])
+    if (data?.[0]) { setMarket(data[0]); marketRef.current = data[0] }
     setLoading(false)
   }, [marketId])
 
@@ -249,9 +258,51 @@ export default function MarketPage() {
     setLiveMarkets(data ?? [])
   }, [])
 
-  useEffect(() => { loadMarket(); loadTrades(); loadLiveMarkets() }, [loadMarket, loadTrades, loadLiveMarkets])
-  useEffect(() => { if (user?.id) loadPosition(user.id) }, [user, loadPosition])
+  // Auto-Refresh: 10s normal, 5s letzte 30s, 2s nach Ablauf
+  useEffect(() => {
+    loadMarket(); loadTrades(); loadLiveMarkets()
 
+    let interval: ReturnType<typeof setInterval>
+
+    const startInterval = (ms: number) => {
+      clearInterval(interval)
+      interval = setInterval(() => {
+        loadMarket(); loadTrades(); loadLiveMarkets()
+      }, ms)
+    }
+
+    startInterval(10000)
+
+    const watchdog = setInterval(() => {
+      const m = marketRef.current
+      if (!m || m.resolved) { startInterval(10000); return }
+      const diff = parseUTC(m.closes_at).getTime() - Date.now()
+      if (diff <= 0) {
+        startInterval(2000)
+      } else if (diff <= 30000) {
+        startInterval(5000)
+      } else {
+        startInterval(10000)
+      }
+    }, 1000)
+
+    return () => { clearInterval(interval); clearInterval(watchdog) }
+  }, [loadMarket, loadTrades, loadLiveMarkets])
+
+  useEffect(() => {
+    if (user?.id) loadPosition(user.id)
+  }, [user, loadPosition])
+
+  // Balance nach Auflösung neu laden
+  useEffect(() => {
+    if (!market?.resolved || !user?.id) return
+    dbGet('users', `id=eq.${user.id}&select=balance`).then(d => {
+      if (d?.[0]) setUser(prev => prev ? { ...prev, balance: d[0].balance } : prev)
+    })
+    loadPosition(user.id)
+  }, [market?.resolved, user?.id, loadPosition])
+
+  // Krypto Live-Preis — nur wenn nicht aufgelöst
   useEffect(() => {
     if (!market?.is_auto || !market?.coin || market?.resolved) return
     const coin = market.coin
@@ -279,14 +330,16 @@ export default function MarketPage() {
     return () => { clearInterval(fetchInterval); clearInterval(interpInterval) }
   }, [market?.is_auto, market?.coin, market?.resolved])
 
+  // Canvas
   useEffect(() => {
     if (!market?.is_auto || !cryptoCanvasRef.current || !market?.start_price || !market?.closes_at) return
     const closesAt      = parseUTC(market.closes_at)
     const marketEndMs   = closesAt.getTime()
     const marketStartMs = marketEndMs - 3 * 60 * 1000
     drawCryptoChart(cryptoCanvasRef.current, priceHistory, market.start_price, marketStartMs, marketEndMs)
-  }, [priceHistory, market?.is_auto, market?.start_price, market?.closes_at])
+  }, [priceHistory, market?.is_auto, market?.start_price, market?.closes_at, market?.resolved])
 
+  // Countdown
   useEffect(() => {
     if (!market?.closes_at) return
     const closesAt = parseUTC(market.closes_at)
@@ -302,6 +355,7 @@ export default function MarketPage() {
     return () => clearInterval(id)
   }, [market?.closes_at])
 
+  // Normaler Chart
   const tradeHistory = (() => {
     if (!market || trades.length === 0) return []
     let qY = 0, qN = 0
@@ -326,18 +380,14 @@ export default function MarketPage() {
       const gridColor  = isDark ? '#2a2d3a' : '#e8eaef'
       const tickColor  = isDark ? '#94a3b8' : '#9ca3af'
       if (chartInstance.current) (chartInstance.current as { destroy: () => void }).destroy()
-      chartInstance.current = new (await import('chart.js')).Chart(chartRef.current!, {
+      chartInstance.current = new Chart(chartRef.current!, {
         type: 'line',
         data: {
           labels: dataPoints.map(p => {
             const d = new Date(p.t)
             return activeTab === 'Gesamt' ? d.toLocaleDateString('de', { month: 'short', day: 'numeric' }) : d.toLocaleDateString('de', { day: '2-digit', month: '2-digit' })
           }),
-          datasets: [{
-            data: dataPoints.map(p => p.prob),
-            borderColor: '#12b76a', backgroundColor: isDark ? 'rgba(18,183,106,0.08)' : 'rgba(18,183,106,0.10)',
-            fill: true, borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, tension: 0.4,
-          }],
+          datasets: [{ data: dataPoints.map(p => p.prob), borderColor: '#12b76a', backgroundColor: isDark ? 'rgba(18,183,106,0.08)' : 'rgba(18,183,106,0.10)', fill: true, borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, tension: 0.4 }],
         },
         options: {
           responsive: true, maintainAspectRatio: false, animation: { duration: 350 },
@@ -409,8 +459,8 @@ export default function MarketPage() {
 
   async function handleVerkaufen() {
     if (!user || !market || !position) return
-    const sharesYes = position.shares_yes ?? 0
-    const sharesNo  = position.shares_no  ?? 0
+    const sharesYes  = position.shares_yes ?? 0
+    const sharesNo   = position.shares_no  ?? 0
     const sellSide   = sharesYes >= sharesNo ? 'yes' : 'no'
     const sellShares = sellSide === 'yes' ? sharesYes : sharesNo
     if (sellShares <= 0) { setBetError('Keine Anteile.'); return }
@@ -469,15 +519,13 @@ export default function MarketPage() {
   const isKrypto     = !!market.is_auto
   const closesAt     = parseUTC(market.closes_at)
   const delta        = livePrice && market.start_price ? livePrice - market.start_price : null
-  const isUp         = delta !== null ? delta >= 0 : true
+  const endDelta     = market.end_price && market.start_price ? market.end_price - market.start_price : null
+  const isUp         = delta !== null ? delta >= 0 : (endDelta !== null ? endDelta >= 0 : true)
   const countdownRed = countdown === '00:00' || (countdown !== '' && parseInt(countdown.split(':')[0]) === 0 && parseInt(countdown.split(':')[1]) <= 30)
-
-  // Nächster Live-Markt desselben Coins
-  const nextLiveMarket = liveMarkets.find(m => m.coin === market.coin && m.id !== marketId)
-  // Andere Live-Märkte (andere Coins)
+  const nextLiveMarket   = liveMarkets.find(m => m.coin === market.coin && m.id !== marketId)
   const otherLiveMarkets = liveMarkets.filter(m => m.coin !== market.coin).slice(0, 4)
-
-  const COIN_COLORS: Record<string, string> = { BTC: '#f59e0b', ETH: '#6366f1', SOL: '#9945ff', XRP: '#00aae4' }
+  const userWon = market.resolved && hasPosition &&
+    ((market.resolution === 'yes' && sharesYes > 0) || (market.resolution === 'no' && sharesNo > 0))
 
   return (
     <>
@@ -501,34 +549,30 @@ export default function MarketPage() {
 
       <div style={{ maxWidth: 980, margin: '0 auto', padding: '24px 16px' }}>
 
-        {/* ── Krypto Header ── */}
+        {/* Krypto Header */}
         {isKrypto && (
           <div className="card" style={{ marginBottom: 20 }}>
             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 16 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{ width: 40, height: 40, borderRadius: 10, background: COIN_COLORS[market.coin ?? 'BTC'] ?? '#f97316', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, fontWeight: 800, color: '#fff', flexShrink: 0 }}>
+                <span style={{ width: 40, height: 40, borderRadius: 10, background: COIN_COLORS[market.coin ?? ''] ?? '#f97316', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, fontWeight: 800, color: '#fff', flexShrink: 0 }}>
                   {market.coin?.charAt(0) ?? '₿'}
                 </span>
                 <div>
-                  <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>{market.coin ?? 'BTC'} Up or Down – 3 Minuten</div>
-                  <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Schließt um {closesAt.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })} Uhr</div>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>{market.coin} Up or Down – 3 Minuten</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                    {market.resolved ? 'Markt beendet' : `Schließt um ${closesAt.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })} Uhr`}
+                  </div>
                 </div>
               </div>
-
-              {/* Countdown oder "Zum Live-Markt" Button */}
               <div style={{ textAlign: 'right', flexShrink: 0 }}>
                 {market.resolved ? (
-                  nextLiveMarket ? (
+                  nextLiveMarket && (
                     <button onClick={() => router.push(`/markets/${nextLiveMarket.id}`)}
-                      style={{
-                        display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px',
-                        background: 'var(--surface)', border: '1px solid var(--border)',
-                        borderRadius: 20, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--text)',
-                      }}>
+                      style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 20, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>
                       <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#22c55e', display: 'inline-block', boxShadow: '0 0 6px #22c55e' }} />
                       Zum Live-Markt →
                     </button>
-                  ) : null
+                  )
                 ) : (
                   <div>
                     <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>Verbleibend</div>
@@ -540,7 +584,6 @@ export default function MarketPage() {
               </div>
             </div>
 
-            {/* Preise */}
             <div style={{ display: 'flex', gap: 40, marginBottom: 16 }}>
               <div>
                 <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>Zielpreis</div>
@@ -551,7 +594,12 @@ export default function MarketPage() {
               <div>
                 <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2, display: 'flex', alignItems: 'center', gap: 6 }}>
                   {market.resolved ? 'Endpreis' : 'Aktueller Preis'}
-                  {delta !== null && (
+                  {market.resolved && endDelta !== null && (
+                    <span style={{ color: endDelta >= 0 ? '#16a34a' : '#dc2626', fontWeight: 700, fontSize: 12 }}>
+                      {endDelta >= 0 ? '▲' : '▼'} ${Math.abs(endDelta).toFixed(2)}
+                    </span>
+                  )}
+                  {!market.resolved && delta !== null && (
                     <span style={{ color: isUp ? '#16a34a' : '#dc2626', fontWeight: 700, fontSize: 12 }}>
                       {isUp ? '▲' : '▼'} ${Math.abs(delta).toFixed(2)}
                     </span>
@@ -565,7 +613,6 @@ export default function MarketPage() {
               </div>
             </div>
 
-            {/* Canvas */}
             <div style={{ position: 'relative', width: '100%', height: 240 }}>
               <canvas ref={cryptoCanvasRef} width={860} height={240} style={{ width: '100%', height: '100%', display: 'block' }} />
               {priceHistory.length < 2 && !market.resolved && (
@@ -577,37 +624,35 @@ export default function MarketPage() {
           </div>
         )}
 
-        {/* ── Normaler Header ── */}
+        {/* Normaler Header */}
         {!isKrypto && (
-          <div style={{ marginBottom: 20 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-              {market.category && <span className={`cat-badge ${catClass}`}>{market.category}</span>}
-              {market.resolved && (
-                <span style={{ fontSize: 12, fontWeight: 600, padding: '2px 10px', borderRadius: 20, background: market.resolution === 'yes' ? 'rgba(22,163,74,0.15)' : 'rgba(220,38,38,0.15)', color: market.resolution === 'yes' ? '#16a34a' : '#dc2626' }}>
-                  Aufgelöst: {market.resolution === 'yes' ? 'Ja' : 'Nein'}
-                </span>
-              )}
+          <>
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                {market.category && <span className={`cat-badge ${catClass}`}>{market.category}</span>}
+                {market.resolved && (
+                  <span style={{ fontSize: 12, fontWeight: 600, padding: '2px 10px', borderRadius: 20, background: market.resolution === 'yes' ? 'rgba(22,163,74,0.15)' : 'rgba(220,38,38,0.15)', color: market.resolution === 'yes' ? '#16a34a' : '#dc2626' }}>
+                    Aufgelöst: {market.resolution === 'yes' ? 'Ja' : 'Nein'}
+                  </span>
+                )}
+              </div>
+              <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text)', lineHeight: 1.35, marginBottom: 8 }}>{market.question}</h1>
+              {market.description && <p style={{ fontSize: 14, color: 'var(--text-muted)', lineHeight: 1.6 }}>{market.description}</p>}
             </div>
-            <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text)', lineHeight: 1.35, marginBottom: 8 }}>{market.question}</h1>
-            {market.description && <p style={{ fontSize: 14, color: 'var(--text-muted)', lineHeight: 1.6 }}>{market.description}</p>}
-          </div>
-        )}
-
-        {!isKrypto && (
-          <div className="card" style={{ marginBottom: 20 }}>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 10 }}>
-              <span style={{ fontSize: 36, fontWeight: 700, color: isLow ? 'var(--no)' : 'var(--yes)' }}>{prob}%</span>
-              <span style={{ fontSize: 14, color: 'var(--text-muted)' }}>Wahrscheinlichkeit Ja</span>
+            <div className="card" style={{ marginBottom: 20 }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 10 }}>
+                <span style={{ fontSize: 36, fontWeight: 700, color: isLow ? 'var(--no)' : 'var(--yes)' }}>{prob}%</span>
+                <span style={{ fontSize: 14, color: 'var(--text-muted)' }}>Wahrscheinlichkeit Ja</span>
+              </div>
+              <div className="prob-bar" style={{ height: 8, marginBottom: 0 }}>
+                <div className={`prob-bar-fill ${isLow ? 'low' : ''}`} style={{ width: `${prob}%` }} />
+              </div>
             </div>
-            <div className="prob-bar" style={{ height: 8, marginBottom: 0 }}>
-              <div className={`prob-bar-fill ${isLow ? 'low' : ''}`} style={{ width: `${prob}%` }} />
-            </div>
-          </div>
+          </>
         )}
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 20, alignItems: 'start' }}>
 
-          {/* Linke Spalte */}
           {!isKrypto && (
             <div className="card">
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
@@ -618,76 +663,55 @@ export default function MarketPage() {
                   ))}
                 </div>
               </div>
-              {tradeHistory.length === 0 ? (
-                <div style={{ height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-subtle)', fontSize: 13 }}>Chart erscheint nach der ersten Wette.</div>
-              ) : (
-                <div style={{ height: 200, position: 'relative' }}><canvas ref={chartRef} /></div>
-              )}
+              {tradeHistory.length === 0
+                ? <div style={{ height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-subtle)', fontSize: 13 }}>Chart erscheint nach der ersten Wette.</div>
+                : <div style={{ height: 200, position: 'relative' }}><canvas ref={chartRef} /></div>}
               <div style={{ marginTop: 12, fontSize: 12, color: 'var(--text-subtle)' }}>
                 Volumen: {Math.round(market.q_yes + market.q_no).toLocaleString('de')} ₫ · {trades.filter(t => t.shares > 0).length} Trades
               </div>
             </div>
           )}
 
-          {/* Krypto aufgelöst: Ergebnis-Banner + andere Märkte */}
           {isKrypto && market.resolved && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              {/* Ergebnis-Banner */}
               <div className="card" style={{ textAlign: 'center', padding: '32px 24px' }}>
-                <div style={{
-                  width: 64, height: 64, borderRadius: '50%',
-                  background: market.resolution === 'yes' ? '#dcfce7' : '#fee2e2',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  margin: '0 auto 16px', fontSize: 32,
-                }}>
+                <div style={{ width: 72, height: 72, borderRadius: '50%', background: market.resolution === 'yes' ? '#dcfce7' : '#fee2e2', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', fontSize: 36 }}>
                   {market.resolution === 'yes' ? '✓' : '✗'}
                 </div>
-                <div style={{
-                  fontSize: 28, fontWeight: 800, marginBottom: 8,
-                  color: market.resolution === 'yes' ? '#16a34a' : '#dc2626',
-                }}>
+                <div style={{ fontSize: 30, fontWeight: 800, marginBottom: 8, color: market.resolution === 'yes' ? '#16a34a' : '#dc2626' }}>
                   Ergebnis: {market.resolution === 'yes' ? 'Up ↑' : 'Down ↓'}
                 </div>
                 <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 20 }}>
-                  {market.coin} stieg von ${market.start_price?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} auf ${market.end_price?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  {market.coin}: ${market.start_price?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} → ${market.end_price?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </div>
                 {nextLiveMarket && (
                   <button onClick={() => router.push(`/markets/${nextLiveMarket.id}`)}
-                    style={{
-                      display: 'inline-flex', alignItems: 'center', gap: 8,
-                      padding: '10px 20px', background: '#16a34a', color: '#fff',
-                      border: 'none', borderRadius: 20, cursor: 'pointer',
-                      fontSize: 14, fontWeight: 700,
-                    }}>
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '12px 24px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: 20, cursor: 'pointer', fontSize: 14, fontWeight: 700 }}>
                     <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#fff', display: 'inline-block' }} />
                     Zum Live-Markt →
                   </button>
                 )}
               </div>
 
-              {/* Andere Live-Märkte */}
               {otherLiveMarkets.length > 0 && (
                 <div className="card">
                   <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 12 }}>Weitere Live-Märkte</div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                     {otherLiveMarkets.map(m => {
                       const mProb = calcProb(m.q_yes, m.q_no, m.b)
-                      const mClosesAt = parseUTC(m.closes_at)
-                      const mDiff = mClosesAt.getTime() - Date.now()
+                      const mDiff = parseUTC(m.closes_at).getTime() - Date.now()
                       const mMins = Math.max(0, Math.floor(mDiff / 60000))
                       const mSecs = Math.max(0, Math.floor((mDiff % 60000) / 1000))
                       return (
                         <div key={m.id} onClick={() => router.push(`/markets/${m.id}`)}
                           style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', background: 'var(--surface)', borderRadius: 10, cursor: 'pointer' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#22c55e', display: 'inline-block' }} />
+                            <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#22c55e' }} />
                             <span style={{ fontWeight: 700, fontSize: 13, color: COIN_COLORS[m.coin ?? ''] ?? '#888' }}>{m.coin}</span>
                             <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Up or Down</span>
                           </div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                            <span style={{ fontSize: 12, color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>
-                              {String(mMins).padStart(2,'0')}:{String(mSecs).padStart(2,'0')}
-                            </span>
+                            <span style={{ fontSize: 12, color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>{String(mMins).padStart(2,'0')}:{String(mSecs).padStart(2,'0')}</span>
                             <span style={{ fontSize: 13, fontWeight: 700, color: mProb >= 50 ? 'var(--yes)' : 'var(--no)' }}>{mProb}%</span>
                           </div>
                         </div>
@@ -699,7 +723,6 @@ export default function MarketPage() {
             </div>
           )}
 
-          {/* Krypto offen: Marktregeln */}
           {isKrypto && !market.resolved && (
             <div className="card">
               <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', marginBottom: 12 }}>Marktregeln</div>
@@ -707,7 +730,7 @@ export default function MarketPage() {
                 <div>Volumen: <strong style={{ color: 'var(--text)' }}>{Math.round(market.q_yes + market.q_no).toLocaleString('de')} ₫</strong></div>
                 <div>Trades: <strong style={{ color: 'var(--text)' }}>{trades.filter(t => t.shares > 0).length}</strong></div>
                 <div style={{ marginTop: 12, padding: '12px', background: 'var(--surface)', borderRadius: 8, fontSize: 12, lineHeight: 1.7 }}>
-                  Ist der {market.coin}-Preis bei Ablauf <strong style={{ color: 'var(--yes)' }}>höher</strong> als der Zielpreis → <strong style={{ color: 'var(--yes)' }}>Up gewinnt</strong>.<br />
+                  Ist der {market.coin}-Preis bei Ablauf <strong style={{ color: 'var(--yes)' }}>höher</strong> → <strong style={{ color: 'var(--yes)' }}>Up gewinnt</strong>.<br />
                   Ist er <strong style={{ color: 'var(--no)' }}>niedriger</strong> → <strong style={{ color: 'var(--no)' }}>Down gewinnt</strong>.
                 </div>
               </div>
@@ -718,9 +741,11 @@ export default function MarketPage() {
           <div className="card" style={{ position: 'sticky', top: 'calc(var(--nav-height) + 16px)', padding: 0, overflow: 'hidden' }}>
             {market.resolved ? (
               <div style={{ padding: '24px 16px' }}>
-                {/* Aufgelöst — zeige ob User gewonnen hat */}
                 <div style={{ textAlign: 'center', marginBottom: 16 }}>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 4 }}>Markt aufgelöst</div>
+                  <div style={{ fontSize: 28, marginBottom: 4 }}>{userWon ? '🎉' : hasPosition ? '😔' : '✓'}</div>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', marginBottom: 4 }}>
+                    {userWon ? 'Gewonnen!' : hasPosition ? 'Verloren' : 'Markt beendet'}
+                  </div>
                   <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
                     Ergebnis: <strong style={{ color: market.resolution === 'yes' ? 'var(--yes)' : 'var(--no)', fontSize: 15 }}>
                       {market.resolution === 'yes' ? (isKrypto ? '↑ Up' : 'Ja') : (isKrypto ? '↓ Down' : 'Nein')}
@@ -728,29 +753,24 @@ export default function MarketPage() {
                   </div>
                 </div>
                 {hasPosition && (
-                  <div style={{
-                    padding: '14px', borderRadius: 10, textAlign: 'center',
-                    background: (market.resolution === 'yes' && sharesYes > 0) || (market.resolution === 'no' && sharesNo > 0)
-                      ? 'rgba(22,163,74,0.08)' : 'rgba(220,38,38,0.08)',
-                    border: `1px solid ${(market.resolution === 'yes' && sharesYes > 0) || (market.resolution === 'no' && sharesNo > 0) ? 'rgba(22,163,74,0.2)' : 'rgba(220,38,38,0.2)'}`,
-                  }}>
-                    {(market.resolution === 'yes' && sharesYes > 0) || (market.resolution === 'no' && sharesNo > 0) ? (
+                  <div style={{ padding: '14px', borderRadius: 10, textAlign: 'center', marginBottom: 14, background: userWon ? 'rgba(22,163,74,0.08)' : 'rgba(220,38,38,0.08)', border: `1px solid ${userWon ? 'rgba(22,163,74,0.2)' : 'rgba(220,38,38,0.2)'}` }}>
+                    {userWon ? (
                       <>
-                        <div style={{ fontSize: 13, color: '#16a34a', marginBottom: 4 }}>🎉 Du hast gewonnen!</div>
-                        <div style={{ fontSize: 24, fontWeight: 800, color: '#16a34a' }}>+{Math.round(market.resolution === 'yes' ? sharesYes : sharesNo)} ₫</div>
-                        <div style={{ fontSize: 11, color: 'var(--text-subtle)', marginTop: 4 }}>Auszahlung erfolgt automatisch</div>
+                        <div style={{ fontSize: 12, color: '#16a34a', marginBottom: 4 }}>Auszahlung erfolgt automatisch</div>
+                        <div style={{ fontSize: 28, fontWeight: 800, color: '#16a34a' }}>
+                          +{Math.round(market.resolution === 'yes' ? sharesYes : sharesNo)} ₫
+                        </div>
                       </>
                     ) : (
-                      <>
-                        <div style={{ fontSize: 13, color: '#dc2626', marginBottom: 4 }}>Leider verloren</div>
-                        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Nächsten Markt versuchen →</div>
-                      </>
+                      <div style={{ fontSize: 13, color: '#dc2626' }}>
+                        Leider verloren — nächsten Markt versuchen!
+                      </div>
                     )}
                   </div>
                 )}
                 {nextLiveMarket && (
                   <button onClick={() => router.push(`/markets/${nextLiveMarket.id}`)}
-                    style={{ width: '100%', marginTop: 14, padding: '12px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: 10, cursor: 'pointer', fontSize: 14, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                    style={{ width: '100%', padding: '12px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: 10, cursor: 'pointer', fontSize: 14, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
                     <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#fff' }} />
                     Zum Live-Markt →
                   </button>
@@ -860,7 +880,6 @@ export default function MarketPage() {
           </div>
         </div>
 
-        {/* Letzte Trades */}
         {trades.filter(t => t.shares > 0).length > 0 && (
           <div className="card" style={{ marginTop: 20 }}>
             <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', marginBottom: 14 }}>Letzte Trades</div>
