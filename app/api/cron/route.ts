@@ -17,35 +17,46 @@ async function dbGet(table: string, params: string) {
 export async function POST() {
   const results: string[] = []
   const now = new Date()
+  const nowISO = now.toISOString()
 
-  // 1. Abgelaufene Märkte auflösen
-  const expiredMarkets = await dbGet(
+  // 1. Alle offenen Auto-Märkte laden (nicht nur abgelaufene)
+  const allAutoMarkets = await dbGet(
     'markets',
-    `is_auto=eq.true&resolved=eq.false&closes_at=lt.${now.toISOString()}&select=id,coin,start_price`
+    `is_auto=eq.true&resolved=eq.false&select=id,coin,start_price,closes_at,q_yes,q_no`
   )
 
-  for (const market of (expiredMarkets ?? [])) {
-    try {
-      const res = await fetch(`${APP_URL}/api/resolve-crypto-market`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ market_id: market.id }),
-      })
-      const data = await res.json()
-      results.push(`Aufgelöst: ${market.coin} → ${data.resolution} (${data.payouts} Auszahlungen)`)
-    } catch {
-      results.push(`Fehler beim Auflösen von ${market.id}`)
+  results.push(`Offene Auto-Märkte: ${allAutoMarkets?.length ?? 0}`)
+  results.push(`Aktuelle Zeit (UTC): ${nowISO}`)
+
+  // Jeden Markt prüfen ob abgelaufen
+  for (const market of (allAutoMarkets ?? [])) {
+    const closesAt = new Date(market.closes_at)
+    const isExpired = closesAt.getTime() < now.getTime()
+    results.push(`Markt ${market.coin}: closes_at=${market.closes_at}, abgelaufen=${isExpired}`)
+
+    if (isExpired) {
+      try {
+        const res = await fetch(`${APP_URL}/api/resolve-crypto-market`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ market_id: market.id }),
+        })
+        const data = await res.json()
+        results.push(`→ Aufgelöst: ${market.coin} → ${data.resolution} (${data.payouts} Auszahlungen)`)
+      } catch (e) {
+        results.push(`→ Fehler beim Auflösen: ${String(e)}`)
+      }
     }
   }
 
-  // 2. Neue Märkte erstellen falls keine offenen existieren
+  // 2. Neue Märkte erstellen falls keiner offen
   for (const coin of COINS) {
-    const openMarkets = await dbGet(
-      'markets',
-      `is_auto=eq.true&resolved=eq.false&coin=eq.${coin}&select=id`
+    const openForCoin = (allAutoMarkets ?? []).filter(
+      (m: { coin: string; closes_at: string }) =>
+        m.coin === coin && new Date(m.closes_at).getTime() > now.getTime()
     )
 
-    if (!openMarkets || openMarkets.length === 0) {
+    if (openForCoin.length === 0) {
       try {
         const res = await fetch(`${APP_URL}/api/create-crypto-market`, {
           method: 'POST',
@@ -54,13 +65,17 @@ export async function POST() {
         })
         const data = await res.json()
         results.push(`Erstellt: ${coin} Markt ($${data.startPrice})`)
-      } catch {
-        results.push(`Fehler beim Erstellen von ${coin}`)
+      } catch (e) {
+        results.push(`Fehler beim Erstellen von ${coin}: ${String(e)}`)
       }
     }
   }
 
-  return NextResponse.json({ success: true, timestamp: now.toISOString(), results })
+  return NextResponse.json({
+    success: true,
+    timestamp: nowISO,
+    results,
+  })
 }
 
 export async function GET() {
