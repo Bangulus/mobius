@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server'
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-const APP_URL      = process.env.NEXT_PUBLIC_APP_URL ?? 'https://mobius-lemon.vercel.app'
 
 async function getCoinPrice(coin: string): Promise<number | null> {
   try {
@@ -48,13 +47,9 @@ export async function POST(req: Request) {
   const resolution = endPrice > (market.start_price ?? 0) ? 'yes' : 'no'
 
   await dbPatch('markets', `id=eq.${marketId}`, {
-    resolved:   true,
-    resolution: resolution,
-    status:     'resolved',
-    end_price:  endPrice,
+    resolved: true, resolution, status: 'resolved', end_price: endPrice,
   })
 
-  // Positionen auszahlen
   const positions = await dbGet('positions', `market_id=eq.${marketId}&select=*`)
   const errors: string[] = []
   let payoutCount = 0
@@ -73,34 +68,14 @@ export async function POST(req: Request) {
     else { errors.push(`user ${pos.user_id}: ${patchRes.status}`) }
   }
 
-  // Positionen löschen
   await fetch(`${SUPABASE_URL}/rest/v1/positions?market_id=eq.${marketId}`, {
     method: 'DELETE',
     headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` },
   })
 
-  // Sofort neuen Markt erstellen — kein Warten auf den nächsten Cron
-  let newMarketPrice = null
-  try {
-    const createRes = await fetch(`${APP_URL}/api/create-crypto-market`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ coin: market.coin, minutes: 3 }),
-    })
-    const createData = await createRes.json()
-    newMarketPrice = createData.startPrice ?? null
-  } catch (e) {
-    errors.push(`Neuer Markt fehlgeschlagen: ${String(e)}`)
-  }
-
   return NextResponse.json({
-    success:          true,
-    market_id:        marketId,
-    resolution,
-    end_price:        endPrice,
-    start_price:      market.start_price,
-    payouts:          payoutCount,
-    new_market_price: newMarketPrice,
-    errors,
+    success: true, market_id: marketId, resolution,
+    end_price: endPrice, start_price: market.start_price,
+    payouts: payoutCount, coin: market.coin, errors,
   })
 }
