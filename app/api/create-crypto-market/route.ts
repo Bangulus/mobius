@@ -1,11 +1,7 @@
 import { NextResponse } from 'next/server'
 
-const SUPABASE_URL    = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const SERVICE_KEY     = process.env.SUPABASE_SERVICE_ROLE_KEY!
-
-const COINS: Record<string, string> = {
-  BTC: 'Bitcoin', ETH: 'Ethereum', SOL: 'Solana', XRP: 'XRP',
-}
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const SERVICE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY!
 
 async function getCoinPrice(coin: string): Promise<number | null> {
   try {
@@ -16,43 +12,73 @@ async function getCoinPrice(coin: string): Promise<number | null> {
 }
 
 export async function POST(req: Request) {
-  const body   = await req.json().catch(() => ({}))
-  const coin   = (body.coin ?? 'BTC').toUpperCase()
-  const minutes = body.minutes ?? 3
+  let coin: string | undefined
+  try {
+    const body = await req.json()
+    coin = body?.coin
+  } catch {}
 
-  if (!COINS[coin]) return NextResponse.json({ error: `Unbekannte Münze: ${coin}` }, { status: 400 })
+  // Wenn kein Coin übergeben → nichts tun
+  if (!coin) {
+    return NextResponse.json({ error: 'coin fehlt' }, { status: 400 })
+  }
 
-  const startPrice = await getCoinPrice(coin)
-  if (!startPrice) return NextResponse.json({ error: 'Preis nicht abrufbar' }, { status: 500 })
+  // ── Idempotenz-Check: existiert schon ein offener Markt für diesen Coin? ──
+  const checkRes = await fetch(
+    `${SUPABASE_URL}/rest/v1/markets?is_auto=eq.true&resolved=eq.false&coin=eq.${coin}&select=id`,
+    {
+      headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` },
+      cache: 'no-store',
+    }
+  )
+  const existing = await checkRes.json()
+  if (Array.isArray(existing) && existing.length > 0) {
+    return NextResponse.json({ message: 'Markt bereits offen', id: existing[0].id })
+  }
+
+  // ── Preis holen ──
+  const price = await getCoinPrice(coin)
+  if (!price) {
+    return NextResponse.json({ error: 'Preis nicht abrufbar' }, { status: 502 })
+  }
 
   const now      = new Date()
-  const closesAt = new Date(now.getTime() + minutes * 60 * 1000)
-  const priceStr = startPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-  const timeStr  = closesAt.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
+  const closesAt = new Date(now.getTime() + 3 * 60 * 1000)
 
   const res = await fetch(`${SUPABASE_URL}/rest/v1/markets`, {
     method: 'POST',
     headers: {
-      apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`,
-      'Content-Type': 'application/json', Prefer: 'return=representation',
+      apikey: SERVICE_KEY,
+      Authorization: `Bearer ${SERVICE_KEY}`,
+      'Content-Type': 'application/json',
+      Prefer: 'return=representation',
     },
     body: JSON.stringify({
-      question:    `Ist der ${COINS[coin]}-Preis um ${timeStr} Uhr höher als $${priceStr}?`,
-      short_label: `${coin} Up or Down · ${minutes} Min`,
-      description: `Startpreis: $${priceStr}. Auflösung per Coinbase ${coin}/USD.`,
-      category:    'Krypto',
+      question:    `Ist ${coin} in 3 Minuten höher als jetzt?`,
+      short_label: `${coin} Up or Down`,
+      description: `Markt schließt um ${closesAt.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })} Uhr`,
       status:      'open',
+      category:    'Krypto',
       b:           100,
       q_yes:       0,
       q_no:        0,
       closes_at:   closesAt.toISOString(),
-      start_price: startPrice,
+      resolved:    false,
       is_auto:     true,
-      coin:        coin,
+      coin,
+      start_price: price,
     }),
   })
 
-  if (!res.ok) return NextResponse.json({ error: await res.text() }, { status: 500 })
-  const market = await res.json()
-  return NextResponse.json({ success: true, market: market[0], startPrice })
+  if (!res.ok) {
+    const err = await res.text()
+    return NextResponse.json({ error: err }, { status: 500 })
+  }
+
+  const created = await res.json()
+  return NextResponse.json({ message: 'Erstellt', id: created?.[0]?.id, price })
+}
+
+export async function GET() {
+  return NextResponse.json({ error: 'GET nicht unterstützt' }, { status: 405 })
 }
