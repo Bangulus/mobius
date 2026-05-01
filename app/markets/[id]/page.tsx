@@ -253,6 +253,7 @@ export default function MarketPage() {
   const marketRef                       = useRef<Market | null>(null)
   const liveMarketPollRef               = useRef<ReturnType<typeof setInterval> | null>(null)
   const positionRef                     = useRef<Position | null>(null)
+  const marketCreationTriggeredRef      = useRef(false)
 
   // Toast-State
   const [resultToast, setResultToast]   = useState<ResultToast | null>(null)
@@ -293,7 +294,7 @@ export default function MarketPage() {
   // Toast feuern sobald Markt aufgelöst wird — einmalig
   useEffect(() => {
     if (!market?.resolved || toastShownRef.current) return
-    if (!market.is_auto) return // nur für Krypto-Märkte
+    if (!market.is_auto) return
     toastShownRef.current = true
 
     const pos       = positionRef.current
@@ -306,7 +307,6 @@ export default function MarketPage() {
     )
     const amount = won ? Math.round(market.resolution === 'yes' ? sharesYes : sharesNo) : 0
 
-    // nextLiveMarket aus liveMarkets holen
     const next = liveMarkets.find(m => m.coin === market.coin && m.id !== marketId)
 
     setResultToast({
@@ -317,7 +317,6 @@ export default function MarketPage() {
       nextMarketId: next?.id,
     })
 
-    // Balance neu laden
     if (user?.id) {
       dbGet('users', `id=eq.${user.id}&select=balance`).then(d => {
         if (d?.[0]) setUser(prev => prev ? { ...prev, balance: d[0].balance } : prev)
@@ -436,20 +435,44 @@ export default function MarketPage() {
     drawCryptoChart(cryptoCanvasRef.current, priceHistory, market.start_price, marketStartMs, marketEndMs)
   }, [priceHistory, market?.is_auto, market?.start_price, market?.closes_at, market?.resolved])
 
+  // ── Countdown + clientseitiger Markt-Trigger ──
   useEffect(() => {
-    if (!market?.closes_at) return
+    if (!market?.closes_at || !market?.coin) return
+    // Reset Debounce wenn neue closes_at geladen wird (= neuer Markt)
+    marketCreationTriggeredRef.current = false
+
     const closesAt = parseUTC(market.closes_at)
+    const coin     = market.coin
+
     const tick = () => {
       const diff = closesAt.getTime() - Date.now()
-      if (diff <= 0) { setCountdown('00:00'); return }
+
+      if (diff <= 0) {
+        setCountdown('00:00')
+
+        // Einmalig bei Countdown-Ende: neuen Markt sofort anfordern
+        if (!marketCreationTriggeredRef.current) {
+          marketCreationTriggeredRef.current = true
+          fetch('/api/create-crypto-market', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ coin }),
+          }).catch(() => {
+            // Fehler ignorieren — Cron übernimmt als Fallback
+          })
+        }
+        return
+      }
+
       const m = Math.floor(diff / 60000)
       const s = Math.floor((diff % 60000) / 1000)
       setCountdown(`${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`)
     }
+
     tick()
     const id = setInterval(tick, 1000)
     return () => clearInterval(id)
-  }, [market?.closes_at])
+  }, [market?.closes_at, market?.coin])
 
   const tradeHistory = (() => {
     if (!market || trades.length === 0) return []
