@@ -253,11 +253,11 @@ export default function MarketPage() {
   const marketRef                       = useRef<Market | null>(null)
   const liveMarketPollRef               = useRef<ReturnType<typeof setInterval> | null>(null)
   const positionRef                     = useRef<Position | null>(null)
-  const marketCreationTriggeredRef      = useRef(false)
+  const resolveTriggeredRef             = useRef(false)
+  const createTriggeredRef              = useRef(false)
 
-  // Toast-State
-  const [resultToast, setResultToast]   = useState<ResultToast | null>(null)
-  const toastShownRef                   = useRef(false)
+  const [resultToast, setResultToast] = useState<ResultToast | null>(null)
+  const toastShownRef                 = useRef(false)
 
   useEffect(() => {
     const saved = localStorage.getItem('mobius_session')
@@ -306,16 +306,9 @@ export default function MarketPage() {
       (market.resolution === 'no'  && sharesNo  > 0)
     )
     const amount = won ? Math.round(market.resolution === 'yes' ? sharesYes : sharesNo) : 0
+    const next   = liveMarkets.find(m => m.coin === market.coin && m.id !== marketId)
 
-    const next = liveMarkets.find(m => m.coin === market.coin && m.id !== marketId)
-
-    setResultToast({
-      won,
-      amount,
-      resolution: market.resolution ?? '',
-      coin: market.coin,
-      nextMarketId: next?.id,
-    })
+    setResultToast({ won, amount, resolution: market.resolution ?? '', coin: market.coin, nextMarketId: next?.id })
 
     if (user?.id) {
       dbGet('users', `id=eq.${user.id}&select=balance`).then(d => {
@@ -324,7 +317,7 @@ export default function MarketPage() {
     }
   }, [market?.resolved, market?.resolution, market?.is_auto, market?.coin, liveMarkets, marketId, user?.id])
 
-  // nextMarketId im Toast aktualisieren sobald liveMarkets nachlädt
+  // nextMarketId im Toast nachführen
   useEffect(() => {
     if (!resultToast || resultToast.nextMarketId) return
     const next = liveMarkets.find(m => m.coin === market?.coin && m.id !== marketId)
@@ -375,7 +368,7 @@ export default function MarketPage() {
 
   useEffect(() => {
     if (!market?.resolved) return
-    const coin = market.coin
+    const coin  = market.coin
     const found = liveMarkets.find(m => m.coin === coin && m.id !== marketId)
     if (found && liveMarketPollRef.current) {
       clearInterval(liveMarketPollRef.current)
@@ -435,32 +428,55 @@ export default function MarketPage() {
     drawCryptoChart(cryptoCanvasRef.current, priceHistory, market.start_price, marketStartMs, marketEndMs)
   }, [priceHistory, market?.is_auto, market?.start_price, market?.closes_at, market?.resolved])
 
-  // ── Countdown + clientseitiger Markt-Trigger ──
+  // ── Countdown + clientseitiger Resolve + Create ──
   useEffect(() => {
-    if (!market?.closes_at || !market?.coin) return
-    // Reset Debounce wenn neue closes_at geladen wird (= neuer Markt)
-    marketCreationTriggeredRef.current = false
+    if (!market?.closes_at || !market?.coin || !market?.id) return
+    resolveTriggeredRef.current = false
+    createTriggeredRef.current  = false
 
     const closesAt = parseUTC(market.closes_at)
     const coin     = market.coin
+    const mktId    = market.id
 
-    const tick = () => {
+    const tick = async () => {
       const diff = closesAt.getTime() - Date.now()
 
       if (diff <= 0) {
         setCountdown('00:00')
 
-        // Einmalig bei Countdown-Ende: neuen Markt sofort anfordern
-        if (!marketCreationTriggeredRef.current) {
-          marketCreationTriggeredRef.current = true
-          fetch('/api/create-crypto-market', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ coin }),
-          }).catch(() => {
-            // Fehler ignorieren — Cron übernimmt als Fallback
-          })
+        // Schritt 1: Auflösen — einmalig, sofort bei 00:00
+        if (!resolveTriggeredRef.current) {
+          resolveTriggeredRef.current = true
+          try {
+            await fetch('/api/resolve-crypto-market', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ market_id: mktId }),
+            })
+          } catch {}
+          // Marktdaten sofort neu laden damit Toast erscheint
+          loadMarket()
+          if (user?.id) {
+            dbGet('users', `id=eq.${user?.id}&select=balance`).then(d => {
+              if (d?.[0]) setUser(prev => prev ? { ...prev, balance: d[0].balance } : prev)
+            })
+          }
         }
+
+        // Schritt 2: Neuen Markt erstellen — einmalig, nach Resolve
+        if (!createTriggeredRef.current) {
+          createTriggeredRef.current = true
+          try {
+            await fetch('/api/create-crypto-market', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ coin }),
+            })
+          } catch {}
+          // Live-Märkte sofort neu laden damit "Zum Live-Markt" erscheint
+          loadLiveMarkets()
+        }
+
         return
       }
 
@@ -472,7 +488,7 @@ export default function MarketPage() {
     tick()
     const id = setInterval(tick, 1000)
     return () => clearInterval(id)
-  }, [market?.closes_at, market?.coin])
+  }, [market?.closes_at, market?.coin, market?.id, loadMarket, loadLiveMarkets, user?.id])
 
   const tradeHistory = (() => {
     if (!market || trades.length === 0) return []
