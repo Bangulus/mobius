@@ -64,21 +64,14 @@ export async function POST() {
   const now    = new Date()
   const nowISO = now.toISOString()
 
-  const allAutoMarkets = await dbGet(
+  // Abgelaufene Märkte auflösen (Fallback falls Client es nicht getan hat)
+  const expiredMarkets = await dbGet(
     'markets',
-    `is_auto=eq.true&resolved=eq.false&select=id,coin,start_price,closes_at`
+    `is_auto=eq.true&resolved=eq.false&closes_at=lt.${nowISO}&select=id,coin`
   )
-  results.push(`Offene Auto-Märkte: ${allAutoMarkets?.length ?? 0}`)
-  results.push(`Aktuelle Zeit (UTC): ${nowISO}`)
+  results.push(`Abgelaufene unaufgelöste Märkte: ${expiredMarkets?.length ?? 0}`)
 
-  // Abgelaufene auflösen + sofort neuen Markt erstellen
-  for (const market of (allAutoMarkets ?? [])) {
-    const closesAt  = new Date(market.closes_at)
-    const isExpired = closesAt.getTime() < now.getTime()
-    if (!isExpired) continue
-
-    results.push(`${market.coin} abgelaufen → auflösen`)
-
+  for (const market of (expiredMarkets ?? [])) {
     try {
       const res  = await fetch(`${APP_URL}/api/resolve-crypto-market`, {
         method: 'POST',
@@ -86,28 +79,23 @@ export async function POST() {
         body: JSON.stringify({ market_id: market.id }),
       })
       const data = await res.json()
-
       if (data.message === 'Bereits aufgelöst') {
         results.push(`→ ${market.coin} bereits aufgelöst`)
       } else {
-        results.push(`→ ${market.coin} → ${data.resolution} (${data.payouts} Auszahlungen)`)
-        // Sofort neuen Markt erstellen — direkt im Cron, kein externer Call
-        await createMarket(market.coin, results)
+        results.push(`→ ${market.coin} aufgelöst: ${data.resolution} (${data.payouts} Auszahlungen)`)
       }
     } catch (e) {
-      results.push(`→ Fehler: ${String(e)}`)
-      // Trotzdem neuen Markt versuchen
-      await createMarket(market.coin, results)
+      results.push(`→ Fehler bei ${market.coin}: ${String(e)}`)
     }
   }
 
   // Fallback: Coins ohne offenen Markt auffüllen
-  const stillOpen = await dbGet(
+  const openMarkets = await dbGet(
     'markets',
     `is_auto=eq.true&resolved=eq.false&select=id,coin`
   )
   for (const coin of COINS) {
-    const has = (stillOpen ?? []).some((m: { coin: string }) => m.coin === coin)
+    const has = (openMarkets ?? []).some((m: { coin: string }) => m.coin === coin)
     if (!has) {
       results.push(`${coin}: kein offener Markt → Fallback erstellen`)
       await createMarket(coin, results)
