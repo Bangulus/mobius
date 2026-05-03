@@ -1,18 +1,34 @@
-const supabaseUrl = 'https://zrujclkigcrlrvpgxrqx.supabase.co';
-const supabaseKey =
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpydWpjbGtpZ2NybHJ2cGd4cnF4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU4MjQ0NTEsImV4cCI6MjA5MTQwMDQ1MX0.JpuZxskptogAKtw5cUR3gJOAcnh3BFh1NSvfVEtN8IQ';
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+
+// Server-only helper — nur in API Routes verwenden
+function getAdminHeaders() {
+  return {
+    apikey: supabaseServiceKey,
+    Authorization: `Bearer ${supabaseServiceKey}`,
+    'Content-Type': 'application/json',
+  };
+}
+
+// Browser-safe helper — für lesende Zugriffe
+function getAnonHeaders() {
+  return {
+    apikey: supabaseKey,
+    Authorization: `Bearer ${supabaseKey}`,
+    'Content-Type': 'application/json',
+  };
+}
 
 export async function getMarkets() {
   const response = await fetch(
     `${supabaseUrl}/rest/v1/markets?status=eq.open&select=*`,
     {
-      headers: {
-        apikey: supabaseKey,
-        Authorization: `Bearer ${supabaseKey}`,
-      },
+      headers: getAnonHeaders(),
       cache: 'no-store',
     }
   );
+  if (!response.ok) throw new Error(`getMarkets failed: ${response.status}`);
   return response.json();
 }
 
@@ -26,16 +42,12 @@ export async function placeBet(
   newQYes: number,
   newQNo: number,
   userId: string,
-  token: string
+  _token: string
 ) {
-  const authToken = token || supabaseKey;
-
   const tradeResponse = await fetch(`${supabaseUrl}/rest/v1/trades`, {
     method: 'POST',
     headers: {
-      apikey: supabaseKey,
-      Authorization: `Bearer ${authToken}`,
-      'Content-Type': 'application/json',
+      ...getAdminHeaders(),
       Prefer: 'return=minimal',
     },
     body: JSON.stringify({
@@ -57,25 +69,15 @@ export async function placeBet(
   await fetch(`${supabaseUrl}/rest/v1/markets?id=eq.${marketId}`, {
     method: 'PATCH',
     headers: {
-      apikey: supabaseKey,
-      Authorization: `Bearer ${authToken}`,
-      'Content-Type': 'application/json',
+      ...getAdminHeaders(),
       Prefer: 'return=minimal',
     },
-    body: JSON.stringify({
-      q_yes: newQYes,
-      q_no: newQNo,
-    }),
+    body: JSON.stringify({ q_yes: newQYes, q_no: newQNo }),
   });
 
   const userResponse = await fetch(
     `${supabaseUrl}/rest/v1/users?id=eq.${userId}&select=balance`,
-    {
-      headers: {
-        apikey: supabaseKey,
-        Authorization: `Bearer ${supabaseKey}`,
-      },
-    }
+    { headers: getAdminHeaders() }
   );
   const userData = await userResponse.json();
   const currentBalance = userData[0]?.balance || 0;
@@ -84,9 +86,7 @@ export async function placeBet(
   await fetch(`${supabaseUrl}/rest/v1/users?id=eq.${userId}`, {
     method: 'PATCH',
     headers: {
-      apikey: supabaseKey,
-      Authorization: `Bearer ${supabaseKey}`,
-      'Content-Type': 'application/json',
+      ...getAdminHeaders(),
       Prefer: 'return=minimal',
     },
     body: JSON.stringify({ balance: newBalance }),
