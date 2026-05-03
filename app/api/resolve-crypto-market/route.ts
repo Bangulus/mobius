@@ -1,7 +1,22 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const SERVICE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+const SUPABASE_URL  = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const SERVICE_KEY   = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+const CRON_SECRET   = process.env.CRON_SECRET!
+
+function isAuthorized(req: NextRequest): boolean {
+  const authHeader  = req.headers.get('authorization')
+  const querySecret = new URL(req.url).searchParams.get('secret')
+  // Erlaubt: Cron-Secret ODER interner Aufruf vom eigenen Server
+  const host   = req.headers.get('host') ?? ''
+  const origin = req.headers.get('origin') ?? ''
+  const isInternal = origin.includes('mobius-lemon.vercel.app') || origin.includes('localhost') || host.includes('vercel.app')
+  return (
+    authHeader === `Bearer ${CRON_SECRET}` ||
+    querySecret === CRON_SECRET ||
+    isInternal
+  )
+}
 
 async function getCoinPrice(coin: string): Promise<number | null> {
   try {
@@ -31,10 +46,22 @@ async function dbPatch(table: string, filter: string, body: object) {
   return res
 }
 
-export async function POST(req: Request) {
-  const body     = await req.json().catch(() => ({}))
+export async function POST(req: NextRequest) {
+  if (!isAuthorized(req)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  let body: Record<string, unknown>
+  try {
+    body = await req.json()
+  } catch {
+    return NextResponse.json({ error: 'Ungültige Anfrage.' }, { status: 400 })
+  }
+
   const marketId = body.market_id
-  if (!marketId) return NextResponse.json({ error: 'market_id fehlt' }, { status: 400 })
+  if (!marketId || typeof marketId !== 'string' || marketId.length > 100) {
+    return NextResponse.json({ error: 'market_id fehlt oder ungültig' }, { status: 400 })
+  }
 
   const markets = await dbGet('markets', `id=eq.${marketId}&select=*`)
   const market  = markets?.[0]
