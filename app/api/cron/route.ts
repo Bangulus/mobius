@@ -1,38 +1,50 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server';
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const SERVICE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY!
-const APP_URL      = process.env.NEXT_PUBLIC_APP_URL ?? 'https://mobius-lemon.vercel.app'
-const COINS        = ['BTC', 'ETH', 'SOL', 'XRP']
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const SERVICE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+const APP_URL      = process.env.NEXT_PUBLIC_APP_URL ?? 'https://mobius-lemon.vercel.app';
+const CRON_SECRET  = process.env.CRON_SECRET!;
+const COINS        = ['BTC', 'ETH', 'SOL', 'XRP'];
+
+function isAuthorized(req: NextRequest): boolean {
+  const authHeader = req.headers.get('authorization');
+  const querySecret = new URL(req.url).searchParams.get('secret');
+  return (
+    authHeader === `Bearer ${CRON_SECRET}` ||
+    querySecret === CRON_SECRET
+  );
+}
 
 async function dbGet(table: string, params: string) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}`, {
     headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` },
     cache: 'no-store',
-  })
-  return res.json()
+  });
+  return res.json();
 }
 
 async function getCoinPrice(coin: string): Promise<number | null> {
   try {
-    const res  = await fetch(`https://api.coinbase.com/v2/prices/${coin}-USD/spot`, { cache: 'no-store' })
-    const data = await res.json()
-    return parseFloat(data.data.amount)
-  } catch { return null }
+    const res  = await fetch(`https://api.coinbase.com/v2/prices/${coin}-USD/spot`, { cache: 'no-store' });
+    const data = await res.json();
+    return parseFloat(data.data.amount);
+  } catch { return null; }
 }
 
 async function createMarket(coin: string, results: string[]) {
-  const price = await getCoinPrice(coin)
-  if (!price) { results.push(`${coin}: Preis nicht abrufbar`); return }
+  const price = await getCoinPrice(coin);
+  if (!price) { results.push(`${coin}: Preis nicht abrufbar`); return; }
 
-  const now      = new Date()
-  const closesAt = new Date(now.getTime() + 3 * 60 * 1000)
+  const now      = new Date();
+  const closesAt = new Date(now.getTime() + 3 * 60 * 1000);
 
   const res = await fetch(`${SUPABASE_URL}/rest/v1/markets`, {
     method: 'POST',
     headers: {
-      apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`,
-      'Content-Type': 'application/json', Prefer: 'return=minimal',
+      apikey: SERVICE_KEY,
+      Authorization: `Bearer ${SERVICE_KEY}`,
+      'Content-Type': 'application/json',
+      Prefer: 'return=minimal',
     },
     body: JSON.stringify({
       question:    `Ist ${coin} in 3 Minuten höher als jetzt?`,
@@ -49,27 +61,31 @@ async function createMarket(coin: string, results: string[]) {
       coin,
       start_price: price,
     }),
-  })
+  });
 
   if (res.ok) {
-    results.push(`Erstellt: ${coin} Markt ($${price})`)
+    results.push(`Erstellt: ${coin} Markt ($${price})`);
   } else {
-    const err = await res.text()
-    results.push(`Fehler beim Erstellen von ${coin}: ${err}`)
+    const err = await res.text();
+    results.push(`Fehler beim Erstellen von ${coin}: ${err}`);
   }
 }
 
-export async function POST() {
-  const results: string[] = []
-  const now    = new Date()
-  const nowISO = now.toISOString()
+export async function POST(req: NextRequest) {
+  if (!isAuthorized(req)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
 
-  // Abgelaufene Märkte auflösen (Fallback falls Client es nicht getan hat)
+  const results: string[] = [];
+  const now    = new Date();
+  const nowISO = now.toISOString();
+
   const expiredMarkets = await dbGet(
     'markets',
     `is_auto=eq.true&resolved=eq.false&closes_at=lt.${nowISO}&select=id,coin`
-  )
-  results.push(`Abgelaufene unaufgelöste Märkte: ${expiredMarkets?.length ?? 0}`)
+  );
+
+  results.push(`Abgelaufene unaufgelöste Märkte: ${expiredMarkets?.length ?? 0}`);
 
   for (const market of (expiredMarkets ?? [])) {
     try {
@@ -77,36 +93,36 @@ export async function POST() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ market_id: market.id }),
-      })
-      const data = await res.json()
+      });
+      const data = await res.json();
       if (data.message === 'Bereits aufgelöst') {
-        results.push(`→ ${market.coin} bereits aufgelöst`)
+        results.push(`→ ${market.coin} bereits aufgelöst`);
       } else {
-        results.push(`→ ${market.coin} aufgelöst: ${data.resolution} (${data.payouts} Auszahlungen)`)
+        results.push(`→ ${market.coin} aufgelöst: ${data.resolution} (${data.payouts} Auszahlungen)`);
       }
     } catch (e) {
-      results.push(`→ Fehler bei ${market.coin}: ${String(e)}`)
+      results.push(`→ Fehler bei ${market.coin}: ${String(e)}`);
     }
   }
 
-  // Fallback: Coins ohne offenen Markt auffüllen
   const openMarkets = await dbGet(
     'markets',
     `is_auto=eq.true&resolved=eq.false&select=id,coin`
-  )
+  );
+
   for (const coin of COINS) {
-    const has = (openMarkets ?? []).some((m: { coin: string }) => m.coin === coin)
+    const has = (openMarkets ?? []).some((m: { coin: string }) => m.coin === coin);
     if (!has) {
-      results.push(`${coin}: kein offener Markt → Fallback erstellen`)
-      await createMarket(coin, results)
+      results.push(`${coin}: kein offener Markt → Fallback erstellen`);
+      await createMarket(coin, results);
     } else {
-      results.push(`${coin}: offen ✓`)
+      results.push(`${coin}: offen ✓`);
     }
   }
 
-  return NextResponse.json({ success: true, timestamp: nowISO, results })
+  return NextResponse.json({ success: true, timestamp: nowISO, results });
 }
 
-export async function GET() {
-  return POST()
+export async function GET(req: NextRequest) {
+  return POST(req);
 }
