@@ -3,8 +3,8 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 
-const SUPABASE_URL = 'https://zrujclkigcrlrvpgxrqx.supabase.co'
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpydWpjbGtpZ2NybHJ2cGd4cnF4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU4MjQ0NTEsImV4cCI6MjA5MTQwMDQ1MX0.JpuZxskptogAKtw5cUR3gJOAcnh3BFh1NSvfVEtN8IQ'
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
 async function dbGet(table: string, params: string) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}`, {
@@ -291,7 +291,6 @@ export default function MarketPage() {
     setLiveMarkets(data ?? [])
   }, [])
 
-  // Toast feuern sobald Markt aufgelöst wird — einmalig
   useEffect(() => {
     if (!market?.resolved || toastShownRef.current) return
     if (!market.is_auto) return
@@ -317,7 +316,6 @@ export default function MarketPage() {
     }
   }, [market?.resolved, market?.resolution, market?.is_auto, market?.coin, liveMarkets, marketId, user?.id])
 
-  // nextMarketId im Toast nachführen
   useEffect(() => {
     if (!resultToast || resultToast.nextMarketId) return
     const next = liveMarkets.find(m => m.coin === market?.coin && m.id !== marketId)
@@ -428,7 +426,6 @@ export default function MarketPage() {
     drawCryptoChart(cryptoCanvasRef.current, priceHistory, market.start_price, marketStartMs, marketEndMs)
   }, [priceHistory, market?.is_auto, market?.start_price, market?.closes_at, market?.resolved])
 
-  // ── Countdown + clientseitiger Resolve + Create ──
   useEffect(() => {
     if (!market?.closes_at || !market?.coin || !market?.id) return
     resolveTriggeredRef.current = false
@@ -444,7 +441,6 @@ export default function MarketPage() {
       if (diff <= 0) {
         setCountdown('00:00')
 
-        // Schritt 1: Auflösen — einmalig, sofort bei 00:00
         if (!resolveTriggeredRef.current) {
           resolveTriggeredRef.current = true
           try {
@@ -454,7 +450,6 @@ export default function MarketPage() {
               body: JSON.stringify({ market_id: mktId }),
             })
           } catch {}
-          // Marktdaten sofort neu laden damit Toast erscheint
           loadMarket()
           if (user?.id) {
             dbGet('users', `id=eq.${user?.id}&select=balance`).then(d => {
@@ -463,7 +458,6 @@ export default function MarketPage() {
           }
         }
 
-        // Schritt 2: Neuen Markt erstellen — einmalig, nach Resolve
         if (!createTriggeredRef.current) {
           createTriggeredRef.current = true
           try {
@@ -473,7 +467,6 @@ export default function MarketPage() {
               body: JSON.stringify({ coin }),
             })
           } catch {}
-          // Live-Märkte sofort neu laden damit "Zum Live-Markt" erscheint
           loadLiveMarkets()
         }
 
@@ -539,7 +532,7 @@ export default function MarketPage() {
 
   async function handleKaufen() {
     if (!user || !market) return
-    if (spend <= 0) { setBetError('Ungültiger Betrag.'); return }
+    if (spend <= 0 || spend > 1000000) { setBetError('Ungültiger Betrag.'); return }
     if (user.balance < spend) { setBetError('Nicht genug Guthaben.'); return }
     setBetLoading(true); setBetError('')
     if (orderType === 'limit') {
@@ -642,7 +635,6 @@ export default function MarketPage() {
 
   return (
     <>
-      {/* ── Ergebnis-Toast ── */}
       {resultToast && (
         <div style={{
           position: 'fixed', top: 80, right: 16, zIndex: 9999,
@@ -667,19 +659,16 @@ export default function MarketPage() {
             <button onClick={() => setResultToast(null)}
               style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: '#9ca3af', padding: 0, lineHeight: 1 }}>×</button>
           </div>
-
           <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 10 }}>
             {resultToast.coin} · Ergebnis: <strong style={{ color: resultToast.resolution === 'yes' ? '#16a34a' : '#dc2626' }}>
               {resultToast.resolution === 'yes' ? 'Up ↑' : 'Down ↓'}
             </strong>
           </div>
-
           {resultToast.won && resultToast.amount > 0 && (
             <div style={{ fontSize: 30, fontWeight: 800, color: '#16a34a', letterSpacing: '-0.5px', marginBottom: 12, lineHeight: 1 }}>
               +{resultToast.amount.toLocaleString('de')} ₫
             </div>
           )}
-
           {resultToast.nextMarketId ? (
             <button onClick={() => { setResultToast(null); router.push(`/markets/${resultToast.nextMarketId}`) }}
               style={{ width: '100%', padding: '10px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: 10, cursor: 'pointer', fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
@@ -712,7 +701,6 @@ export default function MarketPage() {
 
       <div style={{ maxWidth: 980, margin: '0 auto', padding: '24px 16px' }}>
 
-        {/* Ergebnis-Banner */}
         {isKrypto && showEndedBanner && (
           <div style={{
             marginBottom: 20, padding: '16px 20px', borderRadius: 14,
@@ -752,7 +740,6 @@ export default function MarketPage() {
           </div>
         )}
 
-        {/* Krypto Header */}
         {isKrypto && (
           <div className="card" style={{ marginBottom: 20 }}>
             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 16 }}>
@@ -819,7 +806,6 @@ export default function MarketPage() {
           </div>
         )}
 
-        {/* Normaler Header */}
         {!isKrypto && (
           <>
             <div style={{ marginBottom: 20 }}>
@@ -931,7 +917,6 @@ export default function MarketPage() {
             </div>
           )}
 
-          {/* Trading Panel */}
           <div className="card" style={{ position: 'sticky', top: 'calc(var(--nav-height) + 16px)', padding: 0, overflow: 'hidden' }}>
             {market.resolved ? (
               <div style={{ padding: '24px 16px' }}>
@@ -1014,7 +999,7 @@ export default function MarketPage() {
                       )}
                       <div style={{ marginBottom: 12 }}>
                         <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>Betrag (₫)</div>
-                        <input type="number" min={1} max={user.balance} value={spend} onChange={e => setSpend(Math.max(1, parseInt(e.target.value) || 1))} style={{ width: '100%', fontSize: 22, fontWeight: 700 }} />
+                        <input type="number" min={1} max={Math.min(user.balance, 1000000)} value={spend} onChange={e => setSpend(Math.max(1, Math.min(user.balance, parseInt(e.target.value) || 1)))} style={{ width: '100%', fontSize: 22, fontWeight: 700 }} />
                         <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
                           {[50, 100, 200, 500].map(v => (
                             <button key={v} onClick={() => setSpend(v)} style={{ flex: 1, fontSize: 11, padding: '4px 0', borderRadius: 6, border: '1px solid var(--border)', background: spend === v ? 'var(--accent)' : 'var(--surface)', color: spend === v ? '#fff' : 'var(--text-muted)', cursor: 'pointer' }}>+{v}</button>
