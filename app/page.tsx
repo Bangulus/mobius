@@ -5,8 +5,8 @@ import { useRouter } from 'next/navigation'
 import AdminPanel from './components/AdminPanel'
 import ProfileView from './components/ProfileView'
 
-const SUPABASE_URL = 'https://zrujclkigcrlrvpgxrqx.supabase.co'
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpydWpjbGtpZ2NybHJ2cGd4cnF4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU4MjQ0NTEsImV4cCI6MjA5MTQwMDQ1MX0.JpuZxskptogAKtw5cUR3gJOAcnh3BFh1NSvfVEtN8IQ'
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
 async function dbGet(table: string, params: string) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}`, {
@@ -180,9 +180,7 @@ export default function Home() {
     loadLeaderboard()
   }, [loadMarkets, loadLeaderboard])
 
-  // Gewinn-Checker: alle 15s prüfen ob neue Auszahlungen für den User vorliegen
   const checkWins = useCallback(async (userId: string) => {
-    // Letzte 10 Minuten: aufgelöste Märkte wo der User eine Position hatte
     const since = new Date(Date.now() - 10 * 60 * 1000).toISOString()
     const trades = await dbGet('trades', `user_id=eq.${userId}&type=in.(buy_yes,buy_no)&created_at=gte.${since}&select=market_id,type,shares`)
     if (!trades || trades.length === 0) return
@@ -199,21 +197,16 @@ export default function Home() {
     const newToasts: WinToast[] = []
 
     for (const market of resolvedMarkets) {
-      // Bereits angezeigt?
       if (shownToastsRef.current.has(market.id)) continue
-
-      // Hat der User auf die richtige Seite gesetzt?
       const marketTrades = trades.filter((t: { market_id: string; type: string; shares: number }) => t.market_id === market.id)
       const wonTrades = marketTrades.filter((t: { type: string }) =>
         (market.resolution === 'yes' && t.type === 'buy_yes') ||
         (market.resolution === 'no'  && t.type === 'buy_no')
       )
       if (wonTrades.length === 0) continue
-
       const totalShares = wonTrades.reduce((s: number, t: { shares: number }) => s + (t.shares ?? 0), 0)
       const amount = Math.round(totalShares)
       if (amount <= 0) continue
-
       shownToastsRef.current.add(market.id)
       newToasts.push({
         id: market.id,
@@ -227,13 +220,11 @@ export default function Home() {
 
     if (newToasts.length > 0) {
       setWinToasts(prev => [...prev, ...newToasts])
-      // Balance neu laden
       const freshUser = await dbGet('users', `id=eq.${userId}&select=balance`)
       if (freshUser?.[0]) {
         setUser(prev => prev ? { ...prev, balance: freshUser[0].balance } : prev)
         userRef.current = { ...userRef.current!, balance: freshUser[0].balance }
       }
-      // Toasts nach 6s ausblenden
       newToasts.forEach(toast => {
         setTimeout(() => {
           setWinToasts(prev => prev.filter(t => t.id !== toast.id))
@@ -242,19 +233,20 @@ export default function Home() {
     }
   }, [])
 
-  // Gewinn-Checker starten sobald User eingeloggt
   useEffect(() => {
     if (!user?.id) return
     const id = setInterval(() => checkWins(user.id), 15000)
-    checkWins(user.id) // sofort beim Login prüfen
+    checkWins(user.id)
     return () => clearInterval(id)
   }, [user?.id, checkWins])
 
   const handleLogin = async () => {
     setAuthError('')
     if (!authEmail || !authPassword) { setAuthError('Bitte alle Felder ausfüllen.'); return }
+    if (authEmail.length > 254) { setAuthError('E-Mail zu lang.'); return }
+    if (authPassword.length < 6 || authPassword.length > 128) { setAuthError('Passwort muss 6–128 Zeichen lang sein.'); return }
     setAuthLoading(true)
-    const res = await supabaseAuth('token?grant_type=password', { email: authEmail, password: authPassword })
+    const res = await supabaseAuth('token?grant_type=password', { email: authEmail.trim(), password: authPassword })
     setAuthLoading(false)
     if (res.error || !res.access_token) { setAuthError('E-Mail oder Passwort falsch.'); return }
     const userId = res.user?.id
@@ -273,18 +265,20 @@ export default function Home() {
   const handleRegister = async () => {
     setAuthError('')
     if (!authEmail || !authPassword || !authUsername) { setAuthError('Bitte alle Felder ausfüllen.'); return }
-    if (authUsername.length < 3) { setAuthError('Benutzername muss mindestens 3 Zeichen haben.'); return }
-    if (authPassword.length < 6) { setAuthError('Passwort muss mindestens 6 Zeichen haben.'); return }
+    if (authEmail.length > 254) { setAuthError('E-Mail zu lang.'); return }
+    if (authUsername.length < 3 || authUsername.length > 50) { setAuthError('Benutzername: 3–50 Zeichen.'); return }
+    if (authPassword.length < 6 || authPassword.length > 128) { setAuthError('Passwort muss 6–128 Zeichen lang sein.'); return }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(authEmail.trim())) { setAuthError('Ungültige E-Mail-Adresse.'); return }
     setAuthLoading(true)
-    const existing = await dbGet('users', `username=eq.${authUsername}&select=id`)
+    const existing = await dbGet('users', `username=eq.${encodeURIComponent(authUsername.trim())}&select=id`)
     if (existing?.length > 0) { setAuthLoading(false); setAuthError('Benutzername bereits vergeben.'); return }
-    const res = await supabaseAuth('signup', { email: authEmail, password: authPassword })
+    const res = await supabaseAuth('signup', { email: authEmail.trim(), password: authPassword })
     setAuthLoading(false)
     if (res.error) { setAuthError(res.error.message ?? 'Registrierung fehlgeschlagen.'); return }
     const userId = res.user?.id
     const token = res.access_token
     if (!userId) { setAuthError('Bitte bestätige deine E-Mail und melde dich dann an.'); return }
-    await dbPost('users', { id: userId, username: authUsername, balance: 1000 }, token ?? SUPABASE_KEY)
+    await dbPost('users', { id: userId, username: authUsername.trim().slice(0, 50), balance: 1000 }, token ?? SUPABASE_KEY)
     const userData = await dbGet('users', `id=eq.${userId}&select=*`)
     if (userData?.[0]) {
       setUser(userData[0])
@@ -327,8 +321,6 @@ export default function Home() {
       (m.short_label ?? '').toLowerCase().includes(searchQuery.toLowerCase())
     return matchCat && matchSearch
   })
-
-  const token = user?.id ? `?token=${user.id}` : ''
 
   return (
     <>
@@ -386,12 +378,17 @@ export default function Home() {
             </div>
             {authMode === 'register' && (
               <input type="text" placeholder="Benutzername" value={authUsername}
-                onChange={(e) => setAuthUsername(e.target.value)} style={{ width: '100%' }} />
+                onChange={(e) => setAuthUsername(e.target.value)}
+                maxLength={50}
+                style={{ width: '100%' }} />
             )}
             <input type="email" placeholder="E-Mail" value={authEmail}
-              onChange={(e) => setAuthEmail(e.target.value)} style={{ width: '100%' }} autoFocus />
+              onChange={(e) => setAuthEmail(e.target.value)}
+              maxLength={254}
+              style={{ width: '100%' }} autoFocus />
             <input type="password" placeholder="Passwort" value={authPassword}
               onChange={(e) => setAuthPassword(e.target.value)}
+              maxLength={128}
               onKeyDown={(e) => e.key === 'Enter' && (authMode === 'login' ? handleLogin() : handleRegister())}
               style={{ width: '100%' }} />
             {authError && <div className="alert alert-error">{authError}</div>}
@@ -539,7 +536,7 @@ export default function Home() {
             ) : (
               <MarketsGrid
                 markets={filteredMarkets}
-                onOpen={(id) => router.push(`/markets/${id}${token}`)}
+                onOpen={(id) => router.push(`/markets/${id}`)}
               />
             )}
             <div className="section-head" style={{ marginTop: 32 }}>
@@ -549,11 +546,10 @@ export default function Home() {
           </>
         )}
         {view === 'portfolio' && user && (
-          <PortfolioView userId={user.id} token={token} router={router} />
+          <PortfolioView userId={user.id} router={router} />
         )}
       </main>
 
-      {/* ── Toast Animation ── */}
       <style>{`
         @keyframes slideInRight {
           from { transform: translateX(120%); opacity: 0; }
@@ -662,9 +658,8 @@ function Leaderboard({ entries, currentUserId }: { entries: LeaderboardEntry[]; 
   )
 }
 
-function PortfolioView({ userId, token, router }: {
+function PortfolioView({ userId, router }: {
   userId: string
-  token: string
   router: ReturnType<typeof useRouter>
 }) {
   interface Position {
@@ -716,7 +711,7 @@ function PortfolioView({ userId, token, router }: {
           const isYes = p.direction === 'yes'
           return (
             <div key={i} className="card" style={{ cursor: 'pointer' }}
-              onClick={() => router.push(`/markets/${p.market_id}${token}`)}>
+              onClick={() => router.push(`/markets/${p.market_id}`)}>
               <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 8, color: 'var(--text)' }}>{p.question}</div>
               <div style={{ display: 'flex', gap: 16, fontSize: 13, flexWrap: 'wrap' }}>
                 <span style={{ color: 'var(--text-muted)' }}>
