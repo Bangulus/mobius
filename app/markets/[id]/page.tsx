@@ -14,20 +14,6 @@ async function dbGet(table: string, params: string) {
   return res.json()
 }
 
-async function dbWrite(method: 'POST' | 'PATCH' | 'DELETE', table: string, query: string, body?: object) {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}${query ? '?' + query : ''}`, {
-    method,
-    headers: {
-      apikey: SUPABASE_KEY,
-      Authorization: `Bearer ${SUPABASE_KEY}`,
-      'Content-Type': 'application/json',
-      Prefer: 'return=minimal',
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  })
-  return res
-}
-
 interface Market {
   id: string
   question: string
@@ -258,6 +244,15 @@ export default function MarketPage() {
 
   const [resultToast, setResultToast] = useState<ResultToast | null>(null)
   const toastShownRef                 = useRef(false)
+
+  // Token aus localStorage holen
+  function getToken(): string | null {
+    try {
+      const saved = localStorage.getItem('mobius_session')
+      if (!saved) return null
+      return JSON.parse(saved).access_token ?? null
+    } catch { return null }
+  }
 
   useEffect(() => {
     const saved = localStorage.getItem('mobius_session')
@@ -530,74 +525,68 @@ export default function MarketPage() {
     return () => { if (chartInstance.current) (chartInstance.current as { destroy: () => void }).destroy() }
   }, [tradeHistory, activeTab, market?.is_auto])
 
+  // ── KAUFEN via /api/place-bet ──
   async function handleKaufen() {
     if (!user || !market) return
     if (spend <= 0 || spend > 1000000) { setBetError('Ungültiger Betrag.'); return }
     if (user.balance < spend) { setBetError('Nicht genug Guthaben.'); return }
     setBetLoading(true); setBetError('')
+
     if (orderType === 'limit') {
       setBetSuccess(`Limit-Order bei ${limitPrice}¢ platziert.`)
       setBetLoading(false); setTimeout(() => setBetSuccess(''), 4000); return
     }
-    const probBefore = calcProb(market.q_yes, market.q_no, market.b) / 100
-    const shares     = lmsrSharesForSpend(market.q_yes, market.q_no, market.b, direction, spend)
-    const newQYes    = direction === 'yes' ? market.q_yes + shares : market.q_yes
-    const newQNo     = direction === 'no'  ? market.q_no  + shares : market.q_no
-    const probAfter  = calcProb(newQYes, newQNo, market.b) / 100
-    const tradeRes = await dbWrite('POST', 'trades', '', {
-      market_id: marketId, user_id: user.id,
-      type: direction === 'yes' ? 'buy_yes' : 'buy_no',
-      shares, cost: spend, price_before: probBefore, price_after: probAfter,
+
+    const token = getToken()
+    if (!token) { setBetError('Nicht eingeloggt.'); setBetLoading(false); return }
+
+    const res = await fetch('/api/place-bet', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({ marketId, action: 'buy', direction, spend }),
     })
-    if (!tradeRes.ok) { setBetError('Fehler beim Platzieren.'); setBetLoading(false); return }
-    await dbWrite('PATCH', 'markets', `id=eq.${marketId}`, { q_yes: newQYes, q_no: newQNo })
-    await dbWrite('PATCH', 'users', `id=eq.${user.id}`, { balance: Math.round(user.balance - spend) })
-    const existingPos = await dbGet('positions', `user_id=eq.${user.id}&market_id=eq.${marketId}&select=*`)
-    if (existingPos?.[0]) {
-      const pos = existingPos[0]
-      await dbWrite('PATCH', 'positions', `user_id=eq.${user.id}&market_id=eq.${marketId}`, {
-        shares_yes: direction === 'yes' ? (pos.shares_yes ?? 0) + shares : (pos.shares_yes ?? 0),
-        shares_no:  direction === 'no'  ? (pos.shares_no  ?? 0) + shares : (pos.shares_no  ?? 0),
-        updated_at: new Date().toISOString(),
-      })
-    } else {
-      await dbWrite('POST', 'positions', '', {
-        user_id: user.id, market_id: marketId,
-        shares_yes: direction === 'yes' ? shares : 0,
-        shares_no:  direction === 'no'  ? shares : 0,
-        updated_at: new Date().toISOString(),
-      })
+    const data = await res.json()
+
+    if (!res.ok) {
+      setBetError(data.error ?? 'Fehler beim Platzieren.')
+      setBetLoading(false); return
     }
-    setUser({ ...user, balance: Math.round(user.balance - spend) })
+
+    setUser(prev => prev ? { ...prev, balance: data.newBalance } : prev)
     setBetSuccess('Wette platziert ✓')
     setBetLoading(false)
     loadMarket(); loadTrades(); loadPosition(user.id)
     setTimeout(() => setBetSuccess(''), 2500)
   }
 
+  // ── VERKAUFEN via /api/place-bet ──
   async function handleVerkaufen() {
     if (!user || !market || !position) return
-    const sharesYes  = position.shares_yes ?? 0
-    const sharesNo   = position.shares_no  ?? 0
-    const sellSide   = sharesYes >= sharesNo ? 'yes' : 'no'
-    const sellShares = sellSide === 'yes' ? sharesYes : sharesNo
-    if (sellShares <= 0) { setBetError('Keine Anteile.'); return }
     setBetLoading(true); setBetError('')
-    const probBefore = calcProb(market.q_yes, market.q_no, market.b) / 100
-    const returnAmt  = lmsrSellReturn(market.q_yes, market.q_no, market.b, sellSide, sellShares)
-    const newQYes    = sellSide === 'yes' ? Math.max(0, market.q_yes - sellShares) : market.q_yes
-    const newQNo     = sellSide === 'no'  ? Math.max(0, market.q_no  - sellShares) : market.q_no
-    const probAfter  = calcProb(newQYes, newQNo, market.b) / 100
-    await dbWrite('POST', 'trades', '', {
-      market_id: marketId, user_id: user.id,
-      type: sellSide === 'yes' ? 'sell_yes' : 'sell_no',
-      shares: sellShares, cost: -returnAmt, price_before: probBefore, price_after: probAfter,
+
+    const token = getToken()
+    if (!token) { setBetError('Nicht eingeloggt.'); setBetLoading(false); return }
+
+    const res = await fetch('/api/place-bet', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({ marketId, action: 'sell', direction, spend }),
     })
-    await dbWrite('PATCH', 'markets', `id=eq.${marketId}`, { q_yes: newQYes, q_no: newQNo })
-    await dbWrite('PATCH', 'users', `id=eq.${user.id}`, { balance: Math.round(user.balance + returnAmt) })
-    await dbWrite('DELETE', 'positions', `user_id=eq.${user.id}&market_id=eq.${marketId}`)
-    setUser({ ...user, balance: Math.round(user.balance + returnAmt) })
-    setBetSuccess(`${Math.round(returnAmt)} ₫ erhalten ✓`)
+    const data = await res.json()
+
+    if (!res.ok) {
+      setBetError(data.error ?? 'Fehler beim Verkaufen.')
+      setBetLoading(false); return
+    }
+
+    setUser(prev => prev ? { ...prev, balance: data.newBalance } : prev)
+    setBetSuccess(`${data.returned} ₫ erhalten ✓`)
     setBetLoading(false)
     loadMarket(); loadTrades(); loadPosition(user.id)
     setTimeout(() => setBetSuccess(''), 2500)
