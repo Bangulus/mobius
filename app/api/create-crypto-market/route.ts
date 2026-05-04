@@ -3,15 +3,17 @@ import { NextRequest, NextResponse } from 'next/server'
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY!
 const CRON_SECRET  = process.env.CRON_SECRET!
-
-const VALID_COINS = ['BTC', 'ETH', 'SOL', 'XRP']
+const VALID_COINS  = ['BTC', 'ETH', 'SOL', 'XRP']
 
 function isAuthorized(req: NextRequest): boolean {
   const authHeader  = req.headers.get('authorization')
   const querySecret = new URL(req.url).searchParams.get('secret')
   const origin      = req.headers.get('origin') ?? ''
   const host        = req.headers.get('host') ?? ''
-  const isInternal  = origin.includes('mobius-lemon.vercel.app') || origin.includes('localhost') || host.includes('vercel.app')
+  const isInternal  =
+    origin.includes('mobius-lemon.vercel.app') ||
+    origin.includes('localhost') ||
+    host.includes('vercel.app')
   return (
     authHeader === `Bearer ${CRON_SECRET}` ||
     querySecret === CRON_SECRET ||
@@ -39,13 +41,19 @@ export async function POST(req: NextRequest) {
   } catch {}
 
   if (!coin || typeof coin !== 'string' || !VALID_COINS.includes(coin.toUpperCase())) {
-    return NextResponse.json({ error: 'Ungültiger oder fehlender coin. Erlaubt: BTC, ETH, SOL, XRP' }, { status: 400 })
+    return NextResponse.json(
+      { error: 'Ungültiger oder fehlender coin. Erlaubt: BTC, ETH, SOL, XRP' },
+      { status: 400 }
+    )
   }
 
   coin = coin.toUpperCase()
 
+  // Harter Guard: kein neuer Markt wenn bereits einer existiert der in den
+  // nächsten 3 Minuten und 30 Sekunden schließt (Puffer gegen Race Conditions)
+  const guardWindow = new Date(Date.now() - 30 * 1000).toISOString() // 30s Puffer rückwärts
   const checkRes = await fetch(
-    `${SUPABASE_URL}/rest/v1/markets?is_auto=eq.true&resolved=eq.false&coin=eq.${coin}&select=id`,
+    `${SUPABASE_URL}/rest/v1/markets?is_auto=eq.true&resolved=eq.false&coin=eq.${coin}&closes_at=gt.${guardWindow}&select=id,closes_at`,
     {
       headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` },
       cache: 'no-store',
@@ -53,7 +61,11 @@ export async function POST(req: NextRequest) {
   )
   const existing = await checkRes.json()
   if (Array.isArray(existing) && existing.length > 0) {
-    return NextResponse.json({ message: 'Markt bereits offen', id: existing[0].id })
+    return NextResponse.json({
+      message: 'Markt bereits offen',
+      id: existing[0].id,
+      closes_at: existing[0].closes_at,
+    })
   }
 
   const price = await getCoinPrice(coin)
