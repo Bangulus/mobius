@@ -87,7 +87,15 @@ function calcProb(qYes: number, qNo: number, b: number): number {
   return Math.round((eYes / (eYes + eNo)) * 100)
 }
 
+function parseUTC(raw: string): Date {
+  if (!raw) return new Date(0)
+  if (raw.endsWith('Z') || raw.match(/[+-]\d{2}:\d{2}$/)) return new Date(raw)
+  if (raw.match(/[+-]\d{2}$/)) return new Date(raw + ':00')
+  return new Date(raw.replace(' ', 'T') + 'Z')
+}
+
 const CATEGORIES = ['Alle', 'Politik', 'Sport', 'Krypto', 'Entertainment', 'Wirtschaft']
+const COINS      = ['BTC', 'ETH', 'SOL', 'XRP']
 
 const CAT_CLASS: Record<string, string> = {
   Politik:       'cat-politik',
@@ -136,6 +144,8 @@ export default function Home() {
   const [winToasts, setWinToasts]       = useState<WinToast[]>([])
   const shownToastsRef                  = useRef<Set<string>>(new Set())
   const userRef                         = useRef<User | null>(null)
+  const marketsRef                      = useRef<Market[]>([])
+  const triggeredCoinsRef               = useRef<Record<string, number>>({}) // coin → closes_at ms
 
   const ADMIN_ID = 'b75edaf4-141d-41f1-9555-887a8ddbac58'
 
@@ -159,7 +169,9 @@ export default function Home() {
   const loadMarkets = useCallback(async () => {
     setLoading(true)
     const data = await dbGet('markets', 'status=eq.open&select=*&order=created_at.desc')
-    setMarkets(data ?? [])
+    const list = data ?? []
+    setMarkets(list)
+    marketsRef.current = list
     setLoading(false)
   }, [])
 
@@ -179,6 +191,55 @@ export default function Home() {
     loadMarkets()
     loadLeaderboard()
   }, [loadMarkets, loadLeaderboard])
+
+  // ── Market-Creation-Trigger ──────────────────────────────────────────────
+  // Läuft jede Sekunde. Für jeden Coin: wenn closes_at < 10s → POST create.
+  // triggeredCoinsRef verhindert Doppel-Trigger pro Markt (key = closes_at ms).
+  useEffect(() => {
+    const id = setInterval(() => {
+      const now = Date.now()
+      const autoMarkets = marketsRef.current.filter(m => m.is_auto && m.coin && !m.resolved)
+
+      for (const coin of COINS) {
+        const market = autoMarkets.find(m => m.coin === coin)
+        if (!market) {
+          // Kein offener Markt für diesen Coin → sofort erstellen
+          const lastTriggered = triggeredCoinsRef.current[coin + '_missing'] ?? 0
+          if (now - lastTriggered > 30000) { // max einmal alle 30s
+            triggeredCoinsRef.current[coin + '_missing'] = now
+            fetch('/api/create-crypto-market', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ coin }),
+            }).then(() => loadMarkets()).catch(() => {})
+          }
+          continue
+        }
+
+        const closesAtMs = parseUTC(market.closes_at).getTime()
+        const diff       = closesAtMs - now
+        const triggerKey = coin + '_' + closesAtMs
+
+        // Trigger wenn weniger als 10s verbleiben und noch nicht getriggert
+        if (diff < 10000 && diff > -30000 && !triggeredCoinsRef.current[triggerKey]) {
+          triggeredCoinsRef.current[triggerKey] = now
+          fetch('/api/create-crypto-market', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ coin }),
+          }).then(() => setTimeout(loadMarkets, 2000)).catch(() => {})
+        }
+      }
+    }, 1000)
+
+    return () => clearInterval(id)
+  }, [loadMarkets])
+
+  // ── Markt-Polling ────────────────────────────────────────────────────────
+  useEffect(() => {
+    const id = setInterval(loadMarkets, 10000)
+    return () => clearInterval(id)
+  }, [loadMarkets])
 
   const checkWins = useCallback(async (userId: string) => {
     const since = new Date(Date.now() - 10 * 60 * 1000).toISOString()
