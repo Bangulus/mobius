@@ -145,7 +145,7 @@ export default function Home() {
   const shownToastsRef                  = useRef<Set<string>>(new Set())
   const userRef                         = useRef<User | null>(null)
   const marketsRef                      = useRef<Market[]>([])
-  const triggeredCoinsRef               = useRef<Record<string, number>>({}) // coin → closes_at ms
+  const triggeredCoinsRef               = useRef<Record<string, number>>({})
 
   const ADMIN_ID = 'b75edaf4-141d-41f1-9555-887a8ddbac58'
 
@@ -166,8 +166,9 @@ export default function Home() {
     } catch {}
   }, [])
 
-  const loadMarkets = useCallback(async () => {
-    setLoading(true)
+  // FIX: showLoading=false bei allen Poll-Aufrufen → kein setLoading(true) → kein Flackern
+  const loadMarkets = useCallback(async (showLoading = false) => {
+    if (showLoading) setLoading(true)
     const data = await dbGet('markets', 'status=eq.open&select=*&order=created_at.desc')
     const list = data ?? []
     setMarkets(list)
@@ -188,13 +189,11 @@ export default function Home() {
   }, [])
 
   useEffect(() => {
-    loadMarkets()
+    loadMarkets(true)  // nur beim initialen Laden mit Loading-Indikator
     loadLeaderboard()
   }, [loadMarkets, loadLeaderboard])
 
   // ── Market-Creation-Trigger ──────────────────────────────────────────────
-  // Läuft jede Sekunde. Für jeden Coin: wenn closes_at < 10s → POST create.
-  // triggeredCoinsRef verhindert Doppel-Trigger pro Markt (key = closes_at ms).
   useEffect(() => {
     const id = setInterval(() => {
       const now = Date.now()
@@ -203,9 +202,8 @@ export default function Home() {
       for (const coin of COINS) {
         const market = autoMarkets.find(m => m.coin === coin)
         if (!market) {
-          // Kein offener Markt für diesen Coin → sofort erstellen
           const lastTriggered = triggeredCoinsRef.current[coin + '_missing'] ?? 0
-          if (now - lastTriggered > 30000) { // max einmal alle 30s
+          if (now - lastTriggered > 30000) {
             triggeredCoinsRef.current[coin + '_missing'] = now
             fetch('/api/create-crypto-market', {
               method: 'POST',
@@ -220,7 +218,6 @@ export default function Home() {
         const diff       = closesAtMs - now
         const triggerKey = coin + '_' + closesAtMs
 
-        // Trigger wenn weniger als 10s verbleiben und noch nicht getriggert
         if (diff < 10000 && diff > -30000 && !triggeredCoinsRef.current[triggerKey]) {
           triggeredCoinsRef.current[triggerKey] = now
           fetch('/api/create-crypto-market', {
@@ -237,7 +234,7 @@ export default function Home() {
 
   // ── Markt-Polling ────────────────────────────────────────────────────────
   useEffect(() => {
-    const id = setInterval(loadMarkets, 10000)
+    const id = setInterval(() => loadMarkets(), 10000)
     return () => clearInterval(id)
   }, [loadMarkets])
 
@@ -584,7 +581,7 @@ export default function Home() {
               <div className="section-title">
                 {searchQuery ? `Suche: „${searchQuery}"` : category === 'Alle' ? 'Alle Märkte' : category}
               </div>
-              <div className="section-link" onClick={loadMarkets}>Aktualisieren</div>
+              <div className="section-link" onClick={() => loadMarkets()}>Aktualisieren</div>
             </div>
             {loading ? (
               <div style={{ color: 'var(--text-muted)', fontSize: 14, padding: '24px 0' }}>
