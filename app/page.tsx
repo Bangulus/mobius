@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -245,12 +245,9 @@ export default function MarketPage() {
   const [resultToast, setResultToast] = useState<ResultToast | null>(null)
   const toastShownRef                 = useRef(false)
 
-  // FIX: stable interval refs
+  // FIX: stable interval refs — prevent watchdog from restarting interval every second
   const currentIntervalMs = useRef(10000)
   const intervalRef       = useRef<ReturnType<typeof setInterval> | null>(null)
-
-  // FIX: track last chart render key to avoid unnecessary rebuilds
-  const lastChartKeyRef = useRef('')
 
   function getToken(): string | null {
     try {
@@ -326,6 +323,7 @@ export default function MarketPage() {
   useEffect(() => {
     loadMarket(); loadTrades(); loadLiveMarkets()
 
+    // FIX: only restart interval when ms value actually changes
     const startInterval = (ms: number) => {
       if (ms === currentIntervalMs.current && intervalRef.current !== null) return
       currentIntervalMs.current = ms
@@ -486,28 +484,18 @@ export default function MarketPage() {
     return () => clearInterval(id)
   }, [market?.closes_at, market?.coin, market?.id, loadMarket, loadLiveMarkets, user?.id])
 
-  // FIX: useMemo → tradeHistory nur neu berechnen wenn trades/market sich inhaltlich ändern
-  const tradeHistory = useMemo(() => {
+  const tradeHistory = (() => {
     if (!market || trades.length === 0) return []
     let qY = 0, qN = 0
-    return trades
-      .filter(t => t.shares > 0 && (t.type === 'buy_yes' || t.type === 'buy_no'))
-      .map(t => {
-        if (t.type === 'buy_yes') qY += t.shares; else qN += t.shares
-        return { t: t.created_at, prob: calcProb(qY, qN, market.b) }
-      })
-  }, [trades, market?.b]) // eslint-disable-line react-hooks/exhaustive-deps
+    return trades.filter(t => t.shares > 0 && (t.type === 'buy_yes' || t.type === 'buy_no')).map(t => {
+      if (t.type === 'buy_yes') qY += t.shares; else qN += t.shares
+      return { t: t.created_at, prob: calcProb(qY, qN, market.b) }
+    })
+  })()
 
-  // FIX: Chart nur neu bauen wenn sich tradeHistory inhaltlich geändert hat
   useEffect(() => {
     if (market?.is_auto) return
     if (!chartRef.current || tradeHistory.length === 0) return
-
-    // Fingerprint: letzter Timestamp + Länge + activeTab
-    const key = `${tradeHistory.length}_${tradeHistory[tradeHistory.length - 1]?.t}_${activeTab}`
-    if (key === lastChartKeyRef.current) return
-    lastChartKeyRef.current = key
-
     const build = async () => {
       const { Chart, registerables } = await import('chart.js')
       Chart.register(...registerables)
@@ -525,29 +513,13 @@ export default function MarketPage() {
         data: {
           labels: dataPoints.map(p => {
             const d = new Date(p.t)
-            return activeTab === 'Gesamt'
-              ? d.toLocaleDateString('de', { month: 'short', day: 'numeric' })
-              : d.toLocaleDateString('de', { day: '2-digit', month: '2-digit' })
+            return activeTab === 'Gesamt' ? d.toLocaleDateString('de', { month: 'short', day: 'numeric' }) : d.toLocaleDateString('de', { day: '2-digit', month: '2-digit' })
           }),
-          datasets: [{
-            data: dataPoints.map(p => p.prob),
-            borderColor: '#12b76a',
-            backgroundColor: isDark ? 'rgba(18,183,106,0.08)' : 'rgba(18,183,106,0.10)',
-            fill: true,
-            borderWidth: 2,
-            pointRadius: 0,
-            pointHoverRadius: 4,
-            tension: 0.4,
-          }],
+          datasets: [{ data: dataPoints.map(p => p.prob), borderColor: '#12b76a', backgroundColor: isDark ? 'rgba(18,183,106,0.08)' : 'rgba(18,183,106,0.10)', fill: true, borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, tension: 0.4 }],
         },
         options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          animation: { duration: 350 },
-          plugins: {
-            legend: { display: false },
-            tooltip: { callbacks: { label: ctx => `${ctx.parsed.y}% Ja` } },
-          },
+          responsive: true, maintainAspectRatio: false, animation: { duration: 350 },
+          plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => `${ctx.parsed.y}% Ja` } } },
           scales: {
             x: { grid: { color: gridColor }, ticks: { color: tickColor, font: { size: 11 }, maxTicksLimit: 6 } },
             y: { min: 0, max: 100, grid: { color: gridColor }, ticks: { color: tickColor, font: { size: 11 }, callback: v => `${v}%` } },
@@ -579,7 +551,9 @@ export default function MarketPage() {
       body: JSON.stringify({ marketId, action: 'buy', direction, spend }),
     })
     const data = await res.json()
+
     if (!res.ok) { setBetError(data.error ?? 'Fehler beim Platzieren.'); setBetLoading(false); return }
+
     setUser(prev => prev ? { ...prev, balance: data.newBalance } : prev)
     setBetSuccess('Wette platziert ✓')
     setBetLoading(false)
@@ -600,7 +574,9 @@ export default function MarketPage() {
       body: JSON.stringify({ marketId, action: 'sell', direction, spend }),
     })
     const data = await res.json()
+
     if (!res.ok) { setBetError(data.error ?? 'Fehler beim Verkaufen.'); setBetLoading(false); return }
+
     setUser(prev => prev ? { ...prev, balance: data.newBalance } : prev)
     setBetSuccess(`${data.returned} ₫ erhalten ✓`)
     setBetLoading(false)
@@ -845,7 +821,7 @@ export default function MarketPage() {
                 <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>Preisverlauf</div>
                 <div style={{ display: 'flex', gap: 4 }}>
                   {(['7T', '1M', 'Gesamt'] as Tab[]).map(t => (
-                    <button key={t} onClick={() => { setActiveTab(t); lastChartKeyRef.current = '' }} style={{ fontSize: 12, padding: '3px 10px', borderRadius: 6, border: 'none', cursor: 'pointer', background: activeTab === t ? 'var(--accent)' : 'var(--surface)', color: activeTab === t ? '#fff' : 'var(--text-muted)', fontWeight: activeTab === t ? 600 : 400 }}>{t}</button>
+                    <button key={t} onClick={() => setActiveTab(t)} style={{ fontSize: 12, padding: '3px 10px', borderRadius: 6, border: 'none', cursor: 'pointer', background: activeTab === t ? 'var(--accent)' : 'var(--surface)', color: activeTab === t ? '#fff' : 'var(--text-muted)', fontWeight: activeTab === t ? 600 : 400 }}>{t}</button>
                   ))}
                 </div>
               </div>
