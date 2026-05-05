@@ -1,7 +1,9 @@
 'use client'
 
 import { useEffect, useState, useCallback, useRef } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useRouter } from 'next/navigation'
+import AdminPanel from './components/AdminPanel'
+import ProfileView from './components/ProfileView'
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -10,6 +12,29 @@ async function dbGet(table: string, params: string) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}`, {
     headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
     cache: 'no-store',
+  })
+  return res.json()
+}
+
+async function supabaseAuth(path: string, body: object) {
+  const res = await fetch(`${SUPABASE_URL}/auth/v1/${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', apikey: SUPABASE_KEY },
+    body: JSON.stringify(body),
+  })
+  return res.json()
+}
+
+async function dbPost(table: string, body: object, token: string) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${token}`,
+      Prefer: 'return=representation',
+    },
+    body: JSON.stringify(body),
   })
   return res.json()
 }
@@ -23,34 +48,14 @@ interface Market {
   q_yes: number
   q_no: number
   closes_at: string
+  group_title?: string
+  short_label?: string
   category?: string
   resolved: boolean
   resolution?: string
+  display_group?: string
   is_auto?: boolean
   coin?: string
-  start_price?: number
-  end_price?: number
-}
-
-interface Trade {
-  id: string
-  market_id: string
-  user_id: string
-  type: string
-  shares: number
-  cost: number
-  price_before: number
-  price_after: number
-  created_at: string
-}
-
-interface Position {
-  id: string
-  user_id: string
-  market_id: string
-  shares_yes: number
-  shares_no: number
-  updated_at: string
 }
 
 interface User {
@@ -60,48 +65,26 @@ interface User {
   avatar_url?: string
 }
 
-interface PricePoint {
-  t: number
-  price: number
+interface LeaderboardEntry {
+  user_id: string
+  username: string
+  total_balance: number
+  avatar_url?: string
 }
 
-interface ResultToast {
-  won: boolean
-  amount: number
-  resolution: string
+interface WinToast {
+  id: string
   coin?: string
-  nextMarketId?: string
+  question: string
+  amount: number
+  isKrypto: boolean
+  direction: 'yes' | 'no'
 }
 
 function calcProb(qYes: number, qNo: number, b: number): number {
   const eYes = Math.exp(qYes / b)
   const eNo  = Math.exp(qNo  / b)
   return Math.round((eYes / (eYes + eNo)) * 100)
-}
-
-function lmsrCost(qYes: number, qNo: number, b: number, side: 'yes' | 'no', shares: number): number {
-  const newQYes = side === 'yes' ? qYes + shares : qYes
-  const newQNo  = side === 'no'  ? qNo  + shares : qNo
-  const before  = b * Math.log(Math.exp(qYes / b) + Math.exp(qNo / b))
-  const after   = b * Math.log(Math.exp(newQYes / b) + Math.exp(newQNo / b))
-  return Math.max(0, after - before)
-}
-
-function lmsrSharesForSpend(qYes: number, qNo: number, b: number, side: 'yes' | 'no', spend: number): number {
-  let lo = 0, hi = spend * 10
-  for (let i = 0; i < 64; i++) {
-    const mid = (lo + hi) / 2
-    if (lmsrCost(qYes, qNo, b, side, mid) < spend) lo = mid; else hi = mid
-  }
-  return (lo + hi) / 2
-}
-
-function lmsrSellReturn(qYes: number, qNo: number, b: number, side: 'yes' | 'no', shares: number): number {
-  const newQYes = side === 'yes' ? Math.max(0, qYes - shares) : qYes
-  const newQNo  = side === 'no'  ? Math.max(0, qNo  - shares) : qNo
-  const before  = b * Math.log(Math.exp(qYes / b) + Math.exp(qNo / b))
-  const after   = b * Math.log(Math.exp(newQYes / b) + Math.exp(newQNo / b))
-  return Math.max(0, before - after)
 }
 
 function parseUTC(raw: string): Date {
@@ -111,954 +94,486 @@ function parseUTC(raw: string): Date {
   return new Date(raw.replace(' ', 'T') + 'Z')
 }
 
-async function fetchCoinbasePrice(coin: string): Promise<number | null> {
-  try {
-    const res  = await fetch(`https://api.coinbase.com/v2/prices/${coin.toUpperCase()}-USD/spot`, { cache: 'no-store' })
-    const data = await res.json()
-    return parseFloat(data.data.amount)
-  } catch { return null }
-}
-
-function drawCryptoChart(
-  canvas: HTMLCanvasElement,
-  history: PricePoint[],
-  targetPrice: number,
-  marketStartMs: number,
-  marketEndMs: number,
-) {
-  const ctx = canvas.getContext('2d')
-  if (!ctx) return
-  const W = canvas.width, H = canvas.height
-  const padL = 72, padR = 96, padT = 20, padB = 28
-  const visiblePrices = history.length > 0 ? history.map(p => p.price) : [targetPrice]
-  const midPrice = visiblePrices[visiblePrices.length - 1] ?? targetPrice
-  const spread   = midPrice * 0.0025
-  const allVals  = [...visiblePrices, targetPrice]
-  const minP     = Math.min(Math.min(...allVals), midPrice - spread)
-  const maxP     = Math.max(Math.max(...allVals), midPrice + spread)
-  const duration = marketEndMs - marketStartMs
-  const xScale   = (ms: number) => padL + ((Math.min(ms, marketEndMs) - marketStartMs) / duration) * (W - padL - padR)
-  const yScale   = (p: number)  => padT + ((maxP - p) / (maxP - minP)) * (H - padT - padB)
-
-  ctx.clearRect(0, 0, W, H)
-  ctx.fillStyle = '#ffffff'
-  ctx.fillRect(0, 0, W, H)
-
-  const nowMs = Date.now()
-  if (nowMs < marketEndMs) {
-    const nowX = Math.min(xScale(nowMs), W - padR)
-    ctx.fillStyle = 'rgba(0,0,0,0.02)'
-    ctx.fillRect(nowX, padT, W - padR - nowX, H - padT - padB)
-  }
-
-  ctx.strokeStyle = '#e8eaef'; ctx.lineWidth = 1; ctx.setLineDash([])
-  for (let i = 0; i <= 5; i++) {
-    const y = yScale(minP + (maxP - minP) * (i / 5))
-    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W - padR, y); ctx.stroke()
-  }
-
-  const targetY = yScale(targetPrice)
-  ctx.beginPath(); ctx.setLineDash([5, 4]); ctx.strokeStyle = '#f59e0b'; ctx.lineWidth = 1.5
-  ctx.moveTo(padL, targetY); ctx.lineTo(W - padR, targetY); ctx.stroke(); ctx.setLineDash([])
-  ctx.fillStyle = '#fffbeb'; ctx.beginPath(); ctx.rect(W - padR + 4, targetY - 11, 88, 22); ctx.fill()
-  ctx.fillStyle = '#92400e'; ctx.font = 'bold 10px Inter, sans-serif'; ctx.textAlign = 'left'
-  ctx.fillText('Target', W - padR + 8, targetY - 1)
-  ctx.fillStyle = '#b45309'; ctx.font = '9px Inter, sans-serif'
-  ctx.fillText(`$${targetPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, W - padR + 8, targetY + 10)
-
-  const filteredHistory = history.filter(p => p.t <= marketEndMs)
-  if (filteredHistory.length > 1) {
-    ctx.beginPath()
-    filteredHistory.forEach((p, i) => { i === 0 ? ctx.moveTo(xScale(p.t), yScale(p.price)) : ctx.lineTo(xScale(p.t), yScale(p.price)) })
-    const lastX = xScale(filteredHistory[filteredHistory.length - 1].t)
-    ctx.lineTo(lastX, H - padB); ctx.lineTo(xScale(filteredHistory[0].t), H - padB); ctx.closePath()
-    const grad = ctx.createLinearGradient(0, padT, 0, H - padB)
-    grad.addColorStop(0, 'rgba(251,146,60,0.22)'); grad.addColorStop(1, 'rgba(251,146,60,0.0)')
-    ctx.fillStyle = grad; ctx.fill()
-    ctx.beginPath()
-    filteredHistory.forEach((p, i) => { i === 0 ? ctx.moveTo(xScale(p.t), yScale(p.price)) : ctx.lineTo(xScale(p.t), yScale(p.price)) })
-    ctx.strokeStyle = '#f97316'; ctx.lineWidth = 2.5; ctx.lineJoin = 'round'; ctx.stroke()
-    const last = filteredHistory[filteredHistory.length - 1]
-    ctx.beginPath(); ctx.arc(xScale(last.t), yScale(last.price), 4.5, 0, Math.PI * 2)
-    ctx.fillStyle = '#f97316'; ctx.fill(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.stroke()
-  }
-
-  ctx.fillStyle = '#94a3b8'; ctx.font = '10px Inter, sans-serif'; ctx.textAlign = 'right'
-  for (let i = 0; i <= 5; i++) {
-    const val = minP + (maxP - minP) * (1 - i / 5)
-    ctx.fillText(`$${val.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`, padL - 6, yScale(val) + 4)
-  }
-  ctx.textAlign = 'center'
-  for (let i = 0; i <= 3; i++) {
-    const ms = marketStartMs + (duration * i / 3)
-    const d  = new Date(ms)
-    ctx.fillText(`${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`, xScale(ms), H - padB + 16)
-  }
-}
+const CATEGORIES = ['Alle', 'Politik', 'Sport', 'Krypto', 'Entertainment', 'Wirtschaft', 'Geopolitik', 'Finanzen', 'Wetter', 'Kultur']
+const COINS      = ['BTC', 'ETH', 'SOL', 'XRP']
 
 const CAT_CLASS: Record<string, string> = {
-  Politik: 'cat-politik', Sport: 'cat-sport', Krypto: 'cat-krypto',
-  Entertainment: 'cat-entertainment', Wirtschaft: 'cat-wirtschaft',
+  Politik:       'cat-politik',
+  Sport:         'cat-sport',
+  Krypto:        'cat-krypto',
+  Entertainment: 'cat-entertainment',
+  Wirtschaft:    'cat-wirtschaft',
+  Geopolitik:    'cat-politik',
+  Finanzen:      'cat-wirtschaft',
+  Wetter:        'cat-sport',
+  Kultur:        'cat-entertainment',
 }
-const COIN_COLORS: Record<string, string> = { BTC: '#f59e0b', ETH: '#6366f1', SOL: '#9945ff', XRP: '#00aae4' }
 
-type Tab       = '7T' | '1M' | 'Gesamt'
-type TradeTab  = 'kaufen' | 'verkaufen'
-type OrderType = 'markt' | 'limit'
+const COIN_COLORS: Record<string, string> = {
+  BTC: '#f59e0b', ETH: '#6366f1', SOL: '#9945ff', XRP: '#00aae4',
+}
 
-export default function MarketPage() {
-  const params   = useParams()
-  const router   = useRouter()
-  const marketId = params?.id as string
+const AVATAR_COLORS = [
+  { bg: '#eff6ff', color: '#1d4ed8' },
+  { bg: '#f0fdf4', color: '#166534' },
+  { bg: '#fdf4ff', color: '#6b21a8' },
+  { bg: '#fffbeb', color: '#92400e' },
+  { bg: '#f0f9ff', color: '#075985' },
+]
+function avatarColor(str: string) {
+  let h = 0
+  for (let i = 0; i < str.length; i++) h = str.charCodeAt(i) + ((h << 5) - h)
+  return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length]
+}
 
-  const [market, setMarket]           = useState<Market | null>(null)
-  const [trades, setTrades]           = useState<Trade[]>([])
-  const [position, setPosition]       = useState<Position | null>(null)
-  const [user, setUser]               = useState<User | null>(null)
-  const [loading, setLoading]         = useState(true)
-  const [liveMarkets, setLiveMarkets] = useState<Market[]>([])
+type AuthMode = 'login' | 'register'
 
-  const [tradeTab, setTradeTab]     = useState<TradeTab>('kaufen')
-  const [orderType, setOrderType]   = useState<OrderType>('markt')
-  const [direction, setDirection]   = useState<'yes' | 'no'>('yes')
-  const [spend, setSpend]           = useState(100)
-  const [limitPrice, setLimitPrice] = useState(50)
-  const [betLoading, setBetLoading] = useState(false)
-  const [betError, setBetError]     = useState('')
-  const [betSuccess, setBetSuccess] = useState('')
+export default function Home() {
+  const router = useRouter()
+  const [markets, setMarkets]           = useState<Market[]>([])
+  const [user, setUser]                 = useState<User | null>(null)
+  const [leaderboard, setLeaderboard]   = useState<LeaderboardEntry[]>([])
+  const [category, setCategory]         = useState('Alle')
+  const [view, setView]                 = useState<'markets' | 'portfolio' | 'admin' | 'profil'>('markets')
+  const [loading, setLoading]           = useState(true)
+  const [darkMode, setDarkMode]         = useState(false)
+  const [showAuth, setShowAuth]         = useState(false)
+  const [authMode, setAuthMode]         = useState<AuthMode>('login')
+  const [authEmail, setAuthEmail]       = useState('')
+  const [authPassword, setAuthPassword] = useState('')
+  const [authUsername, setAuthUsername] = useState('')
+  const [authError, setAuthError]       = useState('')
+  const [authLoading, setAuthLoading]   = useState(false)
+  const [searchQuery, setSearchQuery]   = useState('')
+  const [winToasts, setWinToasts]       = useState<WinToast[]>([])
+  const shownToastsRef                  = useRef<Set<string>>(new Set())
+  const userRef                         = useRef<User | null>(null)
+  const marketsRef                      = useRef<Market[]>([])
+  const triggeredCoinsRef               = useRef<Record<string, number>>({})
 
-  const [activeTab, setActiveTab]       = useState<Tab>('7T')
-  const chartRef                        = useRef<HTMLCanvasElement>(null)
-  const chartInstance                   = useRef<unknown>(null)
-  const [livePrice, setLivePrice]       = useState<number | null>(null)
-  const [priceHistory, setPriceHistory] = useState<PricePoint[]>([])
-  const [countdown, setCountdown]       = useState('')
-  const cryptoCanvasRef                 = useRef<HTMLCanvasElement>(null)
-  const priceHistoryRef                 = useRef<PricePoint[]>([])
-  const lastRealPrice                   = useRef<number | null>(null)
-  const marketRef                       = useRef<Market | null>(null)
-  const liveMarketPollRef               = useRef<ReturnType<typeof setInterval> | null>(null)
-  const positionRef                     = useRef<Position | null>(null)
-  const resolveTriggeredRef             = useRef(false)
-  const createTriggeredRef              = useRef(false)
+  const ADMIN_ID = 'b75edaf4-141d-41f1-9555-887a8ddbac58'
 
-  const [resultToast, setResultToast] = useState<ResultToast | null>(null)
-  const toastShownRef                 = useRef(false)
-
-  // FIX: stable interval refs — prevent watchdog from restarting interval every second
-  const currentIntervalMs = useRef(10000)
-  const intervalRef       = useRef<ReturnType<typeof setInterval> | null>(null)
-
-  function getToken(): string | null {
-    try {
-      const saved = localStorage.getItem('mobius_session')
-      if (!saved) return null
-      return JSON.parse(saved).access_token ?? null
-    } catch { return null }
-  }
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light')
+  }, [darkMode])
 
   useEffect(() => {
     const saved = localStorage.getItem('mobius_session')
     if (!saved) return
     try {
-      const s = JSON.parse(saved)
-      if (s?.user_id) dbGet('users', `id=eq.${s.user_id}&select=*`).then(d => { if (d?.[0]) setUser(d[0]) })
+      const session = JSON.parse(saved)
+      if (session?.access_token && session?.user_id) {
+        dbGet('users', `id=eq.${session.user_id}&select=*`).then((data) => {
+          if (data?.[0]) { setUser(data[0]); userRef.current = data[0] }
+        })
+      }
     } catch {}
   }, [])
 
-  const loadMarket = useCallback(async () => {
-    const data = await dbGet('markets', `id=eq.${marketId}&select=*`)
-    if (data?.[0]) { setMarket(data[0]); marketRef.current = data[0] }
+  const loadMarkets = useCallback(async (showLoading = false) => {
+    if (showLoading) setLoading(true)
+    const data = await dbGet('markets', 'status=eq.open&select=*&order=created_at.desc')
+    const list = data ?? []
+    setMarkets(list)
+    marketsRef.current = list
     setLoading(false)
-  }, [marketId])
+  }, [])
 
-  const loadTrades = useCallback(async () => {
-    const data = await dbGet('trades', `market_id=eq.${marketId}&select=*&order=created_at.asc`)
-    setTrades(data ?? [])
-  }, [marketId])
-
-  const loadPosition = useCallback(async (userId: string) => {
-    const data = await dbGet('positions', `user_id=eq.${userId}&market_id=eq.${marketId}&select=*`)
-    const pos = data?.[0] ?? null
-    setPosition(pos)
-    positionRef.current = pos
-  }, [marketId])
-
-  const loadLiveMarkets = useCallback(async () => {
-    const data = await dbGet('markets', `is_auto=eq.true&resolved=eq.false&select=*&order=closes_at.asc`)
-    setLiveMarkets(data ?? [])
+  const loadLeaderboard = useCallback(async () => {
+    const data = await dbGet('users', 'select=id,username,balance,avatar_url&order=balance.desc&limit=10')
+    setLeaderboard(
+      (data ?? []).map((u: User) => ({
+        user_id: u.id,
+        username: u.username,
+        total_balance: u.balance,
+        avatar_url: u.avatar_url,
+      }))
+    )
   }, [])
 
   useEffect(() => {
-    if (!market?.resolved || toastShownRef.current) return
-    if (!market.is_auto) return
-    toastShownRef.current = true
-
-    const pos       = positionRef.current
-    const sharesYes = pos?.shares_yes ?? 0
-    const sharesNo  = pos?.shares_no  ?? 0
-    const hasPos    = sharesYes > 0 || sharesNo > 0
-    const won       = hasPos && (
-      (market.resolution === 'yes' && sharesYes > 0) ||
-      (market.resolution === 'no'  && sharesNo  > 0)
-    )
-    const amount = won ? Math.round(market.resolution === 'yes' ? sharesYes : sharesNo) : 0
-    const next   = liveMarkets.find(m => m.coin === market.coin && m.id !== marketId)
-
-    setResultToast({ won, amount, resolution: market.resolution ?? '', coin: market.coin, nextMarketId: next?.id })
-
-    if (user?.id) {
-      dbGet('users', `id=eq.${user.id}&select=balance`).then(d => {
-        if (d?.[0]) setUser(prev => prev ? { ...prev, balance: d[0].balance } : prev)
-      })
-    }
-  }, [market?.resolved, market?.resolution, market?.is_auto, market?.coin, liveMarkets, marketId, user?.id])
+    loadMarkets(true)
+    loadLeaderboard()
+  }, [loadMarkets, loadLeaderboard])
 
   useEffect(() => {
-    if (!resultToast || resultToast.nextMarketId) return
-    const next = liveMarkets.find(m => m.coin === market?.coin && m.id !== marketId)
-    if (next) setResultToast(prev => prev ? { ...prev, nextMarketId: next.id } : prev)
-  }, [liveMarkets, resultToast, market?.coin, marketId])
+    const id = setInterval(() => {
+      const now = Date.now()
+      const autoMarkets = marketsRef.current.filter(m => m.is_auto && m.coin && !m.resolved)
 
-  useEffect(() => {
-    loadMarket(); loadTrades(); loadLiveMarkets()
-
-    // FIX: only restart interval when ms value actually changes
-    const startInterval = (ms: number) => {
-      if (ms === currentIntervalMs.current && intervalRef.current !== null) return
-      currentIntervalMs.current = ms
-      if (intervalRef.current) clearInterval(intervalRef.current)
-      intervalRef.current = setInterval(() => {
-        loadMarket(); loadTrades(); loadLiveMarkets()
-      }, ms)
-    }
-
-    startInterval(10000)
-
-    const watchdog = setInterval(() => {
-      const m = marketRef.current
-      if (!m) return
-      const diff = parseUTC(m.closes_at).getTime() - Date.now()
-      if (m.resolved) {
-        startInterval(10000)
-        if (!liveMarketPollRef.current) {
-          liveMarketPollRef.current = setInterval(() => { loadLiveMarkets() }, 1000)
-        }
-      } else if (diff <= 0) {
-        startInterval(2000)
-        if (!liveMarketPollRef.current) {
-          liveMarketPollRef.current = setInterval(() => { loadLiveMarkets(); loadMarket() }, 1000)
-        }
-      } else if (diff <= 30000) {
-        startInterval(5000)
-      } else {
-        startInterval(10000)
-      }
-    }, 1000)
-
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current)
-      intervalRef.current = null
-      currentIntervalMs.current = 10000
-      clearInterval(watchdog)
-      if (liveMarketPollRef.current) clearInterval(liveMarketPollRef.current)
-    }
-  }, [loadMarket, loadTrades, loadLiveMarkets])
-
-  useEffect(() => {
-    if (!market?.resolved) return
-    const coin  = market.coin
-    const found = liveMarkets.find(m => m.coin === coin && m.id !== marketId)
-    if (found && liveMarketPollRef.current) {
-      clearInterval(liveMarketPollRef.current)
-      liveMarketPollRef.current = null
-    }
-  }, [liveMarkets, market, marketId])
-
-  useEffect(() => {
-    if (user?.id) loadPosition(user.id)
-  }, [user, loadPosition])
-
-  useEffect(() => {
-    if (!market?.resolved || !user?.id) return
-    dbGet('users', `id=eq.${user.id}&select=balance`).then(d => {
-      if (d?.[0]) setUser(prev => prev ? { ...prev, balance: d[0].balance } : prev)
-    })
-    loadPosition(user.id)
-  }, [market?.resolved, user?.id, loadPosition])
-
-  useEffect(() => {
-    if (!market?.is_auto || !market?.coin || market?.resolved) return
-    const coin        = market.coin
-    const marketEndMs = parseUTC(market.closes_at).getTime()
-    const fetchReal = async () => {
-      if (Date.now() > marketEndMs) return
-      const price = await fetchCoinbasePrice(coin)
-      if (price === null) return
-      lastRealPrice.current = price
-      const point: PricePoint = { t: Math.min(Date.now(), marketEndMs), price }
-      priceHistoryRef.current = [...priceHistoryRef.current, point].slice(-300)
-      setPriceHistory([...priceHistoryRef.current])
-      setLivePrice(price)
-    }
-    fetchReal()
-    const fetchInterval  = setInterval(() => {
-      if (Date.now() > marketEndMs) { clearInterval(fetchInterval); clearInterval(interpInterval); return }
-      fetchReal()
-    }, 10000)
-    const interpInterval = setInterval(() => {
-      if (Date.now() > marketEndMs) return
-      if (lastRealPrice.current === null) return
-      const hist   = priceHistoryRef.current
-      const last   = hist.length > 0 ? hist[hist.length - 1].price : lastRealPrice.current
-      const jitter = last * 0.00008 * (Math.random() * 2 - 1)
-      const point: PricePoint = { t: Math.min(Date.now(), marketEndMs), price: last + jitter }
-      priceHistoryRef.current = [...priceHistoryRef.current, point].slice(-300)
-      setPriceHistory([...priceHistoryRef.current])
-      setLivePrice(last + jitter)
-    }, 1000)
-    return () => { clearInterval(fetchInterval); clearInterval(interpInterval) }
-  }, [market?.is_auto, market?.coin, market?.resolved, market?.closes_at])
-
-  useEffect(() => {
-    if (!market?.is_auto || !cryptoCanvasRef.current || !market?.start_price || !market?.closes_at) return
-    const marketEndMs   = parseUTC(market.closes_at).getTime()
-    const marketStartMs = marketEndMs - 3 * 60 * 1000
-    drawCryptoChart(cryptoCanvasRef.current, priceHistory, market.start_price, marketStartMs, marketEndMs)
-  }, [priceHistory, market?.is_auto, market?.start_price, market?.closes_at, market?.resolved])
-
-  useEffect(() => {
-    if (!market?.closes_at || !market?.coin || !market?.id) return
-    resolveTriggeredRef.current = false
-    createTriggeredRef.current  = false
-
-    const closesAt = parseUTC(market.closes_at)
-    const coin     = market.coin
-    const mktId    = market.id
-
-    const tick = async () => {
-      const diff = closesAt.getTime() - Date.now()
-
-      if (diff <= 0) {
-        setCountdown('00:00')
-
-        if (!resolveTriggeredRef.current) {
-          resolveTriggeredRef.current = true
-          try {
-            await fetch('/api/resolve-crypto-market', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ market_id: mktId }),
-            })
-          } catch {}
-          loadMarket()
-          if (user?.id) {
-            dbGet('users', `id=eq.${user?.id}&select=balance`).then(d => {
-              if (d?.[0]) setUser(prev => prev ? { ...prev, balance: d[0].balance } : prev)
-            })
-          }
-        }
-
-        if (!createTriggeredRef.current) {
-          createTriggeredRef.current = true
-          try {
-            await fetch('/api/create-crypto-market', {
+      for (const coin of COINS) {
+        const market = autoMarkets.find(m => m.coin === coin)
+        if (!market) {
+          const lastTriggered = triggeredCoinsRef.current[coin + '_missing'] ?? 0
+          if (now - lastTriggered > 30000) {
+            triggeredCoinsRef.current[coin + '_missing'] = now
+            fetch('/api/create-crypto-market', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ coin }),
-            })
-          } catch {}
-          loadLiveMarkets()
+            }).then(() => loadMarkets()).catch(() => {})
+          }
+          continue
         }
 
-        return
+        const closesAtMs = parseUTC(market.closes_at).getTime()
+        const diff       = closesAtMs - now
+        const triggerKey = coin + '_' + closesAtMs
+
+        if (diff < 10000 && diff > -30000 && !triggeredCoinsRef.current[triggerKey]) {
+          triggeredCoinsRef.current[triggerKey] = now
+          fetch('/api/create-crypto-market', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ coin }),
+          }).then(() => setTimeout(loadMarkets, 2000)).catch(() => {})
+        }
       }
+    }, 1000)
 
-      const m = Math.floor(diff / 60000)
-      const s = Math.floor((diff % 60000) / 1000)
-      setCountdown(`${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`)
-    }
-
-    tick()
-    const id = setInterval(tick, 1000)
     return () => clearInterval(id)
-  }, [market?.closes_at, market?.coin, market?.id, loadMarket, loadLiveMarkets, user?.id])
-
-  const tradeHistory = (() => {
-    if (!market || trades.length === 0) return []
-    let qY = 0, qN = 0
-    return trades.filter(t => t.shares > 0 && (t.type === 'buy_yes' || t.type === 'buy_no')).map(t => {
-      if (t.type === 'buy_yes') qY += t.shares; else qN += t.shares
-      return { t: t.created_at, prob: calcProb(qY, qN, market.b) }
-    })
-  })()
+  }, [loadMarkets])
 
   useEffect(() => {
-    if (market?.is_auto) return
-    if (!chartRef.current || tradeHistory.length === 0) return
-    const build = async () => {
-      const { Chart, registerables } = await import('chart.js')
-      Chart.register(...registerables)
-      const now   = new Date()
-      const since = activeTab === '7T' ? new Date(now.getTime() - 7 * 24 * 3600 * 1000)
-        : activeTab === '1M' ? new Date(now.getTime() - 30 * 24 * 3600 * 1000) : new Date(0)
-      const pts        = tradeHistory.filter(p => new Date(p.t) >= since)
-      const dataPoints = pts.length > 0 ? pts : tradeHistory.slice(-10)
-      const isDark     = document.documentElement.getAttribute('data-theme') === 'dark'
-      const gridColor  = isDark ? '#2a2d3a' : '#e8eaef'
-      const tickColor  = isDark ? '#94a3b8' : '#9ca3af'
-      if (chartInstance.current) (chartInstance.current as { destroy: () => void }).destroy()
-      chartInstance.current = new Chart(chartRef.current!, {
-        type: 'line',
-        data: {
-          labels: dataPoints.map(p => {
-            const d = new Date(p.t)
-            return activeTab === 'Gesamt' ? d.toLocaleDateString('de', { month: 'short', day: 'numeric' }) : d.toLocaleDateString('de', { day: '2-digit', month: '2-digit' })
-          }),
-          datasets: [{ data: dataPoints.map(p => p.prob), borderColor: '#12b76a', backgroundColor: isDark ? 'rgba(18,183,106,0.08)' : 'rgba(18,183,106,0.10)', fill: true, borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, tension: 0.4 }],
-        },
-        options: {
-          responsive: true, maintainAspectRatio: false, animation: { duration: 350 },
-          plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => `${ctx.parsed.y}% Ja` } } },
-          scales: {
-            x: { grid: { color: gridColor }, ticks: { color: tickColor, font: { size: 11 }, maxTicksLimit: 6 } },
-            y: { min: 0, max: 100, grid: { color: gridColor }, ticks: { color: tickColor, font: { size: 11 }, callback: v => `${v}%` } },
-          },
-        },
+    const id = setInterval(() => loadMarkets(), 10000)
+    return () => clearInterval(id)
+  }, [loadMarkets])
+
+  const checkWins = useCallback(async (userId: string) => {
+    const since = new Date(Date.now() - 10 * 60 * 1000).toISOString()
+    const trades = await dbGet('trades', `user_id=eq.${userId}&type=in.(buy_yes,buy_no)&created_at=gte.${since}&select=market_id,type,shares`)
+    if (!trades || trades.length === 0) return
+
+    const seen: Record<string, boolean> = {}
+    const marketIds: string[] = []
+    trades.forEach((t: { market_id: string }) => {
+      if (!seen[t.market_id]) { seen[t.market_id] = true; marketIds.push(t.market_id) }
+    })
+
+    const resolvedMarkets = await dbGet('markets', `id=in.(${marketIds.join(',')})&resolved=eq.true&select=id,question,resolution,is_auto,coin`)
+    if (!resolvedMarkets || resolvedMarkets.length === 0) return
+
+    const newToasts: WinToast[] = []
+
+    for (const market of resolvedMarkets) {
+      if (shownToastsRef.current.has(market.id)) continue
+      const marketTrades = trades.filter((t: { market_id: string; type: string; shares: number }) => t.market_id === market.id)
+      const wonTrades = marketTrades.filter((t: { type: string }) =>
+        (market.resolution === 'yes' && t.type === 'buy_yes') ||
+        (market.resolution === 'no'  && t.type === 'buy_no')
+      )
+      if (wonTrades.length === 0) continue
+      const totalShares = wonTrades.reduce((s: number, t: { shares: number }) => s + (t.shares ?? 0), 0)
+      const amount = Math.round(totalShares)
+      if (amount <= 0) continue
+      shownToastsRef.current.add(market.id)
+      newToasts.push({
+        id: market.id,
+        coin: market.coin,
+        question: market.question,
+        amount,
+        isKrypto: !!market.is_auto,
+        direction: market.resolution as 'yes' | 'no',
       })
     }
-    build()
-    return () => { if (chartInstance.current) (chartInstance.current as { destroy: () => void }).destroy() }
-  }, [tradeHistory, activeTab, market?.is_auto])
 
-  async function handleKaufen() {
-    if (!user || !market) return
-    if (spend <= 0 || spend > 1000000) { setBetError('Ungültiger Betrag.'); return }
-    if (user.balance < spend) { setBetError('Nicht genug Guthaben.'); return }
-    setBetLoading(true); setBetError('')
-
-    if (orderType === 'limit') {
-      setBetSuccess(`Limit-Order bei ${limitPrice}¢ platziert.`)
-      setBetLoading(false); setTimeout(() => setBetSuccess(''), 4000); return
+    if (newToasts.length > 0) {
+      setWinToasts(prev => [...prev, ...newToasts])
+      const freshUser = await dbGet('users', `id=eq.${userId}&select=balance`)
+      if (freshUser?.[0]) {
+        setUser(prev => prev ? { ...prev, balance: freshUser[0].balance } : prev)
+        userRef.current = { ...userRef.current!, balance: freshUser[0].balance }
+      }
+      newToasts.forEach(toast => {
+        setTimeout(() => {
+          setWinToasts(prev => prev.filter(t => t.id !== toast.id))
+        }, 6000)
+      })
     }
+  }, [])
 
-    const token = getToken()
-    if (!token) { setBetError('Nicht eingeloggt.'); setBetLoading(false); return }
+  useEffect(() => {
+    if (!user?.id) return
+    const id = setInterval(() => checkWins(user.id), 15000)
+    checkWins(user.id)
+    return () => clearInterval(id)
+  }, [user?.id, checkWins])
 
-    const res = await fetch('/api/place-bet', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-      body: JSON.stringify({ marketId, action: 'buy', direction, spend }),
-    })
-    const data = await res.json()
-
-    if (!res.ok) { setBetError(data.error ?? 'Fehler beim Platzieren.'); setBetLoading(false); return }
-
-    setUser(prev => prev ? { ...prev, balance: data.newBalance } : prev)
-    setBetSuccess('Wette platziert ✓')
-    setBetLoading(false)
-    loadMarket(); loadTrades(); loadPosition(user.id)
-    setTimeout(() => setBetSuccess(''), 2500)
+  const handleLogin = async () => {
+    setAuthError('')
+    if (!authEmail || !authPassword) { setAuthError('Bitte alle Felder ausfüllen.'); return }
+    if (authEmail.length > 254) { setAuthError('E-Mail zu lang.'); return }
+    if (authPassword.length < 6 || authPassword.length > 128) { setAuthError('Passwort muss 6–128 Zeichen lang sein.'); return }
+    setAuthLoading(true)
+    const res = await supabaseAuth('token?grant_type=password', { email: authEmail.trim(), password: authPassword })
+    setAuthLoading(false)
+    if (res.error || !res.access_token) { setAuthError('E-Mail oder Passwort falsch.'); return }
+    const userId = res.user?.id
+    const userData = await dbGet('users', `id=eq.${userId}&select=*`)
+    if (userData?.[0]) {
+      setUser(userData[0])
+      userRef.current = userData[0]
+      localStorage.setItem('mobius_session', JSON.stringify({ access_token: res.access_token, user_id: userId }))
+      setShowAuth(false)
+      resetAuthForm()
+    } else {
+      setAuthError('Benutzer nicht gefunden.')
+    }
   }
 
-  async function handleVerkaufen() {
-    if (!user || !market || !position) return
-    setBetLoading(true); setBetError('')
-
-    const token = getToken()
-    if (!token) { setBetError('Nicht eingeloggt.'); setBetLoading(false); return }
-
-    const res = await fetch('/api/place-bet', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-      body: JSON.stringify({ marketId, action: 'sell', direction, spend }),
-    })
-    const data = await res.json()
-
-    if (!res.ok) { setBetError(data.error ?? 'Fehler beim Verkaufen.'); setBetLoading(false); return }
-
-    setUser(prev => prev ? { ...prev, balance: data.newBalance } : prev)
-    setBetSuccess(`${data.returned} ₫ erhalten ✓`)
-    setBetLoading(false)
-    loadMarket(); loadTrades(); loadPosition(user.id)
-    setTimeout(() => setBetSuccess(''), 2500)
+  const handleRegister = async () => {
+    setAuthError('')
+    if (!authEmail || !authPassword || !authUsername) { setAuthError('Bitte alle Felder ausfüllen.'); return }
+    if (authEmail.length > 254) { setAuthError('E-Mail zu lang.'); return }
+    if (authUsername.length < 3 || authUsername.length > 50) { setAuthError('Benutzername: 3–50 Zeichen.'); return }
+    if (authPassword.length < 6 || authPassword.length > 128) { setAuthError('Passwort muss 6–128 Zeichen lang sein.'); return }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(authEmail.trim())) { setAuthError('Ungültige E-Mail-Adresse.'); return }
+    setAuthLoading(true)
+    const existing = await dbGet('users', `username=eq.${encodeURIComponent(authUsername.trim())}&select=id`)
+    if (existing?.length > 0) { setAuthLoading(false); setAuthError('Benutzername bereits vergeben.'); return }
+    const res = await supabaseAuth('signup', { email: authEmail.trim(), password: authPassword })
+    setAuthLoading(false)
+    if (res.error) { setAuthError(res.error.message ?? 'Registrierung fehlgeschlagen.'); return }
+    const userId = res.user?.id
+    const token = res.access_token
+    if (!userId) { setAuthError('Bitte bestätige deine E-Mail und melde dich dann an.'); return }
+    await dbPost('users', { id: userId, username: authUsername.trim().slice(0, 50), balance: 1000 }, token ?? SUPABASE_KEY)
+    const userData = await dbGet('users', `id=eq.${userId}&select=*`)
+    if (userData?.[0]) {
+      setUser(userData[0])
+      userRef.current = userData[0]
+      localStorage.setItem('mobius_session', JSON.stringify({ access_token: token, user_id: userId }))
+      setShowAuth(false)
+      resetAuthForm()
+      loadLeaderboard()
+    } else {
+      setAuthError('Konto erstellt! Bitte melde dich jetzt an.')
+    }
   }
 
-  if (loading) return <div style={{ padding: 32, color: 'var(--text-muted)', fontSize: 14 }}>Markt wird geladen…</div>
-  if (!market) return (
-    <div style={{ padding: 32 }}>
-      <div style={{ color: 'var(--no)', fontSize: 14, marginBottom: 16 }}>Markt nicht gefunden.</div>
-      <button className="nav-pill" onClick={() => router.push('/')}>← Zurück</button>
-    </div>
-  )
+  const handleLogout = () => {
+    setUser(null)
+    userRef.current = null
+    localStorage.removeItem('mobius_session')
+    setView('markets')
+    setWinToasts([])
+    shownToastsRef.current = new Set()
+  }
 
-  const prob         = calcProb(market.q_yes, market.q_no, market.b)
-  const isLow        = prob < 50
-  const catClass     = CAT_CLASS[market.category ?? ''] ?? ''
-  const payout       = Math.round(lmsrSharesForSpend(market.q_yes, market.q_no, market.b, direction, spend))
-  const sharesYes    = position?.shares_yes ?? 0
-  const sharesNo     = position?.shares_no  ?? 0
-  const hasPosition  = sharesYes > 0 || sharesNo > 0
-  const sellSide     = sharesYes >= sharesNo ? 'yes' : 'no'
-  const sellShares   = sellSide === 'yes' ? sharesYes : sharesNo
-  const returnOnSell = hasPosition ? lmsrSellReturn(market.q_yes, market.q_no, market.b, sellSide, sellShares) : 0
-  const isKrypto     = !!market.is_auto
-  const closesAt     = parseUTC(market.closes_at)
-  const delta        = livePrice && market.start_price ? livePrice - market.start_price : null
-  const endDelta     = market.end_price && market.start_price ? market.end_price - market.start_price : null
-  const isUp         = delta !== null ? delta >= 0 : (endDelta !== null ? endDelta >= 0 : true)
-  const countdownRed = countdown === '00:00' || (countdown !== '' && parseInt(countdown.split(':')[0]) === 0 && parseInt(countdown.split(':')[1]) <= 30)
-  const nextLiveMarket   = liveMarkets.find(m => m.coin === market.coin && m.id !== marketId)
-  const otherLiveMarkets = liveMarkets.filter(m => m.coin !== market.coin).slice(0, 4)
-  const userWon = market.resolved && hasPosition &&
-    ((market.resolution === 'yes' && sharesYes > 0) || (market.resolution === 'no' && sharesNo > 0))
-  const showEndedBanner = market.resolved || countdown === '00:00'
+  const resetAuthForm = () => {
+    setAuthEmail('')
+    setAuthPassword('')
+    setAuthUsername('')
+    setAuthError('')
+  }
+
+  const openAuth = (mode: AuthMode) => {
+    resetAuthForm()
+    setAuthMode(mode)
+    setShowAuth(true)
+  }
+
+  const filteredMarkets = markets.filter((m) => {
+    const matchCat = category === 'Alle' || m.category === category
+    const matchSearch = searchQuery === '' ||
+      (m.question ?? '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (m.short_label ?? '').toLowerCase().includes(searchQuery.toLowerCase())
+    return matchCat && matchSearch
+  })
 
   return (
     <>
-      {resultToast && (
-        <div style={{
-          position: 'fixed', top: 80, right: 16, zIndex: 9999,
-          background: '#fff',
-          border: `1px solid ${resultToast.won ? 'rgba(22,163,74,0.3)' : 'rgba(220,38,38,0.3)'}`,
-          borderLeft: `4px solid ${resultToast.won ? '#16a34a' : '#dc2626'}`,
-          borderRadius: 14, padding: '16px 18px', minWidth: 280, maxWidth: 340,
-          boxShadow: '0 4px 24px rgba(0,0,0,0.10)',
-          animation: 'slideInRight 0.35s cubic-bezier(.21,1.02,.73,1)',
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              {resultToast.coin && (
-                <span style={{ width: 28, height: 28, borderRadius: 7, background: COIN_COLORS[resultToast.coin] ?? '#f97316', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, color: '#fff' }}>
-                  {resultToast.coin.charAt(0)}
-                </span>
-              )}
-              <span style={{ fontSize: 14, fontWeight: 700, color: resultToast.won ? '#16a34a' : '#dc2626' }}>
-                {resultToast.won ? '🎉 Gewonnen!' : '😔 Verloren'}
-              </span>
+      <div style={{ position: 'fixed', top: 80, right: 16, zIndex: 9999, display: 'flex', flexDirection: 'column', gap: 10, pointerEvents: 'none' }}>
+        {winToasts.map(toast => (
+          <div key={toast.id} style={{
+            pointerEvents: 'all',
+            background: '#fff',
+            border: '1px solid rgba(22,163,74,0.3)',
+            borderLeft: '4px solid #16a34a',
+            borderRadius: 12,
+            padding: '14px 16px',
+            minWidth: 260,
+            maxWidth: 320,
+            boxShadow: '0 4px 24px rgba(0,0,0,0.10)',
+            animation: 'slideInRight 0.3s ease',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                {toast.isKrypto && toast.coin && (
+                  <span style={{ width: 24, height: 24, borderRadius: 6, background: COIN_COLORS[toast.coin] ?? '#f97316', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, color: '#fff', flexShrink: 0 }}>
+                    {toast.coin.charAt(0)}
+                  </span>
+                )}
+                <span style={{ fontSize: 13, fontWeight: 700, color: '#16a34a' }}>🎉 Gewonnen!</span>
+              </div>
+              <button onClick={() => setWinToasts(prev => prev.filter(t => t.id !== toast.id))}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, color: '#9ca3af', padding: 0, lineHeight: 1 }}>×</button>
             </div>
-            <button onClick={() => setResultToast(null)}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: '#9ca3af', padding: 0, lineHeight: 1 }}>×</button>
-          </div>
-          <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 10 }}>
-            {resultToast.coin} · Ergebnis: <strong style={{ color: resultToast.resolution === 'yes' ? '#16a34a' : '#dc2626' }}>
-              {resultToast.resolution === 'yes' ? 'Up ↑' : 'Down ↓'}
-            </strong>
-          </div>
-          {resultToast.won && resultToast.amount > 0 && (
-            <div style={{ fontSize: 30, fontWeight: 800, color: '#16a34a', letterSpacing: '-0.5px', marginBottom: 12, lineHeight: 1 }}>
-              +{resultToast.amount.toLocaleString('de')} ₫
+            <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 8, lineHeight: 1.4 }}>
+              {toast.isKrypto
+                ? `${toast.coin} ${toast.direction === 'yes' ? 'Up ↑' : 'Down ↓'}`
+                : toast.question.length > 50 ? toast.question.slice(0, 50) + '…' : toast.question}
             </div>
-          )}
-          {resultToast.nextMarketId ? (
-            <button onClick={() => { setResultToast(null); router.push(`/markets/${resultToast.nextMarketId}`) }}
-              style={{ width: '100%', padding: '10px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: 10, cursor: 'pointer', fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-              <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#fff', display: 'inline-block' }} />
-              Zum Live-Markt →
+            <div style={{ fontSize: 28, fontWeight: 800, color: '#16a34a', letterSpacing: '-0.5px', lineHeight: 1 }}>
+              +{toast.amount.toLocaleString('de')} ₫
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {showAuth && (
+        <div className="modal-backdrop" onClick={() => setShowAuth(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-title">
+              {authMode === 'login' ? 'Anmelden' : 'Konto erstellen'}
+            </div>
+            <div className="auth-tabs">
+              <button className={`auth-tab ${authMode === 'login' ? 'active' : ''}`}
+                onClick={() => { setAuthMode('login'); setAuthError('') }}>Anmelden</button>
+              <button className={`auth-tab ${authMode === 'register' ? 'active' : ''}`}
+                onClick={() => { setAuthMode('register'); setAuthError('') }}>Registrieren</button>
+            </div>
+            {authMode === 'register' && (
+              <input type="text" placeholder="Benutzername" value={authUsername}
+                onChange={(e) => setAuthUsername(e.target.value)} maxLength={50} style={{ width: '100%' }} />
+            )}
+            <input type="email" placeholder="E-Mail" value={authEmail}
+              onChange={(e) => setAuthEmail(e.target.value)} maxLength={254} style={{ width: '100%' }} autoFocus />
+            <input type="password" placeholder="Passwort" value={authPassword}
+              onChange={(e) => setAuthPassword(e.target.value)} maxLength={128}
+              onKeyDown={(e) => e.key === 'Enter' && (authMode === 'login' ? handleLogin() : handleRegister())}
+              style={{ width: '100%' }} />
+            {authError && <div className="alert alert-error">{authError}</div>}
+            <button className="submit-btn yes" onClick={authMode === 'login' ? handleLogin : handleRegister}
+              disabled={authLoading} style={{ marginTop: 4 }}>
+              {authLoading ? 'Laden…' : authMode === 'login' ? 'Anmelden' : 'Konto erstellen'}
             </button>
-          ) : (
-            <div style={{ fontSize: 12, color: '#9ca3af', textAlign: 'center' }}>Nächster Markt wird erstellt…</div>
-          )}
+            {authMode === 'register' && (
+              <div style={{ fontSize: 12, color: 'var(--text-subtle)', textAlign: 'center' }}>
+                Du startest mit 1.000 ₫ Dukaten.
+              </div>
+            )}
+          </div>
         </div>
       )}
 
       <nav className="nav">
         <div className="nav-left">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo-weiss.png" alt="Möbius" className="nav-logo" onClick={() => router.push('/')} style={{ cursor: 'pointer' }} />
-          <button className="nav-pill" onClick={() => router.push('/')} style={{ fontSize: 13 }}>← Alle Märkte</button>
+          <img src="/logo-weiss.png" alt="Möbius" className="nav-logo"
+            onClick={() => { setView('markets'); setSearchQuery('') }} />
+          <div className="nav-search-wrap">
+            <span className="nav-search-icon">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+              </svg>
+            </span>
+            <input className="nav-search" type="text" placeholder="Märkte durchsuchen…"
+              value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setView('markets') }} />
+          </div>
         </div>
         <div className="nav-right">
           {user ? (
-            <div className="nav-stat">
-              <div className="nav-stat-label">Guthaben</div>
-              <div className="nav-stat-value">{user.balance.toLocaleString('de')} ₫</div>
-            </div>
+            <>
+              <div className="nav-stat">
+                <div className="nav-stat-label">Guthaben</div>
+                <div className="nav-stat-value">{user.balance.toLocaleString('de')} ₫</div>
+              </div>
+              <div className="nav-divider" />
+              {user?.id === ADMIN_ID && (
+                <button className="nav-pill" onClick={() => setView('admin')}
+                  style={{ background: 'rgba(124,58,237,0.25)', borderColor: 'rgba(124,58,237,0.5)', color: '#c4b5fd' }}>
+                  Admin
+                </button>
+              )}
+            </>
           ) : (
-            <button className="nav-pill accent" onClick={() => router.push('/')}>Anmelden</button>
+            <>
+              <button className="nav-pill" onClick={() => openAuth('login')}>Anmelden</button>
+              <button className="nav-pill accent" onClick={() => openAuth('register')}>Registrieren</button>
+            </>
+          )}
+          <button className="nav-icon-btn" onClick={() => setDarkMode(!darkMode)}
+            title={darkMode ? 'Light Mode' : 'Dark Mode'}>
+            {darkMode ? '☀️' : '🌙'}
+          </button>
+          {user && (
+            <>
+              <div className="nav-avatar" onClick={() => setView('profil')} title={user.username}>
+                {user.avatar_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={user.avatar_url} alt={user.username}
+                    style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+                ) : (
+                  <span>{user.username.slice(0, 2).toUpperCase()}</span>
+                )}
+              </div>
+              <button className="nav-pill" onClick={handleLogout}>Abmelden</button>
+            </>
           )}
         </div>
       </nav>
 
-      <div style={{ maxWidth: 980, margin: '0 auto', padding: '24px 16px' }}>
+      <div className="cat-bar">
+        {CATEGORIES.map((cat) => (
+          <button key={cat} className={`cat-bar-btn ${category === cat ? 'active' : ''}`}
+            onClick={() => { setCategory(cat); setView('markets') }}>
+            {cat}
+          </button>
+        ))}
+      </div>
 
-        {isKrypto && showEndedBanner && (
-          <div style={{
-            marginBottom: 20, padding: '16px 20px', borderRadius: 14,
-            background: market.resolved
-              ? (market.resolution === 'yes' ? 'rgba(22,163,74,0.12)' : 'rgba(220,38,38,0.12)')
-              : 'rgba(245,158,11,0.12)',
-            border: `1px solid ${market.resolved
-              ? (market.resolution === 'yes' ? 'rgba(22,163,74,0.3)' : 'rgba(220,38,38,0.3)')
-              : 'rgba(245,158,11,0.3)'}`,
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12,
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <span style={{ fontSize: 28 }}>{market.resolved ? (market.resolution === 'yes' ? '↑' : '↓') : '⏳'}</span>
-              <div>
-                <div style={{ fontSize: 16, fontWeight: 800, color: market.resolved ? (market.resolution === 'yes' ? '#16a34a' : '#dc2626') : '#b45309' }}>
-                  {market.resolved ? `Ergebnis: ${market.resolution === 'yes' ? 'Up ↑' : 'Down ↓'}` : 'Markt läuft ab — Auflösung folgt…'}
+      <main className="page-container">
+        {view === 'admin' && user?.id === ADMIN_ID && (
+          <AdminPanel userId={user.id} openMarkets={markets} onMarketResolved={loadMarkets} />
+        )}
+        {view === 'profil' && user && (
+          <ProfileView
+            userId={user.id} token={user.id} displayName={user.username}
+            avatarUrl={user.avatar_url ?? ''} balance={user.balance}
+            onUsernameChange={(name) => setUser({ ...user, username: name })}
+            onAvatarChange={(url) => setUser({ ...user, avatar_url: url })}
+          />
+        )}
+        {view === 'markets' && (
+          <>
+            {user && (
+              <div className="stats-grid">
+                <div className="stat-card">
+                  <div className="stat-label">Guthaben</div>
+                  <div className="stat-value">{user.balance.toLocaleString('de')} ₫</div>
+                  <div className="stat-delta delta-neu">Deine Dukaten</div>
                 </div>
-                {market.resolved && market.start_price && market.end_price && (
-                  <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 2 }}>
-                    {market.coin}: ${market.start_price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} → ${market.end_price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </div>
-                )}
-              </div>
-            </div>
-            {nextLiveMarket ? (
-              <button onClick={() => router.push(`/markets/${nextLiveMarket.id}`)}
-                style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 20px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: 20, cursor: 'pointer', fontSize: 14, fontWeight: 700, whiteSpace: 'nowrap' }}>
-                <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#fff', display: 'inline-block' }} />
-                Zum Live-Markt →
-              </button>
-            ) : (
-              <div style={{ fontSize: 13, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: '#f59e0b' }} />
-                Nächster Markt wird erstellt…
+                <div className="stat-card">
+                  <div className="stat-label">Aktive Märkte</div>
+                  <div className="stat-value">{markets.length}</div>
+                  <div className="stat-delta delta-neu">offen</div>
+                </div>
               </div>
             )}
-          </div>
-        )}
-
-        {isKrypto && (
-          <div className="card" style={{ marginBottom: 20 }}>
-            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 16 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{ width: 40, height: 40, borderRadius: 10, background: COIN_COLORS[market.coin ?? ''] ?? '#f97316', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, fontWeight: 800, color: '#fff', flexShrink: 0 }}>
-                  {market.coin?.charAt(0) ?? '₿'}
-                </span>
-                <div>
-                  <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>{market.coin} Up or Down – 3 Minuten</div>
-                  <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                    {market.resolved ? 'Markt beendet' : `Schließt um ${closesAt.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })} Uhr`}
-                  </div>
-                </div>
+            <div className="section-head">
+              <div className="section-title">
+                {searchQuery ? `Suche: „${searchQuery}"` : category === 'Alle' ? 'Alle Märkte' : category}
               </div>
-              <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                {!market.resolved && (
-                  <div>
-                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>Verbleibend</div>
-                    <div style={{ fontSize: 40, fontWeight: 900, letterSpacing: '-2px', fontVariantNumeric: 'tabular-nums', color: countdownRed ? '#dc2626' : 'var(--text)', lineHeight: 1 }}>
-                      {countdown || '--:--'}
-                    </div>
-                  </div>
-                )}
-              </div>
+              <div className="section-link" onClick={() => loadMarkets()}>Aktualisieren</div>
             </div>
-
-            <div style={{ display: 'flex', gap: 40, marginBottom: 16 }}>
-              <div>
-                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>Zielpreis</div>
-                <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--text)' }}>
-                  ${market.start_price?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) ?? '—'}
-                </div>
-              </div>
-              <div>
-                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2, display: 'flex', alignItems: 'center', gap: 6 }}>
-                  {market.resolved ? 'Endpreis' : 'Aktueller Preis'}
-                  {market.resolved && endDelta !== null && (
-                    <span style={{ color: endDelta >= 0 ? '#16a34a' : '#dc2626', fontWeight: 700, fontSize: 12 }}>
-                      {endDelta >= 0 ? '▲' : '▼'} ${Math.abs(endDelta).toFixed(2)}
-                    </span>
-                  )}
-                  {!market.resolved && delta !== null && (
-                    <span style={{ color: isUp ? '#16a34a' : '#dc2626', fontWeight: 700, fontSize: 12 }}>
-                      {isUp ? '▲' : '▼'} ${Math.abs(delta).toFixed(2)}
-                    </span>
-                  )}
-                </div>
-                <div style={{ fontSize: 22, fontWeight: 700, color: market.resolved ? 'var(--text)' : '#f97316' }}>
-                  {market.resolved
-                    ? `$${market.end_price?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) ?? '—'}`
-                    : livePrice ? `$${livePrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'Lädt…'}
-                </div>
-              </div>
+            {loading ? (
+              <div style={{ color: 'var(--text-muted)', fontSize: 14, padding: '24px 0' }}>Märkte werden geladen…</div>
+            ) : filteredMarkets.length === 0 ? (
+              <div style={{ color: 'var(--text-muted)', fontSize: 14, padding: '24px 0' }}>Keine Märkte gefunden.</div>
+            ) : (
+              <MarketsGrid markets={filteredMarkets} onOpen={(id) => router.push(`/markets/${id}`)} />
+            )}
+            <div className="section-head" style={{ marginTop: 32 }}>
+              <div className="section-title">Bestenliste</div>
             </div>
-
-            <div style={{ position: 'relative', width: '100%', height: 240 }}>
-              <canvas ref={cryptoCanvasRef} width={860} height={240} style={{ width: '100%', height: '100%', display: 'block' }} />
-              {priceHistory.length < 2 && !market.resolved && (
-                <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
-                  Chart wird aufgebaut…
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {!isKrypto && (
-          <>
-            <div style={{ marginBottom: 20 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                {market.category && <span className={`cat-badge ${catClass}`}>{market.category}</span>}
-                {market.resolved && (
-                  <span style={{ fontSize: 12, fontWeight: 600, padding: '2px 10px', borderRadius: 20, background: market.resolution === 'yes' ? 'rgba(22,163,74,0.15)' : 'rgba(220,38,38,0.15)', color: market.resolution === 'yes' ? '#16a34a' : '#dc2626' }}>
-                    Aufgelöst: {market.resolution === 'yes' ? 'Ja' : 'Nein'}
-                  </span>
-                )}
-              </div>
-              <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text)', lineHeight: 1.35, marginBottom: 8 }}>{market.question}</h1>
-              {market.description && <p style={{ fontSize: 14, color: 'var(--text-muted)', lineHeight: 1.6 }}>{market.description}</p>}
-            </div>
-            <div className="card" style={{ marginBottom: 20 }}>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 10 }}>
-                <span style={{ fontSize: 36, fontWeight: 700, color: isLow ? 'var(--no)' : 'var(--yes)' }}>{prob}%</span>
-                <span style={{ fontSize: 14, color: 'var(--text-muted)' }}>Wahrscheinlichkeit Ja</span>
-              </div>
-              <div className="prob-bar" style={{ height: 8, marginBottom: 0 }}>
-                <div className={`prob-bar-fill ${isLow ? 'low' : ''}`} style={{ width: `${prob}%` }} />
-              </div>
-            </div>
+            <Leaderboard entries={leaderboard} currentUserId={user?.id} />
           </>
         )}
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 20, alignItems: 'start' }}>
-
-          {!isKrypto && (
-            <div className="card">
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>Preisverlauf</div>
-                <div style={{ display: 'flex', gap: 4 }}>
-                  {(['7T', '1M', 'Gesamt'] as Tab[]).map(t => (
-                    <button key={t} onClick={() => setActiveTab(t)} style={{ fontSize: 12, padding: '3px 10px', borderRadius: 6, border: 'none', cursor: 'pointer', background: activeTab === t ? 'var(--accent)' : 'var(--surface)', color: activeTab === t ? '#fff' : 'var(--text-muted)', fontWeight: activeTab === t ? 600 : 400 }}>{t}</button>
-                  ))}
-                </div>
-              </div>
-              {tradeHistory.length === 0
-                ? <div style={{ height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-subtle)', fontSize: 13 }}>Chart erscheint nach der ersten Wette.</div>
-                : <div style={{ height: 200, position: 'relative' }}><canvas ref={chartRef} /></div>}
-              <div style={{ marginTop: 12, fontSize: 12, color: 'var(--text-subtle)' }}>
-                Volumen: {Math.round(market.q_yes + market.q_no).toLocaleString('de')} ₫ · {trades.filter(t => t.shares > 0).length} Trades
-              </div>
-            </div>
-          )}
-
-          {isKrypto && market.resolved && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <div className="card" style={{ textAlign: 'center', padding: '32px 24px' }}>
-                <div style={{ width: 72, height: 72, borderRadius: '50%', background: market.resolution === 'yes' ? '#dcfce7' : '#fee2e2', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', fontSize: 36 }}>
-                  {market.resolution === 'yes' ? '✓' : '✗'}
-                </div>
-                <div style={{ fontSize: 30, fontWeight: 800, marginBottom: 8, color: market.resolution === 'yes' ? '#16a34a' : '#dc2626' }}>
-                  Ergebnis: {market.resolution === 'yes' ? 'Up ↑' : 'Down ↓'}
-                </div>
-                <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 20 }}>
-                  {market.coin}: ${market.start_price?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} → ${market.end_price?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </div>
-                {nextLiveMarket && (
-                  <button onClick={() => router.push(`/markets/${nextLiveMarket.id}`)}
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '12px 24px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: 20, cursor: 'pointer', fontSize: 14, fontWeight: 700 }}>
-                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#fff', display: 'inline-block' }} />
-                    Zum Live-Markt →
-                  </button>
-                )}
-              </div>
-              {otherLiveMarkets.length > 0 && (
-                <div className="card">
-                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 12 }}>Weitere Live-Märkte</div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {otherLiveMarkets.map(m => {
-                      const mProb = calcProb(m.q_yes, m.q_no, m.b)
-                      const mDiff = parseUTC(m.closes_at).getTime() - Date.now()
-                      const mMins = Math.max(0, Math.floor(mDiff / 60000))
-                      const mSecs = Math.max(0, Math.floor((mDiff % 60000) / 1000))
-                      return (
-                        <div key={m.id} onClick={() => router.push(`/markets/${m.id}`)}
-                          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', background: 'var(--surface)', borderRadius: 10, cursor: 'pointer' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#22c55e' }} />
-                            <span style={{ fontWeight: 700, fontSize: 13, color: COIN_COLORS[m.coin ?? ''] ?? '#888' }}>{m.coin}</span>
-                            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Up or Down</span>
-                          </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                            <span style={{ fontSize: 12, color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>{String(mMins).padStart(2,'0')}:{String(mSecs).padStart(2,'0')}</span>
-                            <span style={{ fontSize: 13, fontWeight: 700, color: mProb >= 50 ? 'var(--yes)' : 'var(--no)' }}>{mProb}%</span>
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {isKrypto && !market.resolved && (
-            <div className="card">
-              <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', marginBottom: 12 }}>Marktregeln</div>
-              <div style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.8 }}>
-                <div>Volumen: <strong style={{ color: 'var(--text)' }}>{Math.round(market.q_yes + market.q_no).toLocaleString('de')} ₫</strong></div>
-                <div>Trades: <strong style={{ color: 'var(--text)' }}>{trades.filter(t => t.shares > 0).length}</strong></div>
-                <div style={{ marginTop: 12, padding: '12px', background: 'var(--surface)', borderRadius: 8, fontSize: 12, lineHeight: 1.7 }}>
-                  Ist der {market.coin}-Preis bei Ablauf <strong style={{ color: 'var(--yes)' }}>höher</strong> → <strong style={{ color: 'var(--yes)' }}>Up gewinnt</strong>.<br />
-                  Ist er <strong style={{ color: 'var(--no)' }}>niedriger</strong> → <strong style={{ color: 'var(--no)' }}>Down gewinnt</strong>.
-                </div>
-              </div>
-            </div>
-          )}
-
-          <div className="card" style={{ position: 'sticky', top: 'calc(var(--nav-height) + 16px)', padding: 0, overflow: 'hidden' }}>
-            {market.resolved ? (
-              <div style={{ padding: '24px 16px' }}>
-                <div style={{ textAlign: 'center', marginBottom: 16 }}>
-                  <div style={{ fontSize: 28, marginBottom: 4 }}>{userWon ? '🎉' : hasPosition ? '😔' : '✓'}</div>
-                  <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', marginBottom: 4 }}>
-                    {userWon ? 'Gewonnen!' : hasPosition ? 'Verloren' : 'Markt beendet'}
-                  </div>
-                  <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-                    Ergebnis: <strong style={{ color: market.resolution === 'yes' ? 'var(--yes)' : 'var(--no)', fontSize: 15 }}>
-                      {market.resolution === 'yes' ? (isKrypto ? '↑ Up' : 'Ja') : (isKrypto ? '↓ Down' : 'Nein')}
-                    </strong>
-                  </div>
-                </div>
-                {hasPosition && (
-                  <div style={{ padding: '14px', borderRadius: 10, textAlign: 'center', marginBottom: 14, background: userWon ? 'rgba(22,163,74,0.08)' : 'rgba(220,38,38,0.08)', border: `1px solid ${userWon ? 'rgba(22,163,74,0.2)' : 'rgba(220,38,38,0.2)'}` }}>
-                    {userWon ? (
-                      <>
-                        <div style={{ fontSize: 12, color: '#16a34a', marginBottom: 4 }}>Auszahlung erfolgt automatisch</div>
-                        <div style={{ fontSize: 28, fontWeight: 800, color: '#16a34a' }}>
-                          +{Math.round(market.resolution === 'yes' ? sharesYes : sharesNo)} ₫
-                        </div>
-                      </>
-                    ) : (
-                      <div style={{ fontSize: 13, color: '#dc2626' }}>Leider verloren — nächsten Markt versuchen!</div>
-                    )}
-                  </div>
-                )}
-                {nextLiveMarket && (
-                  <button onClick={() => router.push(`/markets/${nextLiveMarket.id}`)}
-                    style={{ width: '100%', padding: '12px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: 10, cursor: 'pointer', fontSize: 14, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#fff' }} />
-                    Zum Live-Markt →
-                  </button>
-                )}
-                {!nextLiveMarket && (
-                  <div style={{ textAlign: 'center', fontSize: 12, color: 'var(--text-muted)', marginTop: 8 }}>
-                    Nächster Markt wird erstellt…
-                  </div>
-                )}
-              </div>
-            ) : !user ? (
-              <div style={{ textAlign: 'center', padding: '24px 16px' }}>
-                <div style={{ fontSize: 14, color: 'var(--text-muted)', marginBottom: 12 }}>Anmelden um zu handeln</div>
-                <button className="submit-btn yes" onClick={() => router.push('/')}>Zur Anmeldung</button>
-              </div>
-            ) : (
-              <>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border)', padding: '0 16px' }}>
-                  <div style={{ display: 'flex' }}>
-                    {(['kaufen', 'verkaufen'] as TradeTab[]).map(t => (
-                      <button key={t} onClick={() => { setTradeTab(t); setBetError(''); setBetSuccess('') }}
-                        style={{ padding: '12px 14px', fontSize: 13, fontWeight: 600, border: 'none', cursor: 'pointer', background: 'transparent', color: tradeTab === t ? 'var(--text)' : 'var(--text-muted)', borderBottom: tradeTab === t ? '2px solid var(--accent)' : '2px solid transparent', marginBottom: -1 }}>
-                        {t.charAt(0).toUpperCase() + t.slice(1)}
-                      </button>
-                    ))}
-                  </div>
-                  <select value={orderType} onChange={e => setOrderType(e.target.value as OrderType)}
-                    style={{ fontSize: 12, color: 'var(--text-muted)', background: 'transparent', border: '1px solid var(--border)', borderRadius: 6, padding: '4px 8px', cursor: 'pointer' }}>
-                    <option value="markt">Markt</option>
-                    <option value="limit">Limit</option>
-                  </select>
-                </div>
-                <div style={{ padding: 16 }}>
-                  {tradeTab === 'kaufen' && (
-                    <>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 16 }}>
-                        {(['yes', 'no'] as const).map(d => (
-                          <button key={d} onClick={() => setDirection(d)} style={{ padding: '10px 0', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 14, background: direction === d ? (d === 'yes' ? 'rgba(22,163,74,0.15)' : 'rgba(220,38,38,0.15)') : 'var(--surface)', color: direction === d ? (d === 'yes' ? 'var(--yes)' : 'var(--no)') : 'var(--text-muted)', outline: direction === d ? `2px solid ${d === 'yes' ? 'var(--yes)' : 'var(--no)'}` : '2px solid transparent' }}>
-                            {isKrypto ? (d === 'yes' ? `Up · ${prob}¢` : `Down · ${100 - prob}¢`) : (d === 'yes' ? `Ja · ${prob}¢` : `Nein · ${100 - prob}¢`)}
-                          </button>
-                        ))}
-                      </div>
-                      {orderType === 'limit' && (
-                        <div style={{ marginBottom: 14 }}>
-                          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>Limitpreis (¢, 1–99)</div>
-                          <input type="number" min={1} max={99} value={limitPrice} onChange={e => setLimitPrice(Math.min(99, Math.max(1, parseInt(e.target.value) || 1)))} style={{ width: '100%', fontSize: 16, fontWeight: 600 }} />
-                          <div style={{ fontSize: 11, color: 'var(--text-subtle)', marginTop: 4 }}>Aktuell: {direction === 'yes' ? prob : 100 - prob}¢</div>
-                        </div>
-                      )}
-                      <div style={{ marginBottom: 12 }}>
-                        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>Betrag (₫)</div>
-                        <input type="number" min={1} max={Math.min(user.balance, 1000000)} value={spend} onChange={e => setSpend(Math.max(1, Math.min(user.balance, parseInt(e.target.value) || 1)))} style={{ width: '100%', fontSize: 22, fontWeight: 700 }} />
-                        <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
-                          {[50, 100, 200, 500].map(v => (
-                            <button key={v} onClick={() => setSpend(v)} style={{ flex: 1, fontSize: 11, padding: '4px 0', borderRadius: 6, border: '1px solid var(--border)', background: spend === v ? 'var(--accent)' : 'var(--surface)', color: spend === v ? '#fff' : 'var(--text-muted)', cursor: 'pointer' }}>+{v}</button>
-                          ))}
-                        </div>
-                      </div>
-                      {orderType === 'markt' && (
-                        <div style={{ background: 'rgba(22,163,74,0.07)', borderRadius: 10, padding: '14px', marginBottom: 14, textAlign: 'center', border: '1px solid rgba(22,163,74,0.2)' }}>
-                          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Auszahlung wenn {isKrypto ? (direction === 'yes' ? 'Up' : 'Down') : (direction === 'yes' ? 'Ja' : 'Nein')} eintritt</div>
-                          <div style={{ fontSize: 32, fontWeight: 800, color: '#16a34a', letterSpacing: '-0.5px' }}>{payout} ₫</div>
-                        </div>
-                      )}
-                      {orderType === 'limit' && (
-                        <div style={{ background: 'var(--surface)', borderRadius: 10, padding: '12px', marginBottom: 14, fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.6 }}>
-                          Order wird ausgeführt wenn der Kurs {limitPrice}¢ erreicht.
-                        </div>
-                      )}
-                    </>
-                  )}
-                  {tradeTab === 'verkaufen' && (
-                    <>
-                      {!hasPosition ? (
-                        <div style={{ textAlign: 'center', padding: '24px 0', fontSize: 13, color: 'var(--text-muted)' }}>Du hast keine Anteile in diesem Markt.</div>
-                      ) : (
-                        <>
-                          <div style={{ background: 'var(--surface)', borderRadius: 8, padding: '12px', marginBottom: 16, fontSize: 13 }}>
-                            <div style={{ color: 'var(--text-muted)', marginBottom: 4, fontSize: 12 }}>Deine Position</div>
-                            {sharesYes > 0 && <div style={{ fontWeight: 700, color: 'var(--yes)' }}>{isKrypto ? 'Up' : 'Ja'} · {Math.round(sharesYes)} Anteile</div>}
-                            {sharesNo  > 0 && <div style={{ fontWeight: 700, color: 'var(--no)'  }}>{isKrypto ? 'Down' : 'Nein'} · {Math.round(sharesNo)} Anteile</div>}
-                          </div>
-                          {orderType === 'markt' && (
-                            <div style={{ background: 'rgba(22,163,74,0.07)', borderRadius: 10, padding: '14px', marginBottom: 14, textAlign: 'center', border: '1px solid rgba(22,163,74,0.2)' }}>
-                              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Du erhältst jetzt</div>
-                              <div style={{ fontSize: 32, fontWeight: 800, color: '#16a34a', letterSpacing: '-0.5px' }}>{Math.round(returnOnSell)} ₫</div>
-                              <div style={{ fontSize: 11, color: 'var(--text-subtle)', marginTop: 4 }}>alle Anteile verkaufen</div>
-                            </div>
-                          )}
-                        </>
-                      )}
-                    </>
-                  )}
-                  {betError   && <div className="alert alert-error"   style={{ marginBottom: 10 }}>{betError}</div>}
-                  {betSuccess  && <div className="alert alert-success" style={{ marginBottom: 10 }}>{betSuccess}</div>}
-                  {tradeTab === 'kaufen' ? (
-                    <button className={`submit-btn ${direction === 'yes' ? 'yes' : 'no'}`} onClick={handleKaufen} disabled={betLoading || spend <= 0} style={{ width: '100%' }}>
-                      {betLoading ? 'Wird ausgeführt…' : orderType === 'limit' ? `Limit: ${isKrypto ? (direction === 'yes' ? 'Up' : 'Down') : (direction === 'yes' ? 'Ja' : 'Nein')} @ ${limitPrice}¢` : `${isKrypto ? (direction === 'yes' ? 'Up' : 'Down') : (direction === 'yes' ? 'Ja' : 'Nein')} kaufen · ${spend} ₫`}
-                    </button>
-                  ) : (
-                    <button className="submit-btn no" onClick={handleVerkaufen} disabled={betLoading || !hasPosition} style={{ width: '100%' }}>
-                      {betLoading ? 'Wird verkauft…' : `Verkaufen · ${Math.round(returnOnSell)} ₫`}
-                    </button>
-                  )}
-                  <div style={{ fontSize: 11, color: 'var(--text-subtle)', textAlign: 'center', marginTop: 8 }}>Guthaben: {user.balance.toLocaleString('de')} ₫</div>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-
-        {trades.filter(t => t.shares > 0).length > 0 && (
-          <div className="card" style={{ marginTop: 20 }}>
-            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', marginBottom: 14 }}>Letzte Trades</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {[...trades].filter(t => t.shares > 0).reverse().slice(0, 10).map(t => (
-                <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, padding: '6px 0', borderBottom: '1px solid var(--border)' }}>
-                  <span style={{ color: t.type.includes('yes') ? 'var(--yes)' : 'var(--no)', fontWeight: 600 }}>
-                    {isKrypto ? (t.type.includes('yes') ? 'Up' : 'Down') : (t.type.includes('yes') ? 'Ja' : 'Nein')}
-                  </span>
-                  <span style={{ color: 'var(--text)' }}>{Math.round(Math.abs(t.cost))} ₫</span>
-                  <span style={{ color: 'var(--text-subtle)' }}>
-                    {new Date(t.created_at).toLocaleDateString('de', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
+        {view === 'portfolio' && user && (
+          <PortfolioView userId={user.id} router={router} />
         )}
-      </div>
+      </main>
 
       <style>{`
         @keyframes slideInRight {
@@ -1067,5 +582,178 @@ export default function MarketPage() {
         }
       `}</style>
     </>
+  )
+}
+
+function MarketsGrid({ markets, onOpen }: { markets: Market[]; onOpen: (id: string) => void }) {
+  const groups: Record<string, Market[]> = {}
+  const ungrouped: Market[] = []
+
+  markets.forEach((m) => {
+    if (m.group_title) {
+      if (!groups[m.group_title]) groups[m.group_title] = []
+      groups[m.group_title].push(m)
+    } else if (m.display_group) {
+      if (!groups[`__dg__${m.display_group}`]) groups[`__dg__${m.display_group}`] = []
+      groups[`__dg__${m.display_group}`].push(m)
+    } else {
+      ungrouped.push(m)
+    }
+  })
+
+  return (
+    <div>
+      {ungrouped.length > 0 && (
+        <div className="markets-grid">
+          {ungrouped.map((m) => <MarketCard key={m.id} market={m} onClick={() => onOpen(m.id)} />)}
+        </div>
+      )}
+      {Object.entries(groups).map(([key, mts]) => {
+        const isDisplay = key.startsWith('__dg__')
+        const label = isDisplay ? key.replace('__dg__', '') : key
+        return (
+          <div key={key}>
+            <div className={isDisplay ? 'display-group-header' : 'group-header'}>{label}</div>
+            <div className="markets-grid">
+              {mts.map((m) => <MarketCard key={m.id} market={m} onClick={() => onOpen(m.id)} />)}
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function MarketCard({ market, onClick }: { market: Market; onClick: () => void }) {
+  const prob = calcProb(market.q_yes, market.q_no, market.b)
+  const isLow = prob < 50
+  const catClass = CAT_CLASS[market.category ?? ''] ?? ''
+
+  return (
+    <div className="market-card" onClick={onClick}>
+      <div className="market-card-meta">
+        {market.category && <span className={`cat-badge ${catClass}`}>{market.category}</span>}
+        {market.is_auto && <div className="live-dot" title="Live" />}
+      </div>
+      <div className="market-card-question">{market.short_label ?? market.question}</div>
+      <div className="prob-bar">
+        <div className={`prob-bar-fill ${isLow ? 'low' : ''}`} style={{ width: `${prob}%` }} />
+      </div>
+      <div className="market-card-footer">
+        <div className={`market-prob ${isLow ? 'low' : ''}`}>{prob}%</div>
+        <div className="market-volume">{Math.round(market.q_yes + market.q_no)} ₫ Vol.</div>
+      </div>
+      <div className="bet-btns">
+        <button className="btn-yes" onClick={(e) => { e.stopPropagation(); onClick() }}>Ja {prob}%</button>
+        <button className="btn-no" onClick={(e) => { e.stopPropagation(); onClick() }}>Nein {100 - prob}%</button>
+      </div>
+    </div>
+  )
+}
+
+function Leaderboard({ entries, currentUserId }: { entries: LeaderboardEntry[]; currentUserId?: string }) {
+  const rankClass = (i: number) => i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : ''
+
+  return (
+    <div className="leaderboard">
+      {entries.map((e, i) => {
+        const initials = e.username.slice(0, 2).toUpperCase()
+        const av = avatarColor(e.username)
+        const isMe = e.user_id === currentUserId
+        return (
+          <div key={e.user_id} className="lb-row" style={isMe ? { background: 'var(--accent-light)' } : {}}>
+            <div className={`lb-rank ${rankClass(i)}`}>{i + 1}</div>
+            <div className="lb-avatar" style={{ background: av.bg, color: av.color }}>
+              {e.avatar_url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={e.avatar_url} alt={e.username}
+                  style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+              ) : initials}
+            </div>
+            <div className="lb-name">{e.username}{isMe && <span className="lb-badge">Du</span>}</div>
+            <div className="lb-score">{e.total_balance.toLocaleString('de')} ₫</div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function PortfolioView({ userId, router }: {
+  userId: string
+  router: ReturnType<typeof useRouter>
+}) {
+  interface Position {
+    market_id: string
+    direction: string
+    amount: number
+    question: string
+    q_yes: number
+    q_no: number
+    b: number
+    resolved: boolean
+    resolution?: string
+  }
+
+  const [positions, setPositions] = useState<Position[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    dbGet('positions', `user_id=eq.${userId}&select=*`).then(async (posData) => {
+      if (!posData || posData.length === 0) { setLoading(false); return }
+      const ids = posData.map((p: { market_id: string }) => p.market_id).join(',')
+      const mktData = await dbGet('markets', `id=in.(${ids})&select=id,question,q_yes,q_no,b,resolved,resolution`)
+      const mktMap: Record<string, Market> = {}
+      mktData?.forEach((m: Market) => { mktMap[m.id] = m })
+      setPositions(posData.map((p: { market_id: string; direction: string; amount: number }) => ({
+        ...p, ...mktMap[p.market_id],
+      })))
+      setLoading(false)
+    })
+  }, [userId])
+
+  if (loading) return <div style={{ color: 'var(--text-muted)', padding: '24px 0' }}>Portfolio wird geladen…</div>
+
+  if (positions.length === 0) return (
+    <div className="card" style={{ textAlign: 'center', padding: 32 }}>
+      <div style={{ fontSize: 14, color: 'var(--text-muted)', marginBottom: 8 }}>Noch keine Positionen.</div>
+      <div style={{ fontSize: 13, color: 'var(--text-subtle)' }}>Platziere deine erste Wette auf einen Markt.</div>
+    </div>
+  )
+
+  return (
+    <div>
+      <div className="section-head">
+        <div className="section-title">Mein Portfolio</div>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {positions.map((p, i) => {
+          const prob = calcProb(p.q_yes, p.q_no, p.b)
+          const isYes = p.direction === 'yes'
+          return (
+            <div key={i} className="card" style={{ cursor: 'pointer' }}
+              onClick={() => router.push(`/markets/${p.market_id}`)}>
+              <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 8, color: 'var(--text)' }}>{p.question}</div>
+              <div style={{ display: 'flex', gap: 16, fontSize: 13, flexWrap: 'wrap' }}>
+                <span style={{ color: 'var(--text-muted)' }}>
+                  Position: <strong style={{ color: isYes ? 'var(--yes)' : 'var(--no)' }}>{isYes ? 'Ja' : 'Nein'}</strong>
+                </span>
+                <span style={{ color: 'var(--text-muted)' }}>
+                  Einsatz: <strong style={{ color: 'var(--text)' }}>{p.amount} ₫</strong>
+                </span>
+                <span style={{ color: 'var(--text-muted)' }}>
+                  Aktuell: <strong style={{ color: 'var(--text)' }}>{prob}%</strong>
+                </span>
+                {p.resolved && (
+                  <span className={`pos-badge ${p.resolution === p.direction ? 'pos-yes' : 'pos-no'}`}>
+                    {p.resolution === p.direction ? 'Gewonnen' : 'Verloren'}
+                  </span>
+                )}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
   )
 }
