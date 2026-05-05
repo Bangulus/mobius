@@ -94,7 +94,7 @@ function parseUTC(raw: string): Date {
   return new Date(raw.replace(' ', 'T') + 'Z')
 }
 
-const CATEGORIES = ['Alle', 'Politik', 'Sport', 'Krypto', 'Entertainment', 'Wirtschaft']
+const CATEGORIES = ['Alle', 'Politik', 'Sport', 'Krypto', 'Entertainment', 'Wirtschaft', 'Geopolitik', 'Finanzen', 'Wetter', 'Kultur']
 const COINS      = ['BTC', 'ETH', 'SOL', 'XRP']
 
 const CAT_CLASS: Record<string, string> = {
@@ -103,6 +103,10 @@ const CAT_CLASS: Record<string, string> = {
   Krypto:        'cat-krypto',
   Entertainment: 'cat-entertainment',
   Wirtschaft:    'cat-wirtschaft',
+  Geopolitik:    'cat-politik',
+  Finanzen:      'cat-wirtschaft',
+  Wetter:        'cat-sport',
+  Kultur:        'cat-entertainment',
 }
 
 const COIN_COLORS: Record<string, string> = {
@@ -189,7 +193,7 @@ export default function Home() {
   }, [])
 
   useEffect(() => {
-    loadMarkets(true)  // nur beim initialen Laden mit Loading-Indikator
+    loadMarkets(true)
     loadLeaderboard()
   }, [loadMarkets, loadLeaderboard])
 
