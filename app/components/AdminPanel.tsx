@@ -12,7 +12,7 @@ const COINS = [
   { id: 'XRP', label: '✕ XRP', color: '#00aae4' },
 ];
 
-const CATEGORIES = ['Politik', 'Sport', 'Krypto', 'Entertainment', 'Wirtschaft'];
+const CATEGORIES = ['Politik', 'Sport', 'Krypto', 'Entertainment', 'Wirtschaft', 'Geopolitik', 'Finanzen', 'Wetter', 'Kultur'];
 
 interface Props {
   userId: string;
@@ -210,7 +210,6 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
     setResolvedMarketDetails(details);
   }
 
-  // ── Shared input style ──
   const inputStyle: React.CSSProperties = {
     width: '100%',
     padding: '10px 12px',
@@ -239,7 +238,7 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
     color: active ? 'white' : 'var(--text-muted)',
     border: `1px solid ${active ? accent : 'var(--border)'}`,
     borderRadius: 8,
-    cursor: 'pointer',
+    cursor: 'pointer' as const,
     fontSize: 13,
     fontWeight: 600,
   });
@@ -248,9 +247,9 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
     <div>
       {/* ── Tab Bar ── */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 24, flexWrap: 'wrap' }}>
-        <button style={tabBtn(adminTab === 'open')}         onClick={() => setAdminTab('open')}>Offene Märkte</button>
-        <button style={tabBtn(adminTab === 'resolved')}     onClick={() => { setAdminTab('resolved'); loadResolvedMarketDetails(); }}>Aufgelöste Märkte</button>
-        <button style={tabBtn(adminTab === 'btc', '#f59e0b')} onClick={() => setAdminTab('btc')}>🪙 Krypto-Märkte</button>
+        <button style={tabBtn(adminTab === 'open')}              onClick={() => setAdminTab('open')}>Offene Märkte</button>
+        <button style={tabBtn(adminTab === 'resolved')}          onClick={() => { setAdminTab('resolved'); loadResolvedMarketDetails(); }}>Aufgelöste Märkte</button>
+        <button style={tabBtn(adminTab === 'btc', '#f59e0b')}    onClick={() => setAdminTab('btc')}>🪙 Krypto-Märkte</button>
         <button style={tabBtn(adminTab === 'create', '#16a34a')} onClick={() => setAdminTab('create')}>＋ Markt erstellen</button>
       </div>
 
