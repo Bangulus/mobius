@@ -245,7 +245,10 @@ export default function MarketPage() {
   const [resultToast, setResultToast] = useState<ResultToast | null>(null)
   const toastShownRef                 = useRef(false)
 
-  // Token aus localStorage holen
+  // FIX: stable interval refs — prevent watchdog from restarting interval every second
+  const currentIntervalMs = useRef(10000)
+  const intervalRef       = useRef<ReturnType<typeof setInterval> | null>(null)
+
   function getToken(): string | null {
     try {
       const saved = localStorage.getItem('mobius_session')
@@ -320,11 +323,12 @@ export default function MarketPage() {
   useEffect(() => {
     loadMarket(); loadTrades(); loadLiveMarkets()
 
-    let interval: ReturnType<typeof setInterval>
-
+    // FIX: only restart interval when ms value actually changes
     const startInterval = (ms: number) => {
-      clearInterval(interval)
-      interval = setInterval(() => {
+      if (ms === currentIntervalMs.current && intervalRef.current !== null) return
+      currentIntervalMs.current = ms
+      if (intervalRef.current) clearInterval(intervalRef.current)
+      intervalRef.current = setInterval(() => {
         loadMarket(); loadTrades(); loadLiveMarkets()
       }, ms)
     }
@@ -353,7 +357,9 @@ export default function MarketPage() {
     }, 1000)
 
     return () => {
-      clearInterval(interval)
+      if (intervalRef.current) clearInterval(intervalRef.current)
+      intervalRef.current = null
+      currentIntervalMs.current = 10000
       clearInterval(watchdog)
       if (liveMarketPollRef.current) clearInterval(liveMarketPollRef.current)
     }
@@ -525,7 +531,6 @@ export default function MarketPage() {
     return () => { if (chartInstance.current) (chartInstance.current as { destroy: () => void }).destroy() }
   }, [tradeHistory, activeTab, market?.is_auto])
 
-  // ── KAUFEN via /api/place-bet ──
   async function handleKaufen() {
     if (!user || !market) return
     if (spend <= 0 || spend > 1000000) { setBetError('Ungültiger Betrag.'); return }
@@ -542,18 +547,12 @@ export default function MarketPage() {
 
     const res = await fetch('/api/place-bet', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
       body: JSON.stringify({ marketId, action: 'buy', direction, spend }),
     })
     const data = await res.json()
 
-    if (!res.ok) {
-      setBetError(data.error ?? 'Fehler beim Platzieren.')
-      setBetLoading(false); return
-    }
+    if (!res.ok) { setBetError(data.error ?? 'Fehler beim Platzieren.'); setBetLoading(false); return }
 
     setUser(prev => prev ? { ...prev, balance: data.newBalance } : prev)
     setBetSuccess('Wette platziert ✓')
@@ -562,7 +561,6 @@ export default function MarketPage() {
     setTimeout(() => setBetSuccess(''), 2500)
   }
 
-  // ── VERKAUFEN via /api/place-bet ──
   async function handleVerkaufen() {
     if (!user || !market || !position) return
     setBetLoading(true); setBetError('')
@@ -572,18 +570,12 @@ export default function MarketPage() {
 
     const res = await fetch('/api/place-bet', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
       body: JSON.stringify({ marketId, action: 'sell', direction, spend }),
     })
     const data = await res.json()
 
-    if (!res.ok) {
-      setBetError(data.error ?? 'Fehler beim Verkaufen.')
-      setBetLoading(false); return
-    }
+    if (!res.ok) { setBetError(data.error ?? 'Fehler beim Verkaufen.'); setBetLoading(false); return }
 
     setUser(prev => prev ? { ...prev, balance: data.newBalance } : prev)
     setBetSuccess(`${data.returned} ₫ erhalten ✓`)
@@ -1077,3 +1069,4 @@ export default function MarketPage() {
     </>
   )
 }
+
