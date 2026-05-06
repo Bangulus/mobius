@@ -438,10 +438,158 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, o
 
       {/* ── AKTIVITÄT ── */}
       {tab === 'aktivitaet' && (
-        <div className="card" style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)', fontSize: 13 }}>
-          Aktivitäts-Feed kommt bald.
-        </div>
+        <AktivitaetsFeed userId={userId} />
       )}
+    </div>
+  );
+}
+
+const COIN_COLORS_FEED: Record<string, string> = {
+  BTC: '#f59e0b', ETH: '#6366f1', SOL: '#9945ff', XRP: '#00aae4',
+};
+
+interface FeedTrade {
+  id: string;
+  market_id: string;
+  type: string;
+  shares: number;
+  cost: number;
+  created_at: string;
+  market?: {
+    question: string;
+    is_auto: boolean;
+    coin?: string;
+    resolved: boolean;
+    resolution?: string;
+  };
+}
+
+function AktivitaetsFeed({ userId }: { userId: string }) {
+  const [trades, setTrades] = useState<FeedTrade[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function load() {
+      setLoading(true);
+      const raw: FeedTrade[] = await dbGet('trades', `user_id=eq.${userId}&select=*&order=created_at.desc&limit=50`);
+      if (!raw || raw.length === 0) { setLoading(false); return; }
+
+      const seen: Record<string, boolean> = {};
+      const marketIds: string[] = [];
+      raw.forEach(t => { if (!seen[t.market_id]) { seen[t.market_id] = true; marketIds.push(t.market_id); } });
+
+      const markets = await dbGet('markets', `id=in.(${marketIds.join(',')})&select=id,question,is_auto,coin,resolved,resolution`);
+      const mMap: Record<string, FeedTrade['market']> = {};
+      markets?.forEach((m: { id: string; question: string; is_auto: boolean; coin?: string; resolved: boolean; resolution?: string }) => { mMap[m.id] = m; });
+
+      setTrades(raw.map(t => ({ ...t, market: mMap[t.market_id] })));
+      setLoading(false);
+    }
+    load();
+  }, [userId]);
+
+  function formatTime(iso: string) {
+    const d = new Date(iso);
+    const diff = Date.now() - d.getTime();
+    const min = Math.floor(diff / 60000);
+    const h   = Math.floor(diff / 3600000);
+    const day = Math.floor(diff / 86400000);
+    if (min < 1)  return 'Gerade eben';
+    if (min < 60) return `vor ${min} Min.`;
+    if (h < 24)   return `vor ${h} Std.`;
+    if (day < 7)  return `vor ${day} Tag${day > 1 ? 'en' : ''}`;
+    return d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' });
+  }
+
+  function tradeText(t: FeedTrade): { main: string; sub: string; amountColor: string; amount: string } {
+    const m = t.market;
+    const isBuy  = t.type.startsWith('buy');
+    const isSell = t.type.startsWith('sell');
+    const isYes  = t.type.includes('yes');
+
+    const marketLabel = m
+      ? (m.is_auto ? `${m.coin} · 3-Min-Markt` : (m.question.length > 48 ? m.question.slice(0, 48) + '…' : m.question))
+      : 'Unbekannter Markt';
+
+    const dirLabel = m?.is_auto
+      ? (isYes ? 'Up ↑' : 'Down ↓')
+      : (isYes ? 'Ja' : 'Nein');
+
+    if (isBuy) return {
+      main: marketLabel,
+      sub: `Gesetzt auf ${dirLabel}`,
+      amountColor: 'var(--text)',
+      amount: `–${Math.round(Math.abs(t.cost)).toLocaleString('de')} ₫`,
+    };
+    if (isSell) return {
+      main: marketLabel,
+      sub: `Verkauft · ${dirLabel}`,
+      amountColor: 'var(--yes)',
+      amount: `+${Math.round(Math.abs(t.cost)).toLocaleString('de')} ₫`,
+    };
+    return { main: marketLabel, sub: '', amountColor: 'var(--text)', amount: '' };
+  }
+
+  if (loading) return (
+    <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--text-muted)', fontSize: 13 }}>Wird geladen…</div>
+  );
+
+  if (trades.length === 0) return (
+    <div className="card" style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)', fontSize: 13 }}>
+      Noch keine Aktivität.
+    </div>
+  );
+
+  return (
+    <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+      {trades.map((t, idx) => {
+        const { main, sub, amountColor, amount } = tradeText(t);
+        const m = t.market;
+        const coinColor = m?.is_auto && m.coin ? COIN_COLORS_FEED[m.coin] ?? '#f97316' : null;
+        const isYes = t.type.includes('yes');
+        const isBuy = t.type.startsWith('buy');
+
+        return (
+          <div key={t.id} style={{
+            display: 'flex', alignItems: 'center', gap: 14,
+            padding: '14px 20px',
+            borderBottom: idx < trades.length - 1 ? '1px solid var(--border)' : 'none',
+          }}>
+            {/* Icon */}
+            {coinColor ? (
+              <div style={{ width: 36, height: 36, borderRadius: 10, flexShrink: 0, background: coinColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, color: '#fff' }}>
+                {m?.coin?.charAt(0)}
+              </div>
+            ) : (
+              <div style={{
+                width: 36, height: 36, borderRadius: 10, flexShrink: 0,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16,
+                background: isBuy
+                  ? (isYes ? 'rgba(22,163,74,0.12)' : 'rgba(220,38,38,0.12)')
+                  : 'rgba(99,102,241,0.12)',
+              }}>
+                {isBuy ? (isYes ? '↑' : '↓') : '⇄'}
+              </div>
+            )}
+
+            {/* Text */}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {main}
+              </div>
+              {sub && (
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{sub}</div>
+              )}
+            </div>
+
+            {/* Betrag + Zeit */}
+            <div style={{ textAlign: 'right', flexShrink: 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: amountColor }}>{amount}</div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{formatTime(t.created_at)}</div>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
