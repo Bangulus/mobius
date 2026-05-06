@@ -71,28 +71,24 @@ type TabType = 'positionen' | 'aktivitaet';
 type SubTabType = 'aktiv' | 'geschlossen';
 
 export default function ProfileView({ userId, displayName, avatarUrl, balance, onUsernameChange, onAvatarChange }: Props) {
-  const [newUsername, setNewUsername]         = useState(displayName);
-  const [uploadingAvatar, setUploadingAvatar] = useState(false);
-  const [savingUsername, setSavingUsername]   = useState(false);
-  const [profileMessage, setProfileMessage]   = useState('');
-  const [editingUsername, setEditingUsername] = useState(false);
-
-  const [tab, setTab]       = useState<TabType>('positionen');
-  const [subTab, setSubTab] = useState<SubTabType>('aktiv');
-
-  const [allRows, setAllRows]               = useState<PortfolioEntry[]>([]);
+  const [newUsername, setNewUsername]           = useState(displayName);
+  const [uploadingAvatar, setUploadingAvatar]   = useState(false);
+  const [savingUsername, setSavingUsername]     = useState(false);
+  const [profileMessage, setProfileMessage]     = useState('');
+  const [editingUsername, setEditingUsername]   = useState(false);
+  const [tab, setTab]                           = useState<TabType>('positionen');
+  const [subTab, setSubTab]                     = useState<SubTabType>('aktiv');
+  const [allRows, setAllRows]                   = useState<PortfolioEntry[]>([]);
   const [portfolioLoading, setPortfolioLoading] = useState(true);
 
-  const totalEinsatz    = allRows.reduce((s, r) => s + r.einsatz, 0);
-  const totalAusbe      = allRows.filter(r => r.auszahlung !== null && r.auszahlung > 0).reduce((s, r) => s + (r.auszahlung ?? 0), 0);
-  const offeneCount     = allRows.filter(r => !r.market.resolved).length;
-  const geschlossen     = allRows.filter(r => r.market.resolved);
-  const gewonnen        = geschlossen.filter(r => r.auszahlung !== null && r.auszahlung > 0);
-  const groessterGewinn = gewonnen.length > 0 ? Math.max(...gewonnen.map(r => r.auszahlung ?? 0)) : 0;
-
-  const aktiveRows      = allRows.filter(r => !r.market.resolved);
+  const totalEinsatz     = allRows.reduce((s, r) => s + r.einsatz, 0);
+  const totalAusbe       = allRows.filter(r => r.auszahlung !== null && r.auszahlung > 0).reduce((s, r) => s + (r.auszahlung ?? 0), 0);
+  const offeneCount      = allRows.filter(r => !r.market.resolved).length;
+  const gewonnen         = allRows.filter(r => r.market.resolved && r.auszahlung !== null && r.auszahlung > 0);
+  const groessterGewinn  = gewonnen.length > 0 ? Math.max(...gewonnen.map(r => r.auszahlung ?? 0)) : 0;
+  const aktiveRows       = allRows.filter(r => !r.market.resolved);
   const geschlosseneRows = allRows.filter(r => r.market.resolved);
-  const displayRows     = subTab === 'aktiv' ? aktiveRows : geschlosseneRows;
+  const displayRows      = subTab === 'aktiv' ? aktiveRows : geschlosseneRows;
 
   const loadPortfolio = useCallback(async () => {
     setPortfolioLoading(true);
@@ -108,14 +104,12 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, o
     markets.forEach(m => { marketMap[m.id] = m; });
 
     const entryMap: Record<string, PortfolioEntry> = {};
-
     for (const trade of trades) {
       const market = marketMap[trade.market_id];
       if (!market) continue;
       const isBuy  = trade.type === 'buy_yes' || trade.type === 'buy_no';
       const isSell = trade.type === 'sell_yes' || trade.type === 'sell_no';
       const dir: 'yes' | 'no' = trade.type.includes('yes') ? 'yes' : 'no';
-
       if (!entryMap[trade.market_id]) {
         entryMap[trade.market_id] = { market, einsatz: 0, direction: dir, auszahlung: null };
       }
@@ -123,7 +117,6 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, o
       if (isBuy)  { entry.einsatz += Math.abs(trade.cost); entry.direction = dir; }
       if (isSell) { entry.auszahlung = (entry.auszahlung ?? 0) + Math.abs(trade.cost); }
     }
-
     for (const entry of Object.values(entryMap)) {
       const m = entry.market;
       if (!m.resolved || entry.auszahlung !== null) continue;
@@ -136,15 +129,11 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, o
         entry.auszahlung = 0;
       }
     }
-
     setAllRows(Object.values(entryMap));
     setPortfolioLoading(false);
   }, [userId]);
 
-  useEffect(() => {
-    if (!userId) return;
-    loadPortfolio();
-  }, [userId, loadPortfolio]);
+  useEffect(() => { if (userId) loadPortfolio(); }, [userId, loadPortfolio]);
 
   async function saveUsername() {
     if (!newUsername.trim()) return;
@@ -188,17 +177,12 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, o
     <div style={{ maxWidth: 900, margin: '0 auto' }}>
 
       {/* ── HEADER ── */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: '1fr 340px',
-        gap: 16,
-        marginBottom: 24,
-      }}>
-        {/* Linke Seite: Avatar + Stats */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 16, marginBottom: 24 }}>
+
+        {/* Links */}
         <div className="card" style={{ padding: '28px 28px 24px' }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 20, marginBottom: 24 }}>
-            {/* Avatar */}
-            <div style={{ position: 'relative', flexShrink: 0 }}>
+            <div style={{ flexShrink: 0 }}>
               {avatarUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={avatarUrl} alt="Avatar" style={{ width: 80, height: 80, borderRadius: '50%', objectFit: 'cover' }} />
@@ -208,37 +192,25 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, o
                 </div>
               )}
             </div>
-
-            {/* Name + Meta */}
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
                 {editingUsername ? (
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                    <input
-                      type="text"
-                      value={newUsername}
-                      onChange={e => setNewUsername(e.target.value)}
-                      autoFocus
+                    <input type="text" value={newUsername} onChange={e => setNewUsername(e.target.value)} autoFocus
                       onKeyDown={e => { if (e.key === 'Enter') saveUsername(); if (e.key === 'Escape') setEditingUsername(false); }}
-                      style={{ fontSize: 20, fontWeight: 700, padding: '4px 10px', borderRadius: 8, border: '1.5px solid var(--accent)', background: 'var(--surface)', color: 'var(--text)', width: 200 }}
-                    />
+                      style={{ fontSize: 20, fontWeight: 700, padding: '4px 10px', borderRadius: 8, border: '1.5px solid var(--accent)', background: 'var(--surface)', color: 'var(--text)', width: 200 }} />
                     <button onClick={saveUsername} disabled={savingUsername}
                       style={{ padding: '4px 14px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
                       {savingUsername ? '…' : 'Speichern'}
                     </button>
                     <button onClick={() => setEditingUsername(false)}
-                      style={{ padding: '4px 10px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', fontSize: 13, color: 'var(--text-muted)' }}>
-                      ✕
-                    </button>
+                      style={{ padding: '4px 10px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', fontSize: 13, color: 'var(--text-muted)' }}>✕</button>
                   </div>
                 ) : (
                   <>
                     <span style={{ fontSize: 22, fontWeight: 700, color: 'var(--text)' }}>{displayName}</span>
-                    <button onClick={() => setEditingUsername(true)}
-                      title="Name ändern"
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: '2px 4px', fontSize: 14, lineHeight: 1, borderRadius: 4, display: 'flex', alignItems: 'center' }}>
-                      ✎
-                    </button>
+                    <button onClick={() => setEditingUsername(true)} title="Name ändern"
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: '2px 4px', fontSize: 14, lineHeight: 1, borderRadius: 4 }}>✎</button>
                   </>
                 )}
               </div>
@@ -248,25 +220,20 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, o
                 <span>{allRows.length} Prognosen</span>
               </div>
               {profileMessage && (
-                <div style={{ marginTop: 8, fontSize: 12, color: profileMessage.startsWith('Fehler') ? 'var(--no)' : 'var(--yes)' }}>
-                  {profileMessage}
-                </div>
+                <div style={{ marginTop: 8, fontSize: 12, color: profileMessage.startsWith('Fehler') ? 'var(--no)' : 'var(--yes)' }}>{profileMessage}</div>
               )}
             </div>
-
-            {/* Avatar-Upload */}
             <label style={{ fontSize: 12, padding: '6px 14px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 20, cursor: 'pointer', color: 'var(--text)', fontWeight: 600, flexShrink: 0, whiteSpace: 'nowrap' }}>
               {uploadingAvatar ? 'Lädt…' : 'Bild ändern'}
               <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => { if (e.target.files?.[0]) uploadAvatar(e.target.files[0]); }} />
             </label>
           </div>
 
-          {/* Kennzahlen */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 1, borderTop: '1px solid var(--border)', paddingTop: 20 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', borderTop: '1px solid var(--border)', paddingTop: 20 }}>
             {[
-              { label: 'Portfoliowert', value: `${Math.round(balance ?? 0).toLocaleString('de')} ₫`, color: 'var(--text)' },
+              { label: 'Portfoliowert',  value: `${Math.round(balance ?? 0).toLocaleString('de')} ₫`, color: 'var(--text)' },
               { label: 'Größter Gewinn', value: groessterGewinn > 0 ? `+${Math.round(groessterGewinn).toLocaleString('de')} ₫` : '—', color: groessterGewinn > 0 ? 'var(--yes)' : 'var(--text-muted)' },
-              { label: 'Prognosen', value: String(allRows.length), color: 'var(--text)' },
+              { label: 'Prognosen',      value: String(allRows.length), color: 'var(--text)' },
             ].map((s, i) => (
               <div key={s.label} style={{ paddingLeft: i > 0 ? 20 : 0, borderLeft: i > 0 ? '1px solid var(--border)' : 'none' }}>
                 <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{s.label}</div>
@@ -276,20 +243,16 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, o
           </div>
         </div>
 
-        {/* Rechte Seite: Gewinn/Verlust-Card */}
+        {/* Rechts: Gewinn/Verlust */}
         <div className="card" style={{ padding: '24px 24px 20px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--yes)' }} />
-              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Gewinn / Verlust</span>
-            </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+            <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--yes)' }} />
+            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Gewinn / Verlust</span>
           </div>
-
           <div style={{ fontSize: 32, fontWeight: 800, color: totalAusbe - totalEinsatz >= 0 ? 'var(--yes)' : 'var(--no)', letterSpacing: '-1px', marginBottom: 4 }}>
             {totalAusbe - totalEinsatz >= 0 ? '+' : ''}{Math.round(totalAusbe - totalEinsatz).toLocaleString('de')} ₫
           </div>
           <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 20 }}>Gesamt</div>
-
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div style={{ background: 'rgba(22,163,74,0.06)', borderRadius: 10, padding: '10px 14px' }}>
               <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Eingesetzt</div>
@@ -300,7 +263,6 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, o
               <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--yes)' }}>+{Math.round(totalAusbe).toLocaleString('de')} ₫</div>
             </div>
           </div>
-
           <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Offene Positionen</span>
             <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>{offeneCount}</span>
@@ -309,18 +271,16 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, o
       </div>
 
       {/* ── TABS ── */}
-      <div style={{ borderBottom: '1px solid var(--border)', marginBottom: 20, display: 'flex', gap: 0 }}>
+      <div style={{ borderBottom: '1px solid var(--border)', marginBottom: 20, display: 'flex' }}>
         {(['positionen', 'aktivitaet'] as TabType[]).map(t => (
-          <button key={t} onClick={() => setTab(t)}
-            style={{
-              background: 'none', border: 'none', cursor: 'pointer',
-              padding: '10px 20px',
-              fontSize: 14, fontWeight: tab === t ? 700 : 500,
-              color: tab === t ? 'var(--text)' : 'var(--text-muted)',
-              borderBottom: tab === t ? '2px solid var(--accent)' : '2px solid transparent',
-              marginBottom: -1,
-              transition: 'color 0.15s',
-            }}>
+          <button key={t} onClick={() => setTab(t)} style={{
+            background: 'none', border: 'none', cursor: 'pointer',
+            padding: '10px 20px', fontSize: 14,
+            fontWeight: tab === t ? 700 : 500,
+            color: tab === t ? 'var(--text)' : 'var(--text-muted)',
+            borderBottom: tab === t ? '2px solid var(--accent)' : '2px solid transparent',
+            marginBottom: -1, transition: 'color 0.15s',
+          }}>
             {t === 'positionen' ? 'Positionen' : 'Aktivität'}
           </button>
         ))}
@@ -329,16 +289,15 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, o
       {/* ── POSITIONEN ── */}
       {tab === 'positionen' && (
         <>
-          <div style={{ display: 'flex', gap: 8, marginBottom: 20, alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
             {(['aktiv', 'geschlossen'] as SubTabType[]).map(s => (
-              <button key={s} onClick={() => setSubTab(s)}
-                style={{
-                  padding: '6px 16px', borderRadius: 20, fontSize: 13, fontWeight: 600, cursor: 'pointer',
-                  border: '1px solid var(--border)',
-                  background: subTab === s ? 'var(--text)' : 'var(--surface)',
-                  color: subTab === s ? 'var(--bg)' : 'var(--text-muted)',
-                  transition: 'all 0.15s',
-                }}>
+              <button key={s} onClick={() => setSubTab(s)} style={{
+                padding: '6px 16px', borderRadius: 20, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                border: '1px solid var(--border)',
+                background: subTab === s ? 'var(--text)' : 'var(--surface)',
+                color: subTab === s ? 'var(--bg)' : 'var(--text-muted)',
+                transition: 'all 0.15s',
+              }}>
                 {s === 'aktiv' ? `Aktiv (${aktiveRows.length})` : `Geschlossen (${geschlosseneRows.length})`}
               </button>
             ))}
@@ -357,9 +316,8 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, o
                   <tr style={{ background: 'var(--surface)' }}>
                     {['Markt', 'Tipp', 'Eingesetzt', 'Ergebnis', 'Auszahlung'].map((h, i) => (
                       <th key={h} style={{
-                        textAlign: i === 0 ? 'left' : 'right',
-                        fontSize: 11, fontWeight: 600, color: 'var(--text-muted)',
-                        padding: '12px 20px',
+                        textAlign: i === 0 ? 'left' : 'right', fontSize: 11, fontWeight: 600,
+                        color: 'var(--text-muted)', padding: '12px 20px',
                         borderBottom: '1px solid var(--border)',
                         textTransform: 'uppercase', letterSpacing: '0.04em',
                       }}>{h}</th>
@@ -367,17 +325,15 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, o
                   </tr>
                 </thead>
                 <tbody>
-                  {displayRows.map((entry, idx) => {
+                  {displayRows.map((entry) => {
                     const m = entry.market;
                     const isYes = entry.direction === 'yes';
                     const richtungLabel = m.is_auto ? (isYes ? '↑ Up' : '↓ Down') : (isYes ? 'Ja' : 'Nein');
                     const resolved = m.resolved;
-                    const won = resolved && entry.auszahlung !== null && entry.auszahlung > 0;
+                    const won  = resolved && entry.auszahlung !== null && entry.auszahlung > 0;
                     const lost = resolved && entry.auszahlung === 0;
-
                     return (
-                      <tr key={entry.market.id} style={{ background: idx % 2 === 0 ? 'transparent' : 'rgba(0,0,0,0.01)', borderBottom: '1px solid var(--border)' }}>
-                        {/* Markt */}
+                      <tr key={entry.market.id} style={{ borderBottom: '1px solid var(--border)' }}>
                         <td style={{ padding: '14px 20px', fontSize: 13, color: 'var(--text)', maxWidth: 320 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                             {m.is_auto && m.coin && (
@@ -390,20 +346,14 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, o
                             </span>
                           </div>
                         </td>
-
-                        {/* Tipp */}
                         <td style={{ padding: '14px 20px', textAlign: 'right' }}>
                           <span style={{ fontSize: 12, padding: '3px 10px', borderRadius: 20, fontWeight: 600, background: isYes ? 'rgba(22,163,74,0.12)' : 'rgba(220,38,38,0.12)', color: isYes ? '#15803d' : '#b91c1c' }}>
                             {richtungLabel}
                           </span>
                         </td>
-
-                        {/* Eingesetzt */}
                         <td style={{ padding: '14px 20px', textAlign: 'right', fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>
                           {Math.round(entry.einsatz).toLocaleString('de')} ₫
                         </td>
-
-                        {/* Ergebnis */}
                         <td style={{ padding: '14px 20px', textAlign: 'right' }}>
                           {!resolved ? (
                             <span style={{ fontSize: 12, padding: '3px 10px', borderRadius: 20, background: 'rgba(245,158,11,0.12)', color: '#b45309', fontWeight: 600 }}>Läuft</span>
@@ -413,8 +363,6 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, o
                             </span>
                           )}
                         </td>
-
-                        {/* Auszahlung */}
                         <td style={{ padding: '14px 20px', textAlign: 'right', fontSize: 13, fontWeight: 700 }}>
                           {!resolved && entry.auszahlung === null ? (
                             <span style={{ color: 'var(--text-muted)', fontWeight: 400, fontSize: 12 }}>ausstehend</span>
@@ -444,34 +392,38 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, o
   );
 }
 
+// ── FEED ────────────────────────────────────────────────────
+
 const COIN_COLORS_FEED: Record<string, string> = {
   BTC: '#f59e0b', ETH: '#6366f1', SOL: '#9945ff', XRP: '#00aae4',
 };
 
-interface FeedTrade {
+interface FeedMarket {
+  question: string;
+  is_auto: boolean;
+  coin?: string;
+  resolved: boolean;
+  resolution?: string;
+}
+
+interface FeedItem {
   id: string;
   market_id: string;
-  type: string;
+  type: string; // 'buy_yes' | 'buy_no' | 'sell_yes' | 'sell_no' | 'win'
   shares: number;
   cost: number;
   created_at: string;
-  market?: {
-    question: string;
-    is_auto: boolean;
-    coin?: string;
-    resolved: boolean;
-    resolution?: string;
-  };
+  market?: FeedMarket;
 }
 
 function AktivitaetsFeed({ userId }: { userId: string }) {
-  const [trades, setTrades] = useState<FeedTrade[]>([]);
+  const [items, setItems]     = useState<FeedItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function load() {
       setLoading(true);
-      const raw: FeedTrade[] = await dbGet('trades', `user_id=eq.${userId}&select=*&order=created_at.desc&limit=50`);
+      const raw: FeedItem[] = await dbGet('trades', `user_id=eq.${userId}&select=*&order=created_at.desc&limit=100`);
       if (!raw || raw.length === 0) { setLoading(false); return; }
 
       const seen: Record<string, boolean> = {};
@@ -479,21 +431,61 @@ function AktivitaetsFeed({ userId }: { userId: string }) {
       raw.forEach(t => { if (!seen[t.market_id]) { seen[t.market_id] = true; marketIds.push(t.market_id); } });
 
       const markets = await dbGet('markets', `id=in.(${marketIds.join(',')})&select=id,question,is_auto,coin,resolved,resolution`);
-      const mMap: Record<string, FeedTrade['market']> = {};
-      markets?.forEach((m: { id: string; question: string; is_auto: boolean; coin?: string; resolved: boolean; resolution?: string }) => { mMap[m.id] = m; });
+      const mMap: Record<string, FeedMarket> = {};
+      markets?.forEach((m: FeedMarket & { id: string }) => { mMap[m.id] = m; });
 
-      setTrades(raw.map(t => ({ ...t, market: mMap[t.market_id] })));
+      const withMarkets: FeedItem[] = raw.map(t => ({ ...t, market: mMap[t.market_id] }));
+
+      // Gewinn-Zeilen synthetisch erstellen
+      const winItems: FeedItem[] = [];
+      const processedWins = new Set<string>();
+
+      for (const t of withMarkets) {
+        const m = t.market;
+        if (!m?.resolved || processedWins.has(t.market_id)) continue;
+
+        const myBuys = withMarkets.filter(
+          x => x.market_id === t.market_id && (x.type === 'buy_yes' || x.type === 'buy_no')
+        );
+        if (myBuys.length === 0) { processedWins.add(t.market_id); continue; }
+
+        const direction = myBuys[0].type.includes('yes') ? 'yes' : 'no';
+        const won = m.resolution === direction;
+        processedWins.add(t.market_id);
+        if (!won) continue;
+
+        const totalShares = myBuys.reduce((s, x) => s + (x.shares ?? 0), 0);
+        if (totalShares <= 0) continue;
+
+        // Zeitstempel ~3 Min nach erstem Kauf
+        const firstBuyTime = new Date(myBuys[myBuys.length - 1].created_at).getTime();
+        winItems.push({
+          id: `win_${t.market_id}`,
+          market_id: t.market_id,
+          type: 'win',
+          shares: totalShares,
+          cost: totalShares,
+          created_at: new Date(firstBuyTime + 3 * 60 * 1000).toISOString(),
+          market: m,
+        });
+      }
+
+      const combined = [...withMarkets, ...winItems].sort(
+        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      );
+
+      setItems(combined);
       setLoading(false);
     }
     load();
   }, [userId]);
 
   function formatTime(iso: string) {
-    const d = new Date(iso);
+    const d    = new Date(iso);
     const diff = Date.now() - d.getTime();
-    const min = Math.floor(diff / 60000);
-    const h   = Math.floor(diff / 3600000);
-    const day = Math.floor(diff / 86400000);
+    const min  = Math.floor(diff / 60000);
+    const h    = Math.floor(diff / 3600000);
+    const day  = Math.floor(diff / 86400000);
     if (min < 1)  return 'Gerade eben';
     if (min < 60) return `vor ${min} Min.`;
     if (h < 24)   return `vor ${h} Std.`;
@@ -501,40 +493,10 @@ function AktivitaetsFeed({ userId }: { userId: string }) {
     return d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' });
   }
 
-  function tradeText(t: FeedTrade): { main: string; sub: string; amountColor: string; amount: string } {
-    const m = t.market;
-    const isBuy  = t.type.startsWith('buy');
-    const isSell = t.type.startsWith('sell');
-    const isYes  = t.type.includes('yes');
-
-    const marketLabel = m
-      ? (m.is_auto ? `${m.coin} · 3-Min-Markt` : (m.question.length > 48 ? m.question.slice(0, 48) + '…' : m.question))
-      : 'Unbekannter Markt';
-
-    const dirLabel = m?.is_auto
-      ? (isYes ? 'Up ↑' : 'Down ↓')
-      : (isYes ? 'Ja' : 'Nein');
-
-    if (isBuy) return {
-      main: marketLabel,
-      sub: `Gesetzt auf ${dirLabel}`,
-      amountColor: 'var(--text)',
-      amount: `–${Math.round(Math.abs(t.cost)).toLocaleString('de')} ₫`,
-    };
-    if (isSell) return {
-      main: marketLabel,
-      sub: `Verkauft · ${dirLabel}`,
-      amountColor: 'var(--yes)',
-      amount: `+${Math.round(Math.abs(t.cost)).toLocaleString('de')} ₫`,
-    };
-    return { main: marketLabel, sub: '', amountColor: 'var(--text)', amount: '' };
-  }
-
   if (loading) return (
     <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--text-muted)', fontSize: 13 }}>Wird geladen…</div>
   );
-
-  if (trades.length === 0) return (
+  if (items.length === 0) return (
     <div className="card" style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)', fontSize: 13 }}>
       Noch keine Aktivität.
     </div>
@@ -542,18 +504,56 @@ function AktivitaetsFeed({ userId }: { userId: string }) {
 
   return (
     <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-      {trades.map((t, idx) => {
-        const { main, sub, amountColor, amount } = tradeText(t);
-        const m = t.market;
-        const coinColor = m?.is_auto && m.coin ? COIN_COLORS_FEED[m.coin] ?? '#f97316' : null;
-        const isYes = t.type.includes('yes');
-        const isBuy = t.type.startsWith('buy');
+      {items.map((item, idx) => {
+        const m      = item.market;
+        const isBuy  = item.type.startsWith('buy');
+        const isSell = item.type.startsWith('sell');
+        const isWin  = item.type === 'win';
+        const isYes  = item.type.includes('yes');
+
+        const coinColor = !isWin && m?.is_auto && m.coin ? COIN_COLORS_FEED[m.coin] ?? '#f97316' : null;
+
+        const marketLabel = m
+          ? (m.is_auto ? `${m.coin} · 3-Min-Markt` : (m.question.length > 52 ? m.question.slice(0, 52) + '…' : m.question))
+          : 'Unbekannter Markt';
+
+        const dirLabel = m?.is_auto
+          ? (isYes ? 'Up ↑' : 'Down ↓')
+          : (isYes ? 'Ja' : 'Nein');
+
+        // Icon
+        let iconBg      = 'rgba(99,102,241,0.12)';
+        let iconContent = '⇄';
+        if (isWin)       { iconBg = 'rgba(22,163,74,0.15)'; iconContent = '🏆'; }
+        else if (isBuy)  { iconBg = isYes ? 'rgba(22,163,74,0.12)' : 'rgba(220,38,38,0.12)'; iconContent = isYes ? '↑' : '↓'; }
+
+        // Text + Betrag
+        let subText     = '';
+        let amountLabel = '';
+        let amountColor = 'var(--text)';
+
+        if (isWin) {
+          const resLabel = m?.is_auto
+            ? (m.resolution === 'yes' ? 'Up ↑' : 'Down ↓')
+            : (m?.resolution === 'yes' ? 'Ja' : 'Nein');
+          subText     = `Gewonnen · ${resLabel}`;
+          amountLabel = `+${Math.round(item.cost).toLocaleString('de')} ₫`;
+          amountColor = 'var(--yes)';
+        } else if (isBuy) {
+          subText     = `Einsatz auf ${dirLabel}`;
+          amountLabel = `Einsatz: ${Math.round(Math.abs(item.cost)).toLocaleString('de')} ₫`;
+          amountColor = 'var(--text-muted)';
+        } else if (isSell) {
+          subText     = `Verkauft · ${dirLabel}`;
+          amountLabel = `+${Math.round(Math.abs(item.cost)).toLocaleString('de')} ₫`;
+          amountColor = 'var(--yes)';
+        }
 
         return (
-          <div key={t.id} style={{
+          <div key={item.id} style={{
             display: 'flex', alignItems: 'center', gap: 14,
             padding: '14px 20px',
-            borderBottom: idx < trades.length - 1 ? '1px solid var(--border)' : 'none',
+            borderBottom: idx < items.length - 1 ? '1px solid var(--border)' : 'none',
           }}>
             {/* Icon */}
             {coinColor ? (
@@ -561,31 +561,27 @@ function AktivitaetsFeed({ userId }: { userId: string }) {
                 {m?.coin?.charAt(0)}
               </div>
             ) : (
-              <div style={{
-                width: 36, height: 36, borderRadius: 10, flexShrink: 0,
-                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16,
-                background: isBuy
-                  ? (isYes ? 'rgba(22,163,74,0.12)' : 'rgba(220,38,38,0.12)')
-                  : 'rgba(99,102,241,0.12)',
-              }}>
-                {isBuy ? (isYes ? '↑' : '↓') : '⇄'}
+              <div style={{ width: 36, height: 36, borderRadius: 10, flexShrink: 0, background: iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: isWin ? 18 : 16 }}>
+                {iconContent}
               </div>
             )}
 
             {/* Text */}
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {main}
+              <div style={{ fontSize: 13, fontWeight: isWin ? 600 : 500, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {marketLabel}
               </div>
-              {sub && (
-                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{sub}</div>
+              {subText && (
+                <div style={{ fontSize: 12, color: isWin ? '#15803d' : 'var(--text-muted)', marginTop: 2, fontWeight: isWin ? 600 : 400 }}>
+                  {subText}
+                </div>
               )}
             </div>
 
             {/* Betrag + Zeit */}
             <div style={{ textAlign: 'right', flexShrink: 0 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: amountColor }}>{amount}</div>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{formatTime(t.created_at)}</div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: amountColor }}>{amountLabel}</div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{formatTime(item.created_at)}</div>
             </div>
           </div>
         );
