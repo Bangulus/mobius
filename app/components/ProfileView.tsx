@@ -1,117 +1,58 @@
-'use client'
+'use client';
 
-import { useEffect, useState, useCallback, useRef } from 'react'
-import { useRouter } from 'next/navigation'
-import AdminPanel from './components/AdminPanel'
-import ProfileView from './components/ProfileView'
+import { useState, useEffect, useCallback } from 'react';
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
 async function dbGet(table: string, params: string) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}`, {
     headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
     cache: 'no-store',
-  })
-  return res.json()
+  });
+  return res.json();
 }
 
-async function supabaseAuth(path: string, body: object) {
-  const res = await fetch(`${SUPABASE_URL}/auth/v1/${path}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', apikey: SUPABASE_KEY },
-    body: JSON.stringify(body),
-  })
-  return res.json()
+interface Props {
+  userId: string;
+  token: string;
+  displayName: string;
+  avatarUrl: string;
+  balance: number | null;
+  onUsernameChange: (name: string) => void;
+  onAvatarChange: (url: string) => void;
 }
 
-async function dbPost(table: string, body: object, token: string) {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      apikey: SUPABASE_KEY,
-      Authorization: `Bearer ${token}`,
-      Prefer: 'return=representation',
-    },
-    body: JSON.stringify(body),
-  })
-  return res.json()
+interface TradeRow {
+  id: string;
+  market_id: string;
+  type: string;
+  shares: number;
+  cost: number;
+  created_at: string;
 }
 
-interface Market {
-  id: string
-  question: string
-  description?: string
-  status: string
-  b: number
-  q_yes: number
-  q_no: number
-  closes_at: string
-  group_title?: string
-  short_label?: string
-  category?: string
-  resolved: boolean
-  resolution?: string
-  display_group?: string
-  is_auto?: boolean
-  coin?: string
+interface MarketRow {
+  id: string;
+  question: string;
+  resolved: boolean;
+  resolution?: string;
+  is_auto?: boolean;
+  coin?: string;
+  start_price?: number;
+  end_price?: number;
 }
 
-interface User {
-  id: string
-  username: string
-  balance: number
-  avatar_url?: string
-}
-
-interface LeaderboardEntry {
-  user_id: string
-  username: string
-  total_balance: number
-  avatar_url?: string
-}
-
-interface WinToast {
-  id: string
-  coin?: string
-  question: string
-  amount: number
-  isKrypto: boolean
-  direction: 'yes' | 'no'
-}
-
-function calcProb(qYes: number, qNo: number, b: number): number {
-  const eYes = Math.exp(qYes / b)
-  const eNo  = Math.exp(qNo  / b)
-  return Math.round((eYes / (eYes + eNo)) * 100)
-}
-
-function parseUTC(raw: string): Date {
-  if (!raw) return new Date(0)
-  if (raw.endsWith('Z') || raw.match(/[+-]\d{2}:\d{2}$/)) return new Date(raw)
-  if (raw.match(/[+-]\d{2}$/)) return new Date(raw + ':00')
-  return new Date(raw.replace(' ', 'T') + 'Z')
-}
-
-const CATEGORIES = ['Alle', 'Politik', 'Sport', 'Krypto', 'Entertainment', 'Wirtschaft', 'Geopolitik', 'Finanzen', 'Wetter', 'Kultur']
-const COINS      = ['BTC', 'ETH', 'SOL', 'XRP']
-
-const CAT_CLASS: Record<string, string> = {
-  Politik:       'cat-politik',
-  Sport:         'cat-sport',
-  Krypto:        'cat-krypto',
-  Entertainment: 'cat-entertainment',
-  Wirtschaft:    'cat-wirtschaft',
-  Geopolitik:    'cat-politik',
-  Finanzen:      'cat-wirtschaft',
-  Wetter:        'cat-sport',
-  Kultur:        'cat-entertainment',
+interface PortfolioEntry {
+  market: MarketRow;
+  einsatz: number;
+  direction: 'yes' | 'no';
+  auszahlung: number | null;
 }
 
 const COIN_COLORS: Record<string, string> = {
   BTC: '#f59e0b', ETH: '#6366f1', SOL: '#9945ff', XRP: '#00aae4',
-}
+};
 
 const AVATAR_COLORS = [
   { bg: '#eff6ff', color: '#1d4ed8' },
@@ -119,645 +60,388 @@ const AVATAR_COLORS = [
   { bg: '#fdf4ff', color: '#6b21a8' },
   { bg: '#fffbeb', color: '#92400e' },
   { bg: '#f0f9ff', color: '#075985' },
-]
+];
 function avatarColor(str: string) {
-  let h = 0
-  for (let i = 0; i < str.length; i++) h = str.charCodeAt(i) + ((h << 5) - h)
-  return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length]
+  let h = 0;
+  for (let i = 0; i < str.length; i++) h = str.charCodeAt(i) + ((h << 5) - h);
+  return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length];
 }
 
-type AuthMode = 'login' | 'register'
+type TabType = 'positionen' | 'aktivitaet';
+type SubTabType = 'aktiv' | 'geschlossen';
 
-export default function Home() {
-  const router = useRouter()
-  const [markets, setMarkets]           = useState<Market[]>([])
-  const [user, setUser]                 = useState<User | null>(null)
-  const [leaderboard, setLeaderboard]   = useState<LeaderboardEntry[]>([])
-  const [category, setCategory]         = useState('Alle')
-  const [view, setView]                 = useState<'markets' | 'portfolio' | 'admin' | 'profil'>('markets')
-  const [loading, setLoading]           = useState(true)
-  const [darkMode, setDarkMode]         = useState(() => {
-    if (typeof window === 'undefined') return false
-    return localStorage.getItem('mobius_darkmode') === 'true'
-  })
-  const [showAuth, setShowAuth]         = useState(false)
-  const [authMode, setAuthMode]         = useState<AuthMode>('login')
-  const [authEmail, setAuthEmail]       = useState('')
-  const [authPassword, setAuthPassword] = useState('')
-  const [authUsername, setAuthUsername] = useState('')
-  const [authError, setAuthError]       = useState('')
-  const [authLoading, setAuthLoading]   = useState(false)
-  const [searchQuery, setSearchQuery]   = useState('')
-  const [winToasts, setWinToasts]       = useState<WinToast[]>([])
-  const shownToastsRef                  = useRef<Set<string>>(new Set())
-  const userRef                         = useRef<User | null>(null)
-  const marketsRef                      = useRef<Market[]>([])
-  const triggeredCoinsRef               = useRef<Record<string, number>>({})
+export default function ProfileView({ userId, displayName, avatarUrl, balance, onUsernameChange, onAvatarChange }: Props) {
+  const [newUsername, setNewUsername]         = useState(displayName);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [savingUsername, setSavingUsername]   = useState(false);
+  const [profileMessage, setProfileMessage]   = useState('');
+  const [editingUsername, setEditingUsername] = useState(false);
 
-  const ADMIN_ID = 'b75edaf4-141d-41f1-9555-887a8ddbac58'
+  const [tab, setTab]       = useState<TabType>('positionen');
+  const [subTab, setSubTab] = useState<SubTabType>('aktiv');
 
-  useEffect(() => {
-    document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light')
-    localStorage.setItem('mobius_darkmode', String(darkMode))
-  }, [darkMode])
+  const [allRows, setAllRows]               = useState<PortfolioEntry[]>([]);
+  const [portfolioLoading, setPortfolioLoading] = useState(true);
 
-  useEffect(() => {
-    const saved = localStorage.getItem('mobius_session')
-    if (!saved) return
-    try {
-      const session = JSON.parse(saved)
-      if (session?.access_token && session?.user_id) {
-        dbGet('users', `id=eq.${session.user_id}&select=*`).then((data) => {
-          if (data?.[0]) { setUser(data[0]); userRef.current = data[0] }
-        })
+  const totalEinsatz    = allRows.reduce((s, r) => s + r.einsatz, 0);
+  const totalAusbe      = allRows.filter(r => r.auszahlung !== null && r.auszahlung > 0).reduce((s, r) => s + (r.auszahlung ?? 0), 0);
+  const offeneCount     = allRows.filter(r => !r.market.resolved).length;
+  const geschlossen     = allRows.filter(r => r.market.resolved);
+  const gewonnen        = geschlossen.filter(r => r.auszahlung !== null && r.auszahlung > 0);
+  const groessterGewinn = gewonnen.length > 0 ? Math.max(...gewonnen.map(r => r.auszahlung ?? 0)) : 0;
+
+  const aktiveRows      = allRows.filter(r => !r.market.resolved);
+  const geschlosseneRows = allRows.filter(r => r.market.resolved);
+  const displayRows     = subTab === 'aktiv' ? aktiveRows : geschlosseneRows;
+
+  const loadPortfolio = useCallback(async () => {
+    setPortfolioLoading(true);
+    const trades: TradeRow[] = await dbGet('trades', `user_id=eq.${userId}&select=*&order=created_at.desc`);
+    if (!trades || trades.length === 0) { setPortfolioLoading(false); return; }
+
+    const seen: Record<string, boolean> = {};
+    const marketIds: string[] = [];
+    trades.forEach(t => { if (!seen[t.market_id]) { seen[t.market_id] = true; marketIds.push(t.market_id); } });
+
+    const markets: MarketRow[] = await dbGet('markets', `id=in.(${marketIds.join(',')})&select=*`);
+    const marketMap: Record<string, MarketRow> = {};
+    markets.forEach(m => { marketMap[m.id] = m; });
+
+    const entryMap: Record<string, PortfolioEntry> = {};
+
+    for (const trade of trades) {
+      const market = marketMap[trade.market_id];
+      if (!market) continue;
+      const isBuy  = trade.type === 'buy_yes' || trade.type === 'buy_no';
+      const isSell = trade.type === 'sell_yes' || trade.type === 'sell_no';
+      const dir: 'yes' | 'no' = trade.type.includes('yes') ? 'yes' : 'no';
+
+      if (!entryMap[trade.market_id]) {
+        entryMap[trade.market_id] = { market, einsatz: 0, direction: dir, auszahlung: null };
       }
-    } catch {}
-  }, [])
+      const entry = entryMap[trade.market_id];
+      if (isBuy)  { entry.einsatz += Math.abs(trade.cost); entry.direction = dir; }
+      if (isSell) { entry.auszahlung = (entry.auszahlung ?? 0) + Math.abs(trade.cost); }
+    }
 
-  const loadMarkets = useCallback(async (showLoading = false) => {
-    if (showLoading) setLoading(true)
-    const data = await dbGet('markets', 'status=eq.open&select=*&order=created_at.desc')
-    const list = data ?? []
-    setMarkets(list)
-    marketsRef.current = list
-    setLoading(false)
-  }, [])
-
-  const loadLeaderboard = useCallback(async () => {
-    const data = await dbGet('users', 'select=id,username,balance,avatar_url&order=balance.desc&limit=10')
-    setLeaderboard(
-      (data ?? []).map((u: User) => ({
-        user_id: u.id,
-        username: u.username,
-        total_balance: u.balance,
-        avatar_url: u.avatar_url,
-      }))
-    )
-  }, [])
-
-  useEffect(() => {
-    loadMarkets(true)
-    loadLeaderboard()
-  }, [loadMarkets, loadLeaderboard])
-
-  useEffect(() => {
-    const id = setInterval(() => {
-      const now = Date.now()
-      const autoMarkets = marketsRef.current.filter(m => m.is_auto && m.coin && !m.resolved)
-
-      for (const coin of COINS) {
-        const market = autoMarkets.find(m => m.coin === coin)
-        if (!market) {
-          const lastTriggered = triggeredCoinsRef.current[coin + '_missing'] ?? 0
-          if (now - lastTriggered > 30000) {
-            triggeredCoinsRef.current[coin + '_missing'] = now
-            fetch('/api/create-crypto-market', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ coin }),
-            }).then(() => loadMarkets()).catch(() => {})
-          }
-          continue
-        }
-
-        const closesAtMs = parseUTC(market.closes_at).getTime()
-        const diff       = closesAtMs - now
-        const triggerKey = coin + '_' + closesAtMs
-
-        if (diff < 10000 && diff > -30000 && !triggeredCoinsRef.current[triggerKey]) {
-          triggeredCoinsRef.current[triggerKey] = now
-          fetch('/api/create-crypto-market', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ coin }),
-          }).then(() => setTimeout(loadMarkets, 2000)).catch(() => {})
-        }
+    for (const entry of Object.values(entryMap)) {
+      const m = entry.market;
+      if (!m.resolved || entry.auszahlung !== null) continue;
+      const won = (m.resolution === 'yes' && entry.direction === 'yes') ||
+                  (m.resolution === 'no'  && entry.direction === 'no');
+      if (won) {
+        const mTrades = trades.filter(t => t.market_id === m.id && (t.type === 'buy_yes' || t.type === 'buy_no'));
+        entry.auszahlung = Math.round(mTrades.reduce((s, t) => s + (t.shares ?? 0), 0));
+      } else {
+        entry.auszahlung = 0;
       }
-    }, 1000)
+    }
 
-    return () => clearInterval(id)
-  }, [loadMarkets])
+    setAllRows(Object.values(entryMap));
+    setPortfolioLoading(false);
+  }, [userId]);
 
   useEffect(() => {
-    const id = setInterval(() => loadMarkets(), 10000)
-    return () => clearInterval(id)
-  }, [loadMarkets])
+    if (!userId) return;
+    loadPortfolio();
+  }, [userId, loadPortfolio]);
 
-  const checkWins = useCallback(async (userId: string) => {
-    const since = new Date(Date.now() - 10 * 60 * 1000).toISOString()
-    const trades = await dbGet('trades', `user_id=eq.${userId}&type=in.(buy_yes,buy_no)&created_at=gte.${since}&select=market_id,type,shares`)
-    if (!trades || trades.length === 0) return
+  async function saveUsername() {
+    if (!newUsername.trim()) return;
+    setSavingUsername(true);
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${userId}`, {
+      method: 'PATCH',
+      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      body: JSON.stringify({ username: newUsername.trim() }),
+    });
+    if (res.ok) { onUsernameChange(newUsername.trim()); setProfileMessage('Gespeichert ✓'); setEditingUsername(false); }
+    else { setProfileMessage('Fehler beim Speichern.'); }
+    setSavingUsername(false);
+    setTimeout(() => setProfileMessage(''), 3000);
+  }
 
-    const seen: Record<string, boolean> = {}
-    const marketIds: string[] = []
-    trades.forEach((t: { market_id: string }) => {
-      if (!seen[t.market_id]) { seen[t.market_id] = true; marketIds.push(t.market_id) }
-    })
-
-    const resolvedMarkets = await dbGet('markets', `id=in.(${marketIds.join(',')})&resolved=eq.true&select=id,question,resolution,is_auto,coin`)
-    if (!resolvedMarkets || resolvedMarkets.length === 0) return
-
-    const newToasts: WinToast[] = []
-
-    for (const market of resolvedMarkets) {
-      if (shownToastsRef.current.has(market.id)) continue
-      const marketTrades = trades.filter((t: { market_id: string; type: string; shares: number }) => t.market_id === market.id)
-      const wonTrades = marketTrades.filter((t: { type: string }) =>
-        (market.resolution === 'yes' && t.type === 'buy_yes') ||
-        (market.resolution === 'no'  && t.type === 'buy_no')
-      )
-      if (wonTrades.length === 0) continue
-      const totalShares = wonTrades.reduce((s: number, t: { shares: number }) => s + (t.shares ?? 0), 0)
-      const amount = Math.round(totalShares)
-      if (amount <= 0) continue
-      shownToastsRef.current.add(market.id)
-      newToasts.push({
-        id: market.id,
-        coin: market.coin,
-        question: market.question,
-        amount,
-        isKrypto: !!market.is_auto,
-        direction: market.resolution as 'yes' | 'no',
-      })
-    }
-
-    if (newToasts.length > 0) {
-      setWinToasts(prev => [...prev, ...newToasts])
-      const freshUser = await dbGet('users', `id=eq.${userId}&select=balance`)
-      if (freshUser?.[0]) {
-        setUser(prev => prev ? { ...prev, balance: freshUser[0].balance } : prev)
-        userRef.current = { ...userRef.current!, balance: freshUser[0].balance }
-      }
-      newToasts.forEach(toast => {
-        setTimeout(() => {
-          setWinToasts(prev => prev.filter(t => t.id !== toast.id))
-        }, 6000)
-      })
-    }
-  }, [])
-
-  useEffect(() => {
-    if (!user?.id) return
-    const id = setInterval(() => checkWins(user.id), 15000)
-    checkWins(user.id)
-    return () => clearInterval(id)
-  }, [user?.id, checkWins])
-
-  const handleLogin = async () => {
-    setAuthError('')
-    if (!authEmail || !authPassword) { setAuthError('Bitte alle Felder ausfüllen.'); return }
-    if (authEmail.length > 254) { setAuthError('E-Mail zu lang.'); return }
-    if (authPassword.length < 6 || authPassword.length > 128) { setAuthError('Passwort muss 6–128 Zeichen lang sein.'); return }
-    setAuthLoading(true)
-    const res = await supabaseAuth('token?grant_type=password', { email: authEmail.trim(), password: authPassword })
-    setAuthLoading(false)
-    if (res.error || !res.access_token) { setAuthError('E-Mail oder Passwort falsch.'); return }
-    const userId = res.user?.id
-    const userData = await dbGet('users', `id=eq.${userId}&select=*`)
-    if (userData?.[0]) {
-      setUser(userData[0])
-      userRef.current = userData[0]
-      localStorage.setItem('mobius_session', JSON.stringify({ access_token: res.access_token, user_id: userId }))
-      setShowAuth(false)
-      resetAuthForm()
+  async function uploadAvatar(file: File) {
+    setUploadingAvatar(true);
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('userId', userId);
+    const res = await fetch('/api/upload-avatar', { method: 'POST', body: formData });
+    if (res.ok) {
+      const { url } = await res.json();
+      await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${userId}`, {
+        method: 'PATCH',
+        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+        body: JSON.stringify({ avatar_url: url }),
+      });
+      onAvatarChange(url);
+      setProfileMessage('Profilbild gespeichert ✓');
     } else {
-      setAuthError('Benutzer nicht gefunden.')
+      setProfileMessage('Fehler beim Upload.');
     }
+    setUploadingAvatar(false);
+    setTimeout(() => setProfileMessage(''), 4000);
   }
 
-  const handleRegister = async () => {
-    setAuthError('')
-    if (!authEmail || !authPassword || !authUsername) { setAuthError('Bitte alle Felder ausfüllen.'); return }
-    if (authEmail.length > 254) { setAuthError('E-Mail zu lang.'); return }
-    if (authUsername.length < 3 || authUsername.length > 50) { setAuthError('Benutzername: 3–50 Zeichen.'); return }
-    if (authPassword.length < 6 || authPassword.length > 128) { setAuthError('Passwort muss 6–128 Zeichen lang sein.'); return }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(authEmail.trim())) { setAuthError('Ungültige E-Mail-Adresse.'); return }
-    setAuthLoading(true)
-    const existing = await dbGet('users', `username=eq.${encodeURIComponent(authUsername.trim())}&select=id`)
-    if (existing?.length > 0) { setAuthLoading(false); setAuthError('Benutzername bereits vergeben.'); return }
-    const res = await supabaseAuth('signup', { email: authEmail.trim(), password: authPassword })
-    setAuthLoading(false)
-    if (res.error) { setAuthError(res.error.message ?? 'Registrierung fehlgeschlagen.'); return }
-    const userId = res.user?.id
-    const token = res.access_token
-    if (!userId) { setAuthError('Bitte bestätige deine E-Mail und melde dich dann an.'); return }
-    await dbPost('users', { id: userId, username: authUsername.trim().slice(0, 50), balance: 1000 }, token ?? SUPABASE_KEY)
-    const userData = await dbGet('users', `id=eq.${userId}&select=*`)
-    if (userData?.[0]) {
-      setUser(userData[0])
-      userRef.current = userData[0]
-      localStorage.setItem('mobius_session', JSON.stringify({ access_token: token, user_id: userId }))
-      setShowAuth(false)
-      resetAuthForm()
-      loadLeaderboard()
-    } else {
-      setAuthError('Konto erstellt! Bitte melde dich jetzt an.')
-    }
-  }
-
-  const handleLogout = () => {
-    setUser(null)
-    userRef.current = null
-    localStorage.removeItem('mobius_session')
-    setView('markets')
-    setWinToasts([])
-    shownToastsRef.current = new Set()
-  }
-
-  const resetAuthForm = () => {
-    setAuthEmail('')
-    setAuthPassword('')
-    setAuthUsername('')
-    setAuthError('')
-  }
-
-  const openAuth = (mode: AuthMode) => {
-    resetAuthForm()
-    setAuthMode(mode)
-    setShowAuth(true)
-  }
-
-  const filteredMarkets = markets.filter((m) => {
-    const matchCat = category === 'Alle' || m.category === category
-    const matchSearch = searchQuery === '' ||
-      (m.question ?? '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (m.short_label ?? '').toLowerCase().includes(searchQuery.toLowerCase())
-    return matchCat && matchSearch
-  })
+  const av = avatarColor(displayName);
 
   return (
-    <>
-      <div style={{ position: 'fixed', top: 80, right: 16, zIndex: 9999, display: 'flex', flexDirection: 'column', gap: 10, pointerEvents: 'none' }}>
-        {winToasts.map(toast => (
-          <div key={toast.id} style={{
-            pointerEvents: 'all',
-            background: '#fff',
-            border: '1px solid rgba(22,163,74,0.3)',
-            borderLeft: '4px solid #16a34a',
-            borderRadius: 12,
-            padding: '14px 16px',
-            minWidth: 260,
-            maxWidth: 320,
-            boxShadow: '0 4px 24px rgba(0,0,0,0.10)',
-            animation: 'slideInRight 0.3s ease',
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                {toast.isKrypto && toast.coin && (
-                  <span style={{ width: 24, height: 24, borderRadius: 6, background: COIN_COLORS[toast.coin] ?? '#f97316', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, color: '#fff', flexShrink: 0 }}>
-                    {toast.coin.charAt(0)}
-                  </span>
-                )}
-                <span style={{ fontSize: 13, fontWeight: 700, color: '#16a34a' }}>🎉 Gewonnen!</span>
-              </div>
-              <button onClick={() => setWinToasts(prev => prev.filter(t => t.id !== toast.id))}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, color: '#9ca3af', padding: 0, lineHeight: 1 }}>×</button>
-            </div>
-            <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 8, lineHeight: 1.4 }}>
-              {toast.isKrypto
-                ? `${toast.coin} ${toast.direction === 'yes' ? 'Up ↑' : 'Down ↓'}`
-                : toast.question.length > 50 ? toast.question.slice(0, 50) + '…' : toast.question}
-            </div>
-            <div style={{ fontSize: 28, fontWeight: 800, color: '#16a34a', letterSpacing: '-0.5px', lineHeight: 1 }}>
-              +{toast.amount.toLocaleString('de')} ₫
-            </div>
-          </div>
-        ))}
-      </div>
+    <div style={{ maxWidth: 900, margin: '0 auto' }}>
 
-      {showAuth && (
-        <div className="modal-backdrop" onClick={() => setShowAuth(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-title">
-              {authMode === 'login' ? 'Anmelden' : 'Konto erstellen'}
-            </div>
-            <div className="auth-tabs">
-              <button className={`auth-tab ${authMode === 'login' ? 'active' : ''}`}
-                onClick={() => { setAuthMode('login'); setAuthError('') }}>Anmelden</button>
-              <button className={`auth-tab ${authMode === 'register' ? 'active' : ''}`}
-                onClick={() => { setAuthMode('register'); setAuthError('') }}>Registrieren</button>
-            </div>
-            {authMode === 'register' && (
-              <input type="text" placeholder="Benutzername" value={authUsername}
-                onChange={(e) => setAuthUsername(e.target.value)} maxLength={50} style={{ width: '100%' }} />
-            )}
-            <input type="email" placeholder="E-Mail" value={authEmail}
-              onChange={(e) => setAuthEmail(e.target.value)} maxLength={254} style={{ width: '100%' }} autoFocus />
-            <input type="password" placeholder="Passwort" value={authPassword}
-              onChange={(e) => setAuthPassword(e.target.value)} maxLength={128}
-              onKeyDown={(e) => e.key === 'Enter' && (authMode === 'login' ? handleLogin() : handleRegister())}
-              style={{ width: '100%' }} />
-            {authError && <div className="alert alert-error">{authError}</div>}
-            <button className="submit-btn yes" onClick={authMode === 'login' ? handleLogin : handleRegister}
-              disabled={authLoading} style={{ marginTop: 4 }}>
-              {authLoading ? 'Laden…' : authMode === 'login' ? 'Anmelden' : 'Konto erstellen'}
-            </button>
-            {authMode === 'register' && (
-              <div style={{ fontSize: 12, color: 'var(--text-subtle)', textAlign: 'center' }}>
-                Du startest mit 1.000 ₫ Dukaten.
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      <nav className="nav">
-        <div className="nav-left">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo-weiss.png" alt="Möbius" className="nav-logo"
-            onClick={() => { setView('markets'); setSearchQuery('') }} />
-          <div className="nav-search-wrap">
-            <span className="nav-search-icon">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-              </svg>
-            </span>
-            <input className="nav-search" type="text" placeholder="Märkte durchsuchen…"
-              value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setView('markets') }} />
-          </div>
-        </div>
-        <div className="nav-right">
-          {user ? (
-            <>
-              <div className="nav-stat">
-                <div className="nav-stat-label">Guthaben</div>
-                <div className="nav-stat-value">{user.balance.toLocaleString('de')} ₫</div>
-              </div>
-              <div className="nav-divider" />
-              {user?.id === ADMIN_ID && (
-                <button className="nav-pill" onClick={() => setView('admin')}
-                  style={{ background: 'rgba(124,58,237,0.25)', borderColor: 'rgba(124,58,237,0.5)', color: '#c4b5fd' }}>
-                  Admin
-                </button>
-              )}
-            </>
-          ) : (
-            <>
-              <button className="nav-pill" onClick={() => openAuth('login')}>Anmelden</button>
-              <button className="nav-pill accent" onClick={() => openAuth('register')}>Registrieren</button>
-            </>
-          )}
-          <button className="nav-icon-btn" onClick={() => setDarkMode(!darkMode)}
-            title={darkMode ? 'Light Mode' : 'Dark Mode'}>
-            {darkMode ? '☀️' : '🌙'}
-          </button>
-          {user && (
-            <>
-              <div className="nav-avatar" onClick={() => setView('profil')} title={user.username}>
-                {user.avatar_url ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={user.avatar_url} alt={user.username}
-                    style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
-                ) : (
-                  <span>{user.username.slice(0, 2).toUpperCase()}</span>
-                )}
-              </div>
-              <button className="nav-pill" onClick={handleLogout}>Abmelden</button>
-            </>
-          )}
-        </div>
-      </nav>
-
-      <div className="cat-bar">
-        {CATEGORIES.map((cat) => (
-          <button key={cat} className={`cat-bar-btn ${category === cat ? 'active' : ''}`}
-            onClick={() => { setCategory(cat); setView('markets') }}>
-            {cat}
-          </button>
-        ))}
-      </div>
-
-      <main className="page-container">
-        {view === 'admin' && user?.id === ADMIN_ID && (
-          <AdminPanel userId={user.id} openMarkets={markets} onMarketResolved={loadMarkets} />
-        )}
-        {view === 'profil' && user && (
-          <ProfileView
-            userId={user.id} token={user.id} displayName={user.username}
-            avatarUrl={user.avatar_url ?? ''} balance={user.balance}
-            onUsernameChange={(name) => setUser({ ...user, username: name })}
-            onAvatarChange={(url) => setUser({ ...user, avatar_url: url })}
-          />
-        )}
-        {view === 'markets' && (
-          <>
-            {user && (
-              <div className="stats-grid">
-                <div className="stat-card">
-                  <div className="stat-label">Guthaben</div>
-                  <div className="stat-value">{user.balance.toLocaleString('de')} ₫</div>
-                  <div className="stat-delta delta-neu">Deine Dukaten</div>
-                </div>
-                <div className="stat-card">
-                  <div className="stat-label">Aktive Märkte</div>
-                  <div className="stat-value">{markets.length}</div>
-                  <div className="stat-delta delta-neu">offen</div>
-                </div>
-              </div>
-            )}
-            <div className="section-head">
-              <div className="section-title">
-                {searchQuery ? `Suche: „${searchQuery}"` : category === 'Alle' ? 'Alle Märkte' : category}
-              </div>
-              <div className="section-link" onClick={() => loadMarkets()}>Aktualisieren</div>
-            </div>
-            {loading ? (
-              <div style={{ color: 'var(--text-muted)', fontSize: 14, padding: '24px 0' }}>Märkte werden geladen…</div>
-            ) : filteredMarkets.length === 0 ? (
-              <div style={{ color: 'var(--text-muted)', fontSize: 14, padding: '24px 0' }}>Keine Märkte gefunden.</div>
-            ) : (
-              <MarketsGrid markets={filteredMarkets} onOpen={(id) => router.push(`/markets/${id}`)} />
-            )}
-            <div className="section-head" style={{ marginTop: 32 }}>
-              <div className="section-title">Bestenliste</div>
-            </div>
-            <Leaderboard entries={leaderboard} currentUserId={user?.id} />
-          </>
-        )}
-        {view === 'portfolio' && user && (
-          <PortfolioView userId={user.id} router={router} />
-        )}
-      </main>
-
-      <style>{`
-        @keyframes slideInRight {
-          from { transform: translateX(120%); opacity: 0; }
-          to   { transform: translateX(0);    opacity: 1; }
-        }
-      `}</style>
-    </>
-  )
-}
-
-function MarketsGrid({ markets, onOpen }: { markets: Market[]; onOpen: (id: string) => void }) {
-  const groups: Record<string, Market[]> = {}
-  const ungrouped: Market[] = []
-
-  markets.forEach((m) => {
-    if (m.group_title) {
-      if (!groups[m.group_title]) groups[m.group_title] = []
-      groups[m.group_title].push(m)
-    } else if (m.display_group) {
-      if (!groups[`__dg__${m.display_group}`]) groups[`__dg__${m.display_group}`] = []
-      groups[`__dg__${m.display_group}`].push(m)
-    } else {
-      ungrouped.push(m)
-    }
-  })
-
-  return (
-    <div>
-      {ungrouped.length > 0 && (
-        <div className="markets-grid">
-          {ungrouped.map((m) => <MarketCard key={m.id} market={m} onClick={() => onOpen(m.id)} />)}
-        </div>
-      )}
-      {Object.entries(groups).map(([key, mts]) => {
-        const isDisplay = key.startsWith('__dg__')
-        const label = isDisplay ? key.replace('__dg__', '') : key
-        return (
-          <div key={key}>
-            <div className={isDisplay ? 'display-group-header' : 'group-header'}>{label}</div>
-            <div className="markets-grid">
-              {mts.map((m) => <MarketCard key={m.id} market={m} onClick={() => onOpen(m.id)} />)}
-            </div>
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
-function MarketCard({ market, onClick }: { market: Market; onClick: () => void }) {
-  const prob = calcProb(market.q_yes, market.q_no, market.b)
-  const isLow = prob < 50
-  const catClass = CAT_CLASS[market.category ?? ''] ?? ''
-
-  return (
-    <div className="market-card" onClick={onClick}>
-      <div className="market-card-meta">
-        {market.category && <span className={`cat-badge ${catClass}`}>{market.category}</span>}
-        {market.is_auto && <div className="live-dot" title="Live" />}
-      </div>
-      <div className="market-card-question">{market.short_label ?? market.question}</div>
-      <div className="prob-bar">
-        <div className={`prob-bar-fill ${isLow ? 'low' : ''}`} style={{ width: `${prob}%` }} />
-      </div>
-      <div className="market-card-footer">
-        <div className={`market-prob ${isLow ? 'low' : ''}`}>{prob}%</div>
-        <div className="market-volume">{Math.round(market.q_yes + market.q_no)} ₫ Vol.</div>
-      </div>
-      <div className="bet-btns">
-        <button className="btn-yes" onClick={(e) => { e.stopPropagation(); onClick() }}>Ja {prob}%</button>
-        <button className="btn-no" onClick={(e) => { e.stopPropagation(); onClick() }}>Nein {100 - prob}%</button>
-      </div>
-    </div>
-  )
-}
-
-function Leaderboard({ entries, currentUserId }: { entries: LeaderboardEntry[]; currentUserId?: string }) {
-  const rankClass = (i: number) => i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : ''
-
-  return (
-    <div className="leaderboard">
-      {entries.map((e, i) => {
-        const initials = e.username.slice(0, 2).toUpperCase()
-        const av = avatarColor(e.username)
-        const isMe = e.user_id === currentUserId
-        return (
-          <div key={e.user_id} className="lb-row" style={isMe ? { background: 'var(--accent-light)' } : {}}>
-            <div className={`lb-rank ${rankClass(i)}`}>{i + 1}</div>
-            <div className="lb-avatar" style={{ background: av.bg, color: av.color }}>
-              {e.avatar_url ? (
+      {/* ── HEADER ── */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: '1fr 340px',
+        gap: 16,
+        marginBottom: 24,
+      }}>
+        {/* Linke Seite: Avatar + Stats */}
+        <div className="card" style={{ padding: '28px 28px 24px' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 20, marginBottom: 24 }}>
+            {/* Avatar */}
+            <div style={{ position: 'relative', flexShrink: 0 }}>
+              {avatarUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={e.avatar_url} alt={e.username}
-                  style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
-              ) : initials}
+                <img src={avatarUrl} alt="Avatar" style={{ width: 80, height: 80, borderRadius: '50%', objectFit: 'cover' }} />
+              ) : (
+                <div style={{ width: 80, height: 80, borderRadius: '50%', background: av.bg, color: av.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28, fontWeight: 700, border: '2px solid var(--border)' }}>
+                  {displayName.slice(0, 2).toUpperCase()}
+                </div>
+              )}
             </div>
-            <div className="lb-name">{e.username}{isMe && <span className="lb-badge">Du</span>}</div>
-            <div className="lb-score">{e.total_balance.toLocaleString('de')} ₫</div>
-          </div>
-        )
-      })}
-    </div>
-  )
-}
 
-function PortfolioView({ userId, router }: {
-  userId: string
-  router: ReturnType<typeof useRouter>
-}) {
-  interface Position {
-    market_id: string
-    direction: string
-    amount: number
-    question: string
-    q_yes: number
-    q_no: number
-    b: number
-    resolved: boolean
-    resolution?: string
-  }
-
-  const [positions, setPositions] = useState<Position[]>([])
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    dbGet('positions', `user_id=eq.${userId}&select=*`).then(async (posData) => {
-      if (!posData || posData.length === 0) { setLoading(false); return }
-      const ids = posData.map((p: { market_id: string }) => p.market_id).join(',')
-      const mktData = await dbGet('markets', `id=in.(${ids})&select=id,question,q_yes,q_no,b,resolved,resolution`)
-      const mktMap: Record<string, Market> = {}
-      mktData?.forEach((m: Market) => { mktMap[m.id] = m })
-      setPositions(posData.map((p: { market_id: string; direction: string; amount: number }) => ({
-        ...p, ...mktMap[p.market_id],
-      })))
-      setLoading(false)
-    })
-  }, [userId])
-
-  if (loading) return <div style={{ color: 'var(--text-muted)', padding: '24px 0' }}>Portfolio wird geladen…</div>
-
-  if (positions.length === 0) return (
-    <div className="card" style={{ textAlign: 'center', padding: 32 }}>
-      <div style={{ fontSize: 14, color: 'var(--text-muted)', marginBottom: 8 }}>Noch keine Positionen.</div>
-      <div style={{ fontSize: 13, color: 'var(--text-subtle)' }}>Platziere deine erste Wette auf einen Markt.</div>
-    </div>
-  )
-
-  return (
-    <div>
-      <div className="section-head">
-        <div className="section-title">Mein Portfolio</div>
-      </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {positions.map((p, i) => {
-          const prob = calcProb(p.q_yes, p.q_no, p.b)
-          const isYes = p.direction === 'yes'
-          return (
-            <div key={i} className="card" style={{ cursor: 'pointer' }}
-              onClick={() => router.push(`/markets/${p.market_id}`)}>
-              <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 8, color: 'var(--text)' }}>{p.question}</div>
-              <div style={{ display: 'flex', gap: 16, fontSize: 13, flexWrap: 'wrap' }}>
-                <span style={{ color: 'var(--text-muted)' }}>
-                  Position: <strong style={{ color: isYes ? 'var(--yes)' : 'var(--no)' }}>{isYes ? 'Ja' : 'Nein'}</strong>
-                </span>
-                <span style={{ color: 'var(--text-muted)' }}>
-                  Einsatz: <strong style={{ color: 'var(--text)' }}>{p.amount} ₫</strong>
-                </span>
-                <span style={{ color: 'var(--text-muted)' }}>
-                  Aktuell: <strong style={{ color: 'var(--text)' }}>{prob}%</strong>
-                </span>
-                {p.resolved && (
-                  <span className={`pos-badge ${p.resolution === p.direction ? 'pos-yes' : 'pos-no'}`}>
-                    {p.resolution === p.direction ? 'Gewonnen' : 'Verloren'}
-                  </span>
+            {/* Name + Meta */}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+                {editingUsername ? (
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <input
+                      type="text"
+                      value={newUsername}
+                      onChange={e => setNewUsername(e.target.value)}
+                      autoFocus
+                      onKeyDown={e => { if (e.key === 'Enter') saveUsername(); if (e.key === 'Escape') setEditingUsername(false); }}
+                      style={{ fontSize: 20, fontWeight: 700, padding: '4px 10px', borderRadius: 8, border: '1.5px solid var(--accent)', background: 'var(--surface)', color: 'var(--text)', width: 200 }}
+                    />
+                    <button onClick={saveUsername} disabled={savingUsername}
+                      style={{ padding: '4px 14px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
+                      {savingUsername ? '…' : 'Speichern'}
+                    </button>
+                    <button onClick={() => setEditingUsername(false)}
+                      style={{ padding: '4px 10px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', fontSize: 13, color: 'var(--text-muted)' }}>
+                      ✕
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <span style={{ fontSize: 22, fontWeight: 700, color: 'var(--text)' }}>{displayName}</span>
+                    <button onClick={() => setEditingUsername(true)}
+                      title="Name ändern"
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: '2px 4px', fontSize: 14, lineHeight: 1, borderRadius: 4, display: 'flex', alignItems: 'center' }}>
+                      ✎
+                    </button>
+                  </>
                 )}
               </div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', display: 'flex', gap: 12 }}>
+                <span>Guthaben: <strong style={{ color: 'var(--yes)' }}>{(balance ?? 0).toLocaleString('de')} ₫</strong></span>
+                <span>·</span>
+                <span>{allRows.length} Prognosen</span>
+              </div>
+              {profileMessage && (
+                <div style={{ marginTop: 8, fontSize: 12, color: profileMessage.startsWith('Fehler') ? 'var(--no)' : 'var(--yes)' }}>
+                  {profileMessage}
+                </div>
+              )}
             </div>
-          )
-        })}
+
+            {/* Avatar-Upload */}
+            <label style={{ fontSize: 12, padding: '6px 14px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 20, cursor: 'pointer', color: 'var(--text)', fontWeight: 600, flexShrink: 0, whiteSpace: 'nowrap' }}>
+              {uploadingAvatar ? 'Lädt…' : 'Bild ändern'}
+              <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => { if (e.target.files?.[0]) uploadAvatar(e.target.files[0]); }} />
+            </label>
+          </div>
+
+          {/* Kennzahlen */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 1, borderTop: '1px solid var(--border)', paddingTop: 20 }}>
+            {[
+              { label: 'Portfoliowert', value: `${Math.round(balance ?? 0).toLocaleString('de')} ₫`, color: 'var(--text)' },
+              { label: 'Größter Gewinn', value: groessterGewinn > 0 ? `+${Math.round(groessterGewinn).toLocaleString('de')} ₫` : '—', color: groessterGewinn > 0 ? 'var(--yes)' : 'var(--text-muted)' },
+              { label: 'Prognosen', value: String(allRows.length), color: 'var(--text)' },
+            ].map((s, i) => (
+              <div key={s.label} style={{ paddingLeft: i > 0 ? 20 : 0, borderLeft: i > 0 ? '1px solid var(--border)' : 'none' }}>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{s.label}</div>
+                <div style={{ fontSize: 22, fontWeight: 700, color: s.color, letterSpacing: '-0.5px' }}>{s.value}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Rechte Seite: Gewinn/Verlust-Card */}
+        <div className="card" style={{ padding: '24px 24px 20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--yes)' }} />
+              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Gewinn / Verlust</span>
+            </div>
+          </div>
+
+          <div style={{ fontSize: 32, fontWeight: 800, color: totalAusbe - totalEinsatz >= 0 ? 'var(--yes)' : 'var(--no)', letterSpacing: '-1px', marginBottom: 4 }}>
+            {totalAusbe - totalEinsatz >= 0 ? '+' : ''}{Math.round(totalAusbe - totalEinsatz).toLocaleString('de')} ₫
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 20 }}>Gesamt</div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div style={{ background: 'rgba(22,163,74,0.06)', borderRadius: 10, padding: '10px 14px' }}>
+              <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Eingesetzt</div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>{Math.round(totalEinsatz).toLocaleString('de')} ₫</div>
+            </div>
+            <div style={{ background: 'rgba(22,163,74,0.06)', borderRadius: 10, padding: '10px 14px' }}>
+              <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Gewonnen</div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--yes)' }}>+{Math.round(totalAusbe).toLocaleString('de')} ₫</div>
+            </div>
+          </div>
+
+          <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Offene Positionen</span>
+            <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>{offeneCount}</span>
+          </div>
+        </div>
       </div>
+
+      {/* ── TABS ── */}
+      <div style={{ borderBottom: '1px solid var(--border)', marginBottom: 20, display: 'flex', gap: 0 }}>
+        {(['positionen', 'aktivitaet'] as TabType[]).map(t => (
+          <button key={t} onClick={() => setTab(t)}
+            style={{
+              background: 'none', border: 'none', cursor: 'pointer',
+              padding: '10px 20px',
+              fontSize: 14, fontWeight: tab === t ? 700 : 500,
+              color: tab === t ? 'var(--text)' : 'var(--text-muted)',
+              borderBottom: tab === t ? '2px solid var(--accent)' : '2px solid transparent',
+              marginBottom: -1,
+              transition: 'color 0.15s',
+            }}>
+            {t === 'positionen' ? 'Positionen' : 'Aktivität'}
+          </button>
+        ))}
+      </div>
+
+      {/* ── POSITIONEN ── */}
+      {tab === 'positionen' && (
+        <>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 20, alignItems: 'center' }}>
+            {(['aktiv', 'geschlossen'] as SubTabType[]).map(s => (
+              <button key={s} onClick={() => setSubTab(s)}
+                style={{
+                  padding: '6px 16px', borderRadius: 20, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                  border: '1px solid var(--border)',
+                  background: subTab === s ? 'var(--text)' : 'var(--surface)',
+                  color: subTab === s ? 'var(--bg)' : 'var(--text-muted)',
+                  transition: 'all 0.15s',
+                }}>
+                {s === 'aktiv' ? `Aktiv (${aktiveRows.length})` : `Geschlossen (${geschlosseneRows.length})`}
+              </button>
+            ))}
+          </div>
+
+          {portfolioLoading ? (
+            <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--text-muted)', fontSize: 13 }}>Wird geladen…</div>
+          ) : displayRows.length === 0 ? (
+            <div className="card" style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)', fontSize: 13 }}>
+              {subTab === 'aktiv' ? 'Keine aktiven Positionen.' : 'Noch keine abgeschlossenen Positionen.'}
+            </div>
+          ) : (
+            <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ background: 'var(--surface)' }}>
+                    {['Markt', 'Tipp', 'Eingesetzt', 'Ergebnis', 'Auszahlung'].map((h, i) => (
+                      <th key={h} style={{
+                        textAlign: i === 0 ? 'left' : 'right',
+                        fontSize: 11, fontWeight: 600, color: 'var(--text-muted)',
+                        padding: '12px 20px',
+                        borderBottom: '1px solid var(--border)',
+                        textTransform: 'uppercase', letterSpacing: '0.04em',
+                      }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {displayRows.map((entry, idx) => {
+                    const m = entry.market;
+                    const isYes = entry.direction === 'yes';
+                    const richtungLabel = m.is_auto ? (isYes ? '↑ Up' : '↓ Down') : (isYes ? 'Ja' : 'Nein');
+                    const resolved = m.resolved;
+                    const won = resolved && entry.auszahlung !== null && entry.auszahlung > 0;
+                    const lost = resolved && entry.auszahlung === 0;
+
+                    return (
+                      <tr key={entry.market.id} style={{ background: idx % 2 === 0 ? 'transparent' : 'rgba(0,0,0,0.01)', borderBottom: '1px solid var(--border)' }}>
+                        {/* Markt */}
+                        <td style={{ padding: '14px 20px', fontSize: 13, color: 'var(--text)', maxWidth: 320 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            {m.is_auto && m.coin && (
+                              <span style={{ width: 28, height: 28, borderRadius: 8, background: COIN_COLORS[m.coin] ?? '#f97316', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, color: '#fff', flexShrink: 0 }}>
+                                {m.coin.charAt(0)}
+                              </span>
+                            )}
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block', maxWidth: 260 }}>
+                              {m.is_auto ? `${m.coin} · 3-Minuten-Markt` : m.question}
+                            </span>
+                          </div>
+                        </td>
+
+                        {/* Tipp */}
+                        <td style={{ padding: '14px 20px', textAlign: 'right' }}>
+                          <span style={{ fontSize: 12, padding: '3px 10px', borderRadius: 20, fontWeight: 600, background: isYes ? 'rgba(22,163,74,0.12)' : 'rgba(220,38,38,0.12)', color: isYes ? '#15803d' : '#b91c1c' }}>
+                            {richtungLabel}
+                          </span>
+                        </td>
+
+                        {/* Eingesetzt */}
+                        <td style={{ padding: '14px 20px', textAlign: 'right', fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>
+                          {Math.round(entry.einsatz).toLocaleString('de')} ₫
+                        </td>
+
+                        {/* Ergebnis */}
+                        <td style={{ padding: '14px 20px', textAlign: 'right' }}>
+                          {!resolved ? (
+                            <span style={{ fontSize: 12, padding: '3px 10px', borderRadius: 20, background: 'rgba(245,158,11,0.12)', color: '#b45309', fontWeight: 600 }}>Läuft</span>
+                          ) : (
+                            <span style={{ fontSize: 12, padding: '3px 10px', borderRadius: 20, fontWeight: 600, background: m.resolution === 'yes' ? 'rgba(22,163,74,0.12)' : 'rgba(220,38,38,0.12)', color: m.resolution === 'yes' ? '#15803d' : '#b91c1c' }}>
+                              {m.is_auto ? (m.resolution === 'yes' ? 'Up ↑' : 'Down ↓') : (m.resolution === 'yes' ? 'Ja' : 'Nein')}
+                            </span>
+                          )}
+                        </td>
+
+                        {/* Auszahlung */}
+                        <td style={{ padding: '14px 20px', textAlign: 'right', fontSize: 13, fontWeight: 700 }}>
+                          {!resolved && entry.auszahlung === null ? (
+                            <span style={{ color: 'var(--text-muted)', fontWeight: 400, fontSize: 12 }}>ausstehend</span>
+                          ) : won ? (
+                            <span style={{ color: 'var(--yes)' }}>+{Math.round(entry.auszahlung ?? 0).toLocaleString('de')} ₫</span>
+                          ) : lost ? (
+                            <span style={{ color: 'var(--no)' }}>–{Math.round(entry.einsatz).toLocaleString('de')} ₫</span>
+                          ) : (
+                            <span style={{ color: 'var(--text-muted)' }}>—</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* ── AKTIVITÄT ── */}
+      {tab === 'aktivitaet' && (
+        <div className="card" style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)', fontSize: 13 }}>
+          Aktivitäts-Feed kommt bald.
+        </div>
+      )}
     </div>
-  )
+  );
 }
