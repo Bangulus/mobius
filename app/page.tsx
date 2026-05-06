@@ -136,7 +136,10 @@ export default function Home() {
   const [category, setCategory]         = useState('Alle')
   const [view, setView]                 = useState<'markets' | 'portfolio' | 'admin' | 'profil'>('markets')
   const [loading, setLoading]           = useState(true)
-  const [darkMode, setDarkMode]         = useState(false)
+  const [darkMode, setDarkMode]         = useState(() => {
+    if (typeof window === 'undefined') return false
+    return localStorage.getItem('mobius_darkmode') === 'true'
+  })
   const [showAuth, setShowAuth]         = useState(false)
   const [authMode, setAuthMode]         = useState<AuthMode>('login')
   const [authEmail, setAuthEmail]       = useState('')
@@ -155,6 +158,7 @@ export default function Home() {
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light')
+    localStorage.setItem('mobius_darkmode', String(darkMode))
   }, [darkMode])
 
   useEffect(() => {
