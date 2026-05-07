@@ -85,10 +85,8 @@ async function payoutWinners(marketId: string, resolution: 'yes' | 'no' | 'draw'
   const trades = await getTradesForMarket(marketId)
   if (!trades.length) return
 
-  // Gewinnertyp bestimmen
   const winningType = resolution === 'yes' ? 'buy_yes' : resolution === 'no' ? 'buy_no' : null
 
-  // Bei Unentschieden: alle bekommen ihren Einsatz zurück
   if (resolution === 'draw') {
     const userRefunds: Record<string, number> = {}
     for (const trade of trades) {
@@ -105,7 +103,6 @@ async function payoutWinners(marketId: string, resolution: 'yes' | 'no' | 'draw'
 
   if (!winningType) return
 
-  // Gewinner: 1 Dukat pro Share
   const userWinnings: Record<string, number> = {}
   for (const trade of trades) {
     if (trade.type === winningType) {
@@ -126,14 +123,12 @@ export async function GET() {
       return NextResponse.json({ ok: true, resolved: 0 })
     }
 
-    // Alle einzigartigen match_ids sammeln
-    const matchIds: string[] = [...new Set(
+    const matchIds: string[] = Array.from(new Set(
       openMarkets
         .map((m: any) => m.match_id)
         .filter(Boolean)
-    )]
+    ))
 
-    // OpenLigaDB einmal abfragen
     const allMatches = await getCurrentMatches()
     const matchMap = new Map<string, OpenLigaMatch>()
     for (const match of allMatches) {
@@ -147,21 +142,16 @@ export async function GET() {
       if (!match) continue
 
       const outcome = getMatchOutcome(match)
-      if (!outcome) continue // Spiel noch nicht fertig
+      if (!outcome) continue
 
-      // Alle 3 Märkte dieses Spiels holen
       const marketsForMatch = openMarkets.filter((m: any) => m.match_id === matchId)
 
       for (const market of marketsForMatch) {
-        // Bestimmen ob dieser Markt mit YES, NO oder draw aufgelöst wird
         let resolution: 'yes' | 'no' | 'draw'
 
         if (market.outcome === outcome) {
-          // Dieser Outcome ist eingetreten → YES gewinnt
           resolution = 'yes'
         } else if (outcome === 'draw' && market.outcome !== 'draw') {
-          // Unentschieden aber dieser Markt ist kein Draw-Markt
-          // → Einsatz zurück via draw-resolution
           resolution = 'draw'
         } else {
           resolution = 'no'
