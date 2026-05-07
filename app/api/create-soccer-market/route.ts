@@ -24,6 +24,14 @@ async function createThreeMarkets(match: OpenLigaMatch) {
   const matchId = `bl1-${match.matchID}`
   const closesAt = new Date(new Date(match.matchDateTime).getTime() + 115 * 60 * 1000).toISOString()
   const displayGroup = `${match.team1.teamName} vs ${match.team2.teamName}`
+  const matchDate = new Date(match.matchDateTime).toLocaleString('de-DE', {
+    timeZone: 'Europe/Berlin',
+    weekday: 'short',
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
 
   const outcomes = [
     {
@@ -46,7 +54,7 @@ async function createThreeMarkets(match: OpenLigaMatch) {
   for (const o of outcomes) {
     const body = {
       question: o.question,
-      description: `Bundesliga · ${displayGroup} · Anpfiff: ${new Date(match.matchDateTime).toLocaleString('de-DE', { timeZone: 'Europe/Berlin' })}`,
+      description: `Bundesliga · ${displayGroup} · Anpfiff: ${matchDate}`,
       status: 'open',
       b: 100,
       q_yes: 0,
@@ -61,6 +69,9 @@ async function createThreeMarkets(match: OpenLigaMatch) {
       is_auto: true,
       match_id: matchId,
       outcome: o.outcome,
+      home_team_icon: match.team1.teamIconUrl ?? null,
+      away_team_icon: match.team2.teamIconUrl ?? null,
+      match_date: matchDate,
     }
 
     await fetch(`${supabaseUrl}/rest/v1/markets`, {
