@@ -56,6 +56,8 @@ interface Market {
   display_group?: string
   is_auto?: boolean
   coin?: string
+  match_id?: string
+  outcome?: string
 }
 
 interface User {
@@ -111,6 +113,44 @@ const CAT_CLASS: Record<string, string> = {
 
 const COIN_COLORS: Record<string, string> = {
   BTC: '#f59e0b', ETH: '#6366f1', SOL: '#9945ff', XRP: '#00aae4',
+}
+
+const TEAM_COLORS: Record<string, string> = {
+  'FC Bayern München':          '#dc052d',
+  'Borussia Dortmund':          '#fde100',
+  'BV Borussia 09 Dortmund':    '#fde100',
+  'Bayer 04 Leverkusen':        '#e32221',
+  'RB Leipzig':                 '#dd0741',
+  'Eintracht Frankfurt':        '#e1000f',
+  'VfB Stuttgart':              '#e32219',
+  'SC Freiburg':                '#e30613',
+  'Union Berlin':               '#eb1923',
+  'Borussia Mönchengladbach':   '#000000',
+  'VfL Wolfsburg':              '#65b32e',
+  'TSG Hoffenheim':             '#1961ae',
+  'FC Augsburg':                '#ba3733',
+  'SV Werder Bremen':           '#1d9053',
+  'Mainz 05':                   '#c1121c',
+  '1. FSV Mainz 05':            '#c1121c',
+  'VfL Bochum':                 '#005aaa',
+  'FC Heidenheim':              '#e2001a',
+  '1. FC Heidenheim 1846':      '#e2001a',
+  'SV Darmstadt 98':            '#004f9f',
+  'Holstein Kiel':              '#c8102e',
+  'Hamburger SV':               '#0033a0',
+  '1. FC Köln':                 '#e6000f',
+  'Fortuna Düsseldorf':         '#e30613',
+}
+
+function getTeamColor(name: string): string {
+  return TEAM_COLORS[name] ?? '#6366f1'
+}
+
+function getTeamInitials(name: string): string {
+  const clean = name.replace(/^(1\.\s*)?(FC|BV|SV|TSG|VfB|VfL|SC|RB|FSV)\s+/i, '')
+  const words = clean.split(' ').filter(Boolean)
+  if (words.length === 1) return words[0].substring(0, 3).toUpperCase()
+  return (words[0][0] + (words[1]?.[0] ?? '')).toUpperCase()
 }
 
 const AVATAR_COLORS = [
@@ -203,7 +243,7 @@ export default function Home() {
   useEffect(() => {
     const id = setInterval(() => {
       const now = Date.now()
-      const autoMarkets = marketsRef.current.filter(m => m.is_auto && m.coin && !m.resolved)
+      const autoMarkets = marketsRef.current.filter(m => m.is_auto && m.coin && !m.resolved && !m.match_id)
 
       for (const coin of COINS) {
         const market = autoMarkets.find(m => m.coin === coin)
@@ -381,7 +421,8 @@ export default function Home() {
     const matchCat = category === 'Alle' || m.category === category
     const matchSearch = searchQuery === '' ||
       (m.question ?? '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (m.short_label ?? '').toLowerCase().includes(searchQuery.toLowerCase())
+      (m.short_label ?? '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (m.display_group ?? '').toLowerCase().includes(searchQuery.toLowerCase())
     return matchCat && matchSearch
   })
 
@@ -590,10 +631,24 @@ export default function Home() {
 }
 
 function MarketsGrid({ markets, onOpen }: { markets: Market[]; onOpen: (id: string) => void }) {
+  // Soccer-Märkte nach match_id gruppieren
+  const soccerGroups: Record<string, Market[]> = {}
+  const otherMarkets: Market[] = []
+
+  markets.forEach((m) => {
+    if (m.match_id) {
+      if (!soccerGroups[m.match_id]) soccerGroups[m.match_id] = []
+      soccerGroups[m.match_id].push(m)
+    } else {
+      otherMarkets.push(m)
+    }
+  })
+
+  // Restliche Märkte nach group_title / display_group gruppieren
   const groups: Record<string, Market[]> = {}
   const ungrouped: Market[] = []
 
-  markets.forEach((m) => {
+  otherMarkets.forEach((m) => {
     if (m.group_title) {
       if (!groups[m.group_title]) groups[m.group_title] = []
       groups[m.group_title].push(m)
@@ -605,8 +660,27 @@ function MarketsGrid({ markets, onOpen }: { markets: Market[]; onOpen: (id: stri
     }
   })
 
+  const soccerEntries = Object.entries(soccerGroups)
+
   return (
     <div>
+      {/* Soccer-Spiele als eigene Karten */}
+      {soccerEntries.length > 0 && (
+        <div style={{ marginBottom: 24 }}>
+          <div className="group-header">⚽ Bundesliga</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {soccerEntries.map(([matchId, matchMarkets]) => (
+              <SoccerMatchCard
+                key={matchId}
+                markets={matchMarkets}
+                onOpen={onOpen}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Normale Märkte */}
       {ungrouped.length > 0 && (
         <div className="markets-grid">
           {ungrouped.map((m) => <MarketCard key={m.id} market={m} onClick={() => onOpen(m.id)} />)}
@@ -624,6 +698,150 @@ function MarketsGrid({ markets, onOpen }: { markets: Market[]; onOpen: (id: stri
           </div>
         )
       })}
+    </div>
+  )
+}
+
+function SoccerMatchCard({ markets, onOpen }: { markets: Market[]; onOpen: (id: string) => void }) {
+  const homeMarket = markets.find(m => m.outcome === 'home')
+  const drawMarket = markets.find(m => m.outcome === 'draw')
+  const awayMarket = markets.find(m => m.outcome === 'away')
+
+  const anyMarket = homeMarket ?? drawMarket ?? awayMarket
+  if (!anyMarket) return null
+
+  const displayGroup = anyMarket.display_group ?? ''
+  const teams = displayGroup.split(' vs ')
+  const homeTeam = teams[0] ?? ''
+  const awayTeam = teams[1] ?? ''
+
+  const homeProb = homeMarket ? calcProb(homeMarket.q_yes, homeMarket.q_no, homeMarket.b) : 33
+  const drawProb = drawMarket ? calcProb(drawMarket.q_yes, drawMarket.q_no, drawMarket.b) : 34
+  const awayProb = awayMarket ? calcProb(awayMarket.q_yes, awayMarket.q_no, awayMarket.b) : 33
+
+  const total    = homeProb + drawProb + awayProb
+  const homeNorm = Math.round((homeProb / total) * 100)
+  const drawNorm = Math.round((drawProb / total) * 100)
+  const awayNorm = 100 - homeNorm - drawNorm
+
+  const closesAt = parseUTC(anyMarket.closes_at)
+  const diff     = closesAt.getTime() - Date.now()
+  const diffH    = Math.floor(diff / 3600000)
+  const diffM    = Math.floor((diff % 3600000) / 60000)
+  const timeLabel = diffH > 24
+    ? `in ${Math.floor(diffH / 24)}T ${diffH % 24}h`
+    : diffH > 0
+    ? `in ${diffH}h ${diffM}m`
+    : `in ${diffM}m`
+
+  const totalVolume = markets.reduce((s, m) => s + m.q_yes + m.q_no, 0)
+
+  return (
+    <div className="market-card" style={{ padding: '16px 20px', cursor: 'pointer' }}
+      onClick={() => onOpen((homeMarket ?? anyMarket).id)}>
+
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span className="cat-badge cat-sport">Sport</span>
+          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Bundesliga</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div className="live-dot" />
+          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{timeLabel}</span>
+        </div>
+      </div>
+
+      {/* Teams */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
+
+        {/* Heimteam */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
+          <div style={{
+            width: 36, height: 36, borderRadius: 9, flexShrink: 0,
+            background: getTeamColor(homeTeam),
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 13, fontWeight: 900, color: '#fff',
+          }}>
+            {getTeamInitials(homeTeam)}
+          </div>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {homeTeam}
+            </div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: getTeamColor(homeTeam) }}>
+              {homeNorm}%
+            </div>
+          </div>
+        </div>
+
+        {/* Mitte */}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, flexShrink: 0 }}>
+          <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 600, letterSpacing: 0.5 }}>VS</div>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>X {drawNorm}%</div>
+        </div>
+
+        {/* Auswärtsteam */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0, justifyContent: 'flex-end' }}>
+          <div style={{ minWidth: 0, textAlign: 'right' }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {awayTeam}
+            </div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: getTeamColor(awayTeam) }}>
+              {awayNorm}%
+            </div>
+          </div>
+          <div style={{
+            width: 36, height: 36, borderRadius: 9, flexShrink: 0,
+            background: getTeamColor(awayTeam),
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 13, fontWeight: 900, color: '#fff',
+          }}>
+            {getTeamInitials(awayTeam)}
+          </div>
+        </div>
+      </div>
+
+      {/* Wahrscheinlichkeits-Balken */}
+      <div style={{ display: 'flex', height: 5, borderRadius: 3, overflow: 'hidden', gap: 2, marginBottom: 12 }}>
+        <div style={{ width: `${homeNorm}%`, background: getTeamColor(homeTeam) }} />
+        <div style={{ width: `${drawNorm}%`, background: '#94a3b8' }} />
+        <div style={{ width: `${awayNorm}%`, background: getTeamColor(awayTeam) }} />
+      </div>
+
+      {/* Footer */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+          {Math.round(totalVolume).toLocaleString('de')} ₫ Vol.
+        </div>
+        <div style={{ display: 'flex', gap: 6 }}>
+          {[
+            { label: homeTeam.split(' ').pop() ?? homeTeam, id: homeMarket?.id, color: getTeamColor(homeTeam) },
+            { label: 'X', id: drawMarket?.id, color: '#64748b' },
+            { label: awayTeam.split(' ').pop() ?? awayTeam, id: awayMarket?.id, color: getTeamColor(awayTeam) },
+          ].map((btn) => (
+            btn.id ? (
+              <button
+                key={btn.id}
+                onClick={(e) => { e.stopPropagation(); onOpen(btn.id!) }}
+                style={{
+                  fontSize: 11, fontWeight: 700, padding: '4px 10px', borderRadius: 6,
+                  border: `1px solid ${btn.color}33`,
+                  background: `${btn.color}15`,
+                  color: btn.color,
+                  cursor: 'pointer',
+                  maxWidth: 80,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {btn.label}
+              </button>
+            ) : null
+          ))}
+        </div>
+      </div>
     </div>
   )
 }
