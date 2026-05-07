@@ -13,9 +13,8 @@ export interface OpenLigaMatch {
 
 function getCurrentSeason(): number {
   const now = new Date()
-  const month = now.getMonth() // 0 = Januar
+  const month = now.getMonth()
   const year = now.getFullYear()
-  // Saison startet im August (Monat 7)
   return month >= 7 ? year : year - 1
 }
 
@@ -60,13 +59,12 @@ export function getMatchOutcome(match: OpenLigaMatch): 'home' | 'draw' | 'away' 
 
 export function getUpcomingMatches(matches: OpenLigaMatch[]): OpenLigaMatch[] {
   const now = new Date()
-  const in30min = new Date(now.getTime() + 30 * 60 * 1000)
+  const in3days = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000)
 
   return matches.filter(m => {
     if (m.matchIsFinished) return false
     const matchTime = new Date(m.matchDateTime)
-    // Spiele die in den nächsten 30 Minuten starten
-    return matchTime > now && matchTime <= in30min
+    return matchTime > now && matchTime <= in3days
   })
 }
 
