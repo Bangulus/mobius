@@ -118,6 +118,7 @@ const COINS = ['BTC', 'ETH', 'SOL', 'XRP']
 const CAT_CLASS: Record<string, string> = {
   Politik:       'cat-politik',
   Sport:         'cat-sport',
+  sport:         'cat-sport',
   Krypto:        'cat-krypto',
   Entertainment: 'cat-entertainment',
   Wirtschaft:    'cat-wirtschaft',
@@ -125,7 +126,6 @@ const CAT_CLASS: Record<string, string> = {
   Finanzen:      'cat-wirtschaft',
   Wetter:        'cat-sport',
   Kultur:        'cat-entertainment',
-  sport:         'cat-sport',
 }
 
 const COIN_COLORS: Record<string, string> = {
@@ -170,6 +170,13 @@ function getTeamInitials(name: string): string {
   return (words[0][0] + (words[1]?.[0] ?? '')).toUpperCase()
 }
 
+interface NavItemDef {
+  id: string
+  label: string
+  icon: string
+  children?: NavItemDef[]
+}
+
 const NAV_ITEMS: NavItemDef[] = [
   { id: 'Politik',       label: 'Politik',      icon: '🏛️' },
   { id: 'Sport',         label: 'Sport',         icon: '⚽', children: [
@@ -185,13 +192,6 @@ const NAV_ITEMS: NavItemDef[] = [
   { id: 'Wetter',        label: 'Wetter',        icon: '🌤️' },
   { id: 'Kultur',        label: 'Kultur',        icon: '🎭' },
 ]
-
-interface NavItemDef {
-  id: string
-  label: string
-  icon: string
-  children?: NavItemDef[]
-}
 
 type AuthMode = 'login' | 'register'
 
@@ -447,8 +447,8 @@ export default function Home() {
   const filteredMarkets = markets.filter((m) => {
     const matchCat =
       category === 'Bundesliga' ? !!m.match_id :
-      category === 'Fußball'    ? m.category === 'sport' :
-      category === 'Sport'      ? m.category === 'sport' :
+      category === 'Fußball'    ? (m.category === 'sport' || m.category === 'Sport') :
+      category === 'Sport'      ? (m.category === 'sport' || m.category === 'Sport') :
       m.category === category || m.category === category.toLowerCase()
     const matchSearch = searchQuery === '' ||
       (m.question ?? '').toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -759,10 +759,9 @@ function TeamLogo({ iconUrl, teamName, color, size = 36 }: { iconUrl?: string; t
     )
   }
 
-  const initials = getTeamInitials(teamName)
   return (
     <div style={{ width: size, height: size, borderRadius: 6, flexShrink: 0, background: color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: size * 0.36, fontWeight: 900, color: '#fff' }}>
-      {initials}
+      {getTeamInitials(teamName)}
     </div>
   )
 }
@@ -866,11 +865,13 @@ function SoccerMatchCard({ markets, onOpen }: { markets: Market[]; onOpen: (id: 
   const drawNorm = Math.round((drawProb / total) * 100)
   const awayNorm = 100 - homeNorm - drawNorm
 
-  const matchDate  = anyMarket.match_date ?? ''
-  const timePart   = matchDate.split(', ')[1] ?? ''
+  const matchDate   = anyMarket.match_date ?? ''
+  // Format: "So., 10.05., 15:30" → split by ', ' → ['So.', '10.05.', '15:30']
+  const parts       = matchDate.split(', ')
+  const timePart    = parts[2] ?? parts[1] ?? ''
   const totalVolume = markets.reduce((s, m) => s + m.q_yes + m.q_no, 0)
-  const homeColor  = getTeamColor(homeTeam)
-  const awayColor  = getTeamColor(awayTeam)
+  const homeColor   = getTeamColor(homeTeam)
+  const awayColor   = getTeamColor(awayTeam)
 
   return (
     <div className="market-card" style={{ padding: '14px 18px', cursor: 'pointer' }}
@@ -882,9 +883,7 @@ function SoccerMatchCard({ markets, onOpen }: { markets: Market[]; onOpen: (id: 
           {timePart && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>· {timePart} Uhr</span>}
           {totalVolume > 0 && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>· {Math.round(totalVolume).toLocaleString('de')} ₫</span>}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <div className="live-dot" />
-        </div>
+        <div className="live-dot" />
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
