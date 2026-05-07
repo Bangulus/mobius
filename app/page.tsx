@@ -58,6 +58,9 @@ interface Market {
   coin?: string
   match_id?: string
   outcome?: string
+  home_team_icon?: string
+  away_team_icon?: string
+  match_date?: string
 }
 
 interface User {
@@ -96,8 +99,7 @@ function parseUTC(raw: string): Date {
   return new Date(raw.replace(' ', 'T') + 'Z')
 }
 
-const CATEGORIES = ['Politik', 'Sport', 'Krypto', 'Entertainment', 'Wirtschaft', 'Geopolitik', 'Finanzen', 'Wetter', 'Kultur']
-const COINS      = ['BTC', 'ETH', 'SOL', 'XRP']
+const COINS = ['BTC', 'ETH', 'SOL', 'XRP']
 
 const CAT_CLASS: Record<string, string> = {
   Politik:       'cat-politik',
@@ -109,6 +111,7 @@ const CAT_CLASS: Record<string, string> = {
   Finanzen:      'cat-wirtschaft',
   Wetter:        'cat-sport',
   Kultur:        'cat-entertainment',
+  sport:         'cat-sport',
 }
 
 const COIN_COLORS: Record<string, string> = {
@@ -168,6 +171,23 @@ function avatarColor(str: string) {
 
 type AuthMode = 'login' | 'register'
 
+// Sidebar Navigation Struktur
+const NAV_ITEMS = [
+  { id: 'Politik',       label: 'Politik',       icon: '🏛️' },
+  { id: 'Sport',         label: 'Sport',          icon: '⚽', children: [
+    { id: 'Fußball',     label: 'Fußball',        icon: '⚽', children: [
+      { id: 'Bundesliga', label: 'Bundesliga',    icon: '🇩🇪' },
+    ]},
+  ]},
+  { id: 'Krypto',        label: 'Krypto',         icon: '₿'  },
+  { id: 'Entertainment', label: 'Entertainment',  icon: '🎬' },
+  { id: 'Wirtschaft',    label: 'Wirtschaft',     icon: '📈' },
+  { id: 'Geopolitik',    label: 'Geopolitik',     icon: '🌍' },
+  { id: 'Finanzen',      label: 'Finanzen',       icon: '💰' },
+  { id: 'Wetter',        label: 'Wetter',         icon: '🌤️' },
+  { id: 'Kultur',        label: 'Kultur',         icon: '🎭' },
+]
+
 export default function Home() {
   const router = useRouter()
   const [markets, setMarkets]           = useState<Market[]>([])
@@ -189,6 +209,7 @@ export default function Home() {
   const [authLoading, setAuthLoading]   = useState(false)
   const [searchQuery, setSearchQuery]   = useState('')
   const [winToasts, setWinToasts]       = useState<WinToast[]>([])
+  const [expandedNav, setExpandedNav]   = useState<Record<string, boolean>>({ Sport: true, Fußball: true })
   const shownToastsRef                  = useRef<Set<string>>(new Set())
   const userRef                         = useRef<User | null>(null)
   const marketsRef                      = useRef<Market[]>([])
@@ -274,7 +295,6 @@ export default function Home() {
         }
       }
     }, 1000)
-
     return () => clearInterval(id)
   }, [loadMarkets])
 
@@ -329,9 +349,7 @@ export default function Home() {
         userRef.current = { ...userRef.current!, balance: freshUser[0].balance }
       }
       newToasts.forEach(toast => {
-        setTimeout(() => {
-          setWinToasts(prev => prev.filter(t => t.id !== toast.id))
-        }, 6000)
+        setTimeout(() => setWinToasts(prev => prev.filter(t => t.id !== toast.id)), 6000)
       })
     }
   }, [])
@@ -424,7 +442,7 @@ export default function Home() {
       category === 'Bundesliga' ? !!m.match_id :
       category === 'Fußball'    ? m.category === 'sport' :
       category === 'Sport'      ? m.category === 'sport' :
-      m.category === category
+      m.category === category || m.category === category.toLowerCase()
     const matchSearch = searchQuery === '' ||
       (m.question ?? '').toLowerCase().includes(searchQuery.toLowerCase()) ||
       (m.short_label ?? '').toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -432,21 +450,26 @@ export default function Home() {
     return matchCat && matchSearch
   })
 
+  const toggleNav = (id: string) => {
+    setExpandedNav(prev => ({ ...prev, [id]: !prev[id] }))
+  }
+
+  const selectCategory = (id: string) => {
+    setCategory(id)
+    setView('markets')
+    setSearchQuery('')
+  }
+
   return (
     <>
+      {/* Win Toasts */}
       <div style={{ position: 'fixed', top: 80, right: 16, zIndex: 9999, display: 'flex', flexDirection: 'column', gap: 10, pointerEvents: 'none' }}>
         {winToasts.map(toast => (
           <div key={toast.id} style={{
-            pointerEvents: 'all',
-            background: '#fff',
-            border: '1px solid rgba(22,163,74,0.3)',
-            borderLeft: '4px solid #16a34a',
-            borderRadius: 12,
-            padding: '14px 16px',
-            minWidth: 260,
-            maxWidth: 320,
-            boxShadow: '0 4px 24px rgba(0,0,0,0.10)',
-            animation: 'slideInRight 0.3s ease',
+            pointerEvents: 'all', background: '#fff',
+            border: '1px solid rgba(22,163,74,0.3)', borderLeft: '4px solid #16a34a',
+            borderRadius: 12, padding: '14px 16px', minWidth: 260, maxWidth: 320,
+            boxShadow: '0 4px 24px rgba(0,0,0,0.10)', animation: 'slideInRight 0.3s ease',
           }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -461,9 +484,7 @@ export default function Home() {
                 style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, color: '#9ca3af', padding: 0, lineHeight: 1 }}>×</button>
             </div>
             <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 8, lineHeight: 1.4 }}>
-              {toast.isKrypto
-                ? `${toast.coin} ${toast.direction === 'yes' ? 'Up ↑' : 'Down ↓'}`
-                : toast.question.length > 50 ? toast.question.slice(0, 50) + '…' : toast.question}
+              {toast.isKrypto ? `${toast.coin} ${toast.direction === 'yes' ? 'Up ↑' : 'Down ↓'}` : toast.question.length > 50 ? toast.question.slice(0, 50) + '…' : toast.question}
             </div>
             <div style={{ fontSize: 28, fontWeight: 800, color: '#16a34a', letterSpacing: '-0.5px', lineHeight: 1 }}>
               +{toast.amount.toLocaleString('de')} ₫
@@ -472,12 +493,11 @@ export default function Home() {
         ))}
       </div>
 
+      {/* Auth Modal */}
       {showAuth && (
         <div className="modal-backdrop" onClick={() => setShowAuth(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-title">
-              {authMode === 'login' ? 'Anmelden' : 'Konto erstellen'}
-            </div>
+            <div className="modal-title">{authMode === 'login' ? 'Anmelden' : 'Konto erstellen'}</div>
             <div className="auth-tabs">
               <button className={`auth-tab ${authMode === 'login' ? 'active' : ''}`}
                 onClick={() => { setAuthMode('login'); setAuthError('') }}>Anmelden</button>
@@ -508,6 +528,7 @@ export default function Home() {
         </div>
       )}
 
+      {/* Nav */}
       <nav className="nav">
         <div className="nav-left">
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -544,8 +565,7 @@ export default function Home() {
               <button className="nav-pill accent" onClick={() => openAuth('register')}>Registrieren</button>
             </>
           )}
-          <button className="nav-icon-btn" onClick={() => setDarkMode(!darkMode)}
-            title={darkMode ? 'Light Mode' : 'Dark Mode'}>
+          <button className="nav-icon-btn" onClick={() => setDarkMode(!darkMode)}>
             {darkMode ? '☀️' : '🌙'}
           </button>
           {user && (
@@ -565,100 +585,231 @@ export default function Home() {
         </div>
       </nav>
 
-      {/* Haupt-Kategorien */}
-      <div className="cat-bar">
-        {CATEGORIES.map((cat) => (
-          <button key={cat}
-            className={`cat-bar-btn ${cat === 'Sport' && isSportCategory ? 'active' : category === cat ? 'active' : ''}`}
-            onClick={() => { setCategory(cat); setView('markets') }}>
-            {cat}
-          </button>
-        ))}
-      </div>
+      {/* Haupt-Layout: Sidebar + Content */}
+      <div style={{ display: 'flex', minHeight: 'calc(100vh - var(--nav-height, 56px))', maxWidth: 1400, margin: '0 auto' }}>
 
-      {/* Sport Unternavigation */}
-      {isSportCategory && (
-        <div className="cat-bar" style={{ borderTop: '1px solid var(--border)', paddingTop: 0 }}>
-          <span style={{ fontSize: 11, color: 'var(--text-muted)', padding: '0 8px', alignSelf: 'center' }}>↳</span>
-          <button
-            className={`cat-bar-btn ${category === 'Fußball' || category === 'Bundesliga' ? 'active' : ''}`}
-            onClick={() => { setCategory('Fußball'); setView('markets') }}>
-            Fußball
-          </button>
-          {(category === 'Fußball' || category === 'Bundesliga') && (
+        {/* Sidebar */}
+        <aside style={{
+          width: 220, flexShrink: 0, borderRight: '1px solid var(--border)',
+          padding: '20px 0', position: 'sticky', top: 'var(--nav-height, 56px)',
+          height: 'calc(100vh - var(--nav-height, 56px))', overflowY: 'auto',
+          background: 'var(--bg)',
+        }}>
+          {/* User-Bereich in Sidebar */}
+          {user && (
+            <div style={{ padding: '0 16px 16px', borderBottom: '1px solid var(--border)', marginBottom: 12 }}>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Guthaben</div>
+              <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--text)' }}>{user.balance.toLocaleString('de')} ₫</div>
+            </div>
+          )}
+
+          {/* Navigation Items */}
+          <div style={{ padding: '0 8px' }}>
+            {NAV_ITEMS.map(item => (
+              <NavItem
+                key={item.id}
+                item={item}
+                category={category}
+                expandedNav={expandedNav}
+                onSelect={selectCategory}
+                onToggle={toggleNav}
+                depth={0}
+              />
+            ))}
+          </div>
+
+          {/* Divider */}
+          <div style={{ borderTop: '1px solid var(--border)', margin: '16px 0' }} />
+
+          {/* Bestenliste in Sidebar */}
+          <div style={{ padding: '0 16px' }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: 0.5, marginBottom: 10, textTransform: 'uppercase' }}>
+              Bestenliste
+            </div>
+            <SidebarLeaderboard entries={leaderboard} currentUserId={user?.id} />
+          </div>
+        </aside>
+
+        {/* Content */}
+        <main style={{ flex: 1, minWidth: 0, padding: '24px 32px' }}>
+          {view === 'admin' && user?.id === ADMIN_ID && (
+            <AdminPanel userId={user.id} openMarkets={markets} onMarketResolved={loadMarkets} />
+          )}
+          {view === 'profil' && user && (
+            <ProfileView
+              userId={user.id} token={user.id} displayName={user.username}
+              avatarUrl={user.avatar_url ?? ''} balance={user.balance}
+              onUsernameChange={(name) => setUser({ ...user, username: name })}
+              onAvatarChange={(url) => setUser({ ...user, avatar_url: url })}
+            />
+          )}
+          {view === 'markets' && (
             <>
-              <span style={{ fontSize: 11, color: 'var(--text-muted)', padding: '0 4px', alignSelf: 'center' }}>↳</span>
-              <button
-                className={`cat-bar-btn ${category === 'Bundesliga' ? 'active' : ''}`}
-                onClick={() => { setCategory('Bundesliga'); setView('markets') }}>
-                Bundesliga
-              </button>
+              <div className="section-head">
+                <div className="section-title" style={{ fontSize: 22, fontWeight: 800 }}>
+                  {searchQuery ? `Suche: „${searchQuery}"` : category}
+                </div>
+                <div className="section-link" onClick={() => loadMarkets()}>Aktualisieren</div>
+              </div>
+              {loading ? (
+                <div style={{ color: 'var(--text-muted)', fontSize: 14, padding: '24px 0' }}>Märkte werden geladen…</div>
+              ) : filteredMarkets.length === 0 ? (
+                <div style={{ color: 'var(--text-muted)', fontSize: 14, padding: '24px 0' }}>Keine Märkte gefunden.</div>
+              ) : (
+                <MarketsGrid markets={filteredMarkets} onOpen={(id) => router.push(`/markets/${id}`)} isSoccer={isSportCategory} />
+              )}
             </>
           )}
-        </div>
-      )}
-
-      <main className="page-container">
-        {view === 'admin' && user?.id === ADMIN_ID && (
-          <AdminPanel userId={user.id} openMarkets={markets} onMarketResolved={loadMarkets} />
-        )}
-        {view === 'profil' && user && (
-          <ProfileView
-            userId={user.id} token={user.id} displayName={user.username}
-            avatarUrl={user.avatar_url ?? ''} balance={user.balance}
-            onUsernameChange={(name) => setUser({ ...user, username: name })}
-            onAvatarChange={(url) => setUser({ ...user, avatar_url: url })}
-          />
-        )}
-        {view === 'markets' && (
-          <>
-            {user && (
-              <div className="stats-grid">
-                <div className="stat-card">
-                  <div className="stat-label">Guthaben</div>
-                  <div className="stat-value">{user.balance.toLocaleString('de')} ₫</div>
-                  <div className="stat-delta delta-neu">Deine Dukaten</div>
-                </div>
-                <div className="stat-card">
-                  <div className="stat-label">Aktive Märkte</div>
-                  <div className="stat-value">{markets.length}</div>
-                  <div className="stat-delta delta-neu">offen</div>
-                </div>
-              </div>
-            )}
-            <div className="section-head">
-              <div className="section-title">{searchQuery ? `Suche: „${searchQuery}"` : category}</div>
-              <div className="section-link" onClick={() => loadMarkets()}>Aktualisieren</div>
-            </div>
-            {loading ? (
-              <div style={{ color: 'var(--text-muted)', fontSize: 14, padding: '24px 0' }}>Märkte werden geladen…</div>
-            ) : filteredMarkets.length === 0 ? (
-              <div style={{ color: 'var(--text-muted)', fontSize: 14, padding: '24px 0' }}>Keine Märkte gefunden.</div>
-            ) : (
-              <MarketsGrid markets={filteredMarkets} onOpen={(id) => router.push(`/markets/${id}`)} />
-            )}
-            <div className="section-head" style={{ marginTop: 32 }}>
-              <div className="section-title">Bestenliste</div>
-            </div>
-            <Leaderboard entries={leaderboard} currentUserId={user?.id} />
-          </>
-        )}
-        {view === 'portfolio' && user && (
-          <PortfolioView userId={user.id} router={router} />
-        )}
-      </main>
+          {view === 'portfolio' && user && (
+            <PortfolioView userId={user.id} router={router} />
+          )}
+        </main>
+      </div>
 
       <style>{`
         @keyframes slideInRight {
           from { transform: translateX(120%); opacity: 0; }
           to   { transform: translateX(0);    opacity: 1; }
         }
+        .nav-item-btn {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          width: 100%;
+          padding: 8px 12px;
+          border: none;
+          background: transparent;
+          border-radius: 8px;
+          cursor: pointer;
+          font-size: 13px;
+          font-weight: 500;
+          color: var(--text-muted);
+          text-align: left;
+          transition: background 0.1s, color 0.1s;
+        }
+        .nav-item-btn:hover {
+          background: var(--surface);
+          color: var(--text);
+        }
+        .nav-item-btn.active {
+          background: var(--accent-light, rgba(99,102,241,0.1));
+          color: var(--accent, #6366f1);
+          font-weight: 700;
+        }
+        .nav-item-btn .nav-chevron {
+          margin-left: auto;
+          font-size: 10px;
+          opacity: 0.5;
+          transition: transform 0.2s;
+        }
+        .nav-item-btn .nav-chevron.open {
+          transform: rotate(180deg);
+        }
       `}</style>
     </>
   )
 }
 
-function MarketsGrid({ markets, onOpen }: { markets: Market[]; onOpen: (id: string) => void }) {
+// Nav Item Komponente (rekursiv)
+interface NavItemDef {
+  id: string
+  label: string
+  icon: string
+  children?: NavItemDef[]
+}
+
+function NavItem({ item, category, expandedNav, onSelect, onToggle, depth }: {
+  item: NavItemDef
+  category: string
+  expandedNav: Record<string, boolean>
+  onSelect: (id: string) => void
+  onToggle: (id: string) => void
+  depth: number
+}) {
+  const hasChildren = item.children && item.children.length > 0
+  const isExpanded  = expandedNav[item.id]
+  const isActive    = category === item.id
+
+  return (
+    <div>
+      <button
+        className={`nav-item-btn ${isActive ? 'active' : ''}`}
+        style={{ paddingLeft: 12 + depth * 12 }}
+        onClick={() => {
+          if (hasChildren) onToggle(item.id)
+          onSelect(item.id)
+        }}
+      >
+        <span style={{ fontSize: 14 }}>{item.icon}</span>
+        <span>{item.label}</span>
+        {hasChildren && (
+          <span className={`nav-chevron ${isExpanded ? 'open' : ''}`}>▼</span>
+        )}
+      </button>
+      {hasChildren && isExpanded && (
+        <div>
+          {item.children!.map(child => (
+            <NavItem
+              key={child.id}
+              item={child}
+              category={category}
+              expandedNav={expandedNav}
+              onSelect={onSelect}
+              onToggle={onToggle}
+              depth={depth + 1}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function SidebarLeaderboard({ entries, currentUserId }: { entries: LeaderboardEntry[]; currentUserId?: string }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      {entries.slice(0, 5).map((e, i) => {
+        const av = avatarColor(e.username)
+        const isMe = e.user_id === currentUserId
+        const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`
+        return (
+          <div key={e.user_id} style={{
+            display: 'flex', alignItems: 'center', gap: 8,
+            padding: '4px 0',
+            background: isMe ? 'var(--accent-light)' : 'transparent',
+            borderRadius: 6,
+          }}>
+            <span style={{ fontSize: 12, width: 20, textAlign: 'center', flexShrink: 0 }}>{medal}</span>
+            <div style={{ width: 24, height: 24, borderRadius: '50%', background: av.bg, color: av.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, flexShrink: 0 }}>
+              {e.username.slice(0, 2).toUpperCase()}
+            </div>
+            <span style={{ fontSize: 12, color: 'var(--text)', fontWeight: isMe ? 700 : 400, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {e.username}
+            </span>
+            <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>
+              {(e.total_balance / 1000).toFixed(1)}K
+            </span>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function avatarColor(str: string) {
+  const AVATAR_COLORS = [
+    { bg: '#eff6ff', color: '#1d4ed8' },
+    { bg: '#f0fdf4', color: '#166534' },
+    { bg: '#fdf4ff', color: '#6b21a8' },
+    { bg: '#fffbeb', color: '#92400e' },
+    { bg: '#f0f9ff', color: '#075985' },
+  ]
+  let h = 0
+  for (let i = 0; i < str.length; i++) h = str.charCodeAt(i) + ((h << 5) - h)
+  return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length]
+}
+
+function MarketsGrid({ markets, onOpen, isSoccer }: { markets: Market[]; onOpen: (id: string) => void; isSoccer: boolean }) {
   const soccerGroups: Record<string, Market[]> = {}
   const otherMarkets: Market[] = []
 
@@ -688,16 +839,31 @@ function MarketsGrid({ markets, onOpen }: { markets: Market[]; onOpen: (id: stri
 
   const soccerEntries = Object.entries(soccerGroups)
 
+  // Soccer: nach Datum gruppieren
+  const soccerByDate: Record<string, [string, Market[]][]> = {}
+  soccerEntries.forEach(([matchId, matchMarkets]) => {
+    const anyMarket = matchMarkets[0]
+    const dateKey = anyMarket.match_date?.split(',')[0] ?? 'Sonstige'
+    if (!soccerByDate[dateKey]) soccerByDate[dateKey] = []
+    soccerByDate[dateKey].push([matchId, matchMarkets])
+  })
+
   return (
     <div>
       {soccerEntries.length > 0 && (
         <div style={{ marginBottom: 24 }}>
-          <div className="group-header">⚽ Bundesliga</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {soccerEntries.map(([matchId, matchMarkets]) => (
-              <SoccerMatchCard key={matchId} markets={matchMarkets} onOpen={onOpen} />
-            ))}
-          </div>
+          {Object.entries(soccerByDate).map(([dateKey, matches]) => (
+            <div key={dateKey} style={{ marginBottom: 24 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 10, paddingBottom: 6, borderBottom: '1px solid var(--border)' }}>
+                {dateKey}
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {matches.map(([matchId, matchMarkets]) => (
+                  <SoccerMatchCard key={matchId} markets={matchMarkets} onOpen={onOpen} />
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
       )}
       {ungrouped.length > 0 && (
@@ -717,6 +883,40 @@ function MarketsGrid({ markets, onOpen }: { markets: Market[]; onOpen: (id: stri
           </div>
         )
       })}
+    </div>
+  )
+}
+
+function TeamLogo({ iconUrl, teamName, color, size = 36 }: { iconUrl?: string; teamName: string; color: string; size?: number }) {
+  const [imgError, setImgError] = useState(false)
+
+  if (iconUrl && !imgError) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={iconUrl}
+        alt={teamName}
+        onError={() => setImgError(true)}
+        style={{ width: size, height: size, borderRadius: 6, objectFit: 'contain', background: '#fff', padding: 2 }}
+      />
+    )
+  }
+
+  // Fallback: Initialen
+  const clean = teamName.replace(/^(1\.\s*)?(FC|BV|SV|TSG|VfB|VfL|SC|RB|FSV)\s+/i, '')
+  const words = clean.split(' ').filter(Boolean)
+  const initials = words.length === 1
+    ? words[0].substring(0, 3).toUpperCase()
+    : (words[0][0] + (words[1]?.[0] ?? '')).toUpperCase()
+
+  return (
+    <div style={{
+      width: size, height: size, borderRadius: 6, flexShrink: 0,
+      background: color,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontSize: size * 0.36, fontWeight: 900, color: '#fff',
+    }}>
+      {initials}
     </div>
   )
 }
@@ -743,115 +943,112 @@ function SoccerMatchCard({ markets, onOpen }: { markets: Market[]; onOpen: (id: 
   const drawNorm = Math.round((drawProb / total) * 100)
   const awayNorm = 100 - homeNorm - drawNorm
 
-  const closesAt = parseUTC(anyMarket.closes_at)
-  const diff     = closesAt.getTime() - Date.now()
-  const diffH    = Math.floor(diff / 3600000)
-  const diffM    = Math.floor((diff % 3600000) / 60000)
-  const timeLabel = diffH > 24
-    ? `in ${Math.floor(diffH / 24)}T ${diffH % 24}h`
-    : diffH > 0
-    ? `in ${diffH}h ${diffM}m`
-    : `in ${diffM}m`
+  // Uhrzeit aus match_date extrahieren
+  const matchDate = anyMarket.match_date ?? ''
+  const timePart  = matchDate.split(', ')[1] ?? ''
 
   const totalVolume = markets.reduce((s, m) => s + m.q_yes + m.q_no, 0)
 
+  const homeColor = getTeamColor(homeTeam)
+  const awayColor = getTeamColor(awayTeam)
+
   return (
-    <div className="market-card" style={{ padding: '16px 20px', cursor: 'pointer' }}
+    <div className="market-card" style={{ padding: '14px 18px', cursor: 'pointer' }}
       onClick={() => onOpen((homeMarket ?? anyMarket).id)}>
 
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span className="cat-badge cat-sport">Sport</span>
-          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Bundesliga</span>
-        </div>
+      {/* Header: Liga + Uhrzeit + Volumen */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: 0.3 }}>
+            Bundesliga
+          </span>
+          {timePart && (
+            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>· {timePart} Uhr</span>
+          )}
+          {totalVolume > 0 && (
+            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+              · {Math.round(totalVolume).toLocaleString('de')} ₫
+            </span>
+          )}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <div className="live-dot" />
-          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{timeLabel}</span>
+          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Live</span>
         </div>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
-          <div style={{
-            width: 36, height: 36, borderRadius: 9, flexShrink: 0,
-            background: getTeamColor(homeTeam),
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 13, fontWeight: 900, color: '#fff',
-          }}>
-            {getTeamInitials(homeTeam)}
-          </div>
+      {/* Teams + Quoten — Polymarket Style */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+
+        {/* Heimteam */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 }}>
+          <TeamLogo
+            iconUrl={anyMarket.home_team_icon}
+            teamName={homeTeam}
+            color={homeColor}
+            size={40}
+          />
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {homeTeam}
             </div>
-            <div style={{ fontSize: 18, fontWeight: 800, color: getTeamColor(homeTeam) }}>
-              {homeNorm}%
+            <div style={{ fontSize: 20, fontWeight: 800, color: homeColor, lineHeight: 1.1 }}>
+              {homeNorm}¢
             </div>
           </div>
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, flexShrink: 0 }}>
-          <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 600, letterSpacing: 0.5 }}>VS</div>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>X {drawNorm}%</div>
+        {/* Draw */}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, flexShrink: 0, padding: '0 8px' }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: 0.5 }}>DRAW</div>
+          <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-muted)' }}>{drawNorm}¢</div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0, justifyContent: 'flex-end' }}>
+        {/* Auswärtsteam */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0, justifyContent: 'flex-end' }}>
           <div style={{ minWidth: 0, textAlign: 'right' }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {awayTeam}
             </div>
-            <div style={{ fontSize: 18, fontWeight: 800, color: getTeamColor(awayTeam) }}>
-              {awayNorm}%
+            <div style={{ fontSize: 20, fontWeight: 800, color: awayColor, lineHeight: 1.1 }}>
+              {awayNorm}¢
             </div>
           </div>
-          <div style={{
-            width: 36, height: 36, borderRadius: 9, flexShrink: 0,
-            background: getTeamColor(awayTeam),
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 13, fontWeight: 900, color: '#fff',
-          }}>
-            {getTeamInitials(awayTeam)}
-          </div>
+          <TeamLogo
+            iconUrl={anyMarket.away_team_icon}
+            teamName={awayTeam}
+            color={awayColor}
+            size={40}
+          />
         </div>
       </div>
 
-      <div style={{ display: 'flex', height: 5, borderRadius: 3, overflow: 'hidden', gap: 2, marginBottom: 12 }}>
-        <div style={{ width: `${homeNorm}%`, background: getTeamColor(homeTeam) }} />
+      {/* Wahrscheinlichkeits-Balken */}
+      <div style={{ display: 'flex', height: 4, borderRadius: 2, overflow: 'hidden', gap: 2, marginTop: 12 }}>
+        <div style={{ width: `${homeNorm}%`, background: homeColor }} />
         <div style={{ width: `${drawNorm}%`, background: '#94a3b8' }} />
-        <div style={{ width: `${awayNorm}%`, background: getTeamColor(awayTeam) }} />
+        <div style={{ width: `${awayNorm}%`, background: awayColor }} />
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-          {Math.round(totalVolume).toLocaleString('de')} ₫ Vol.
-        </div>
-        <div style={{ display: 'flex', gap: 6 }}>
-          {[
-            { label: homeTeam.split(' ').pop() ?? homeTeam, id: homeMarket?.id, color: getTeamColor(homeTeam) },
-            { label: 'X', id: drawMarket?.id, color: '#64748b' },
-            { label: awayTeam.split(' ').pop() ?? awayTeam, id: awayMarket?.id, color: getTeamColor(awayTeam) },
-          ].map((btn) => (
-            btn.id ? (
-              <button
-                key={btn.id}
-                onClick={(e) => { e.stopPropagation(); onOpen(btn.id!) }}
-                style={{
-                  fontSize: 11, fontWeight: 700, padding: '4px 10px', borderRadius: 6,
-                  border: `1px solid ${btn.color}33`,
-                  background: `${btn.color}15`,
-                  color: btn.color,
-                  cursor: 'pointer',
-                  maxWidth: 80,
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {btn.label}
-              </button>
-            ) : null
-          ))}
-        </div>
+      {/* Tipp-Buttons */}
+      <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
+        {[
+          { label: homeTeam.split(' ').slice(-1)[0], id: homeMarket?.id, color: homeColor },
+          { label: 'Draw', id: drawMarket?.id, color: '#64748b' },
+          { label: awayTeam.split(' ').slice(-1)[0], id: awayMarket?.id, color: awayColor },
+        ].map((btn) => btn.id ? (
+          <button key={btn.id}
+            onClick={(e) => { e.stopPropagation(); onOpen(btn.id!) }}
+            style={{
+              flex: 1, fontSize: 12, fontWeight: 700, padding: '7px 0', borderRadius: 8,
+              border: `1px solid ${btn.color}44`,
+              background: `${btn.color}18`,
+              color: btn.color, cursor: 'pointer',
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            }}>
+            {btn.label}
+          </button>
+        ) : null)}
       </div>
     </div>
   )
@@ -884,38 +1081,7 @@ function MarketCard({ market, onClick }: { market: Market; onClick: () => void }
   )
 }
 
-function Leaderboard({ entries, currentUserId }: { entries: LeaderboardEntry[]; currentUserId?: string }) {
-  const rankClass = (i: number) => i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : ''
-
-  return (
-    <div className="leaderboard">
-      {entries.map((e, i) => {
-        const initials = e.username.slice(0, 2).toUpperCase()
-        const av = avatarColor(e.username)
-        const isMe = e.user_id === currentUserId
-        return (
-          <div key={e.user_id} className="lb-row" style={isMe ? { background: 'var(--accent-light)' } : {}}>
-            <div className={`lb-rank ${rankClass(i)}`}>{i + 1}</div>
-            <div className="lb-avatar" style={{ background: av.bg, color: av.color }}>
-              {e.avatar_url ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={e.avatar_url} alt={e.username}
-                  style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
-              ) : initials}
-            </div>
-            <div className="lb-name">{e.username}{isMe && <span className="lb-badge">Du</span>}</div>
-            <div className="lb-score">{e.total_balance.toLocaleString('de')} ₫</div>
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
-function PortfolioView({ userId, router }: {
-  userId: string
-  router: ReturnType<typeof useRouter>
-}) {
+function PortfolioView({ userId, router }: { userId: string; router: ReturnType<typeof useRouter> }) {
   interface Position {
     market_id: string
     direction: string
@@ -929,7 +1095,7 @@ function PortfolioView({ userId, router }: {
   }
 
   const [positions, setPositions] = useState<Position[]>([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading]     = useState(true)
 
   useEffect(() => {
     dbGet('positions', `user_id=eq.${userId}&select=*`).then(async (posData) => {
@@ -946,7 +1112,6 @@ function PortfolioView({ userId, router }: {
   }, [userId])
 
   if (loading) return <div style={{ color: 'var(--text-muted)', padding: '24px 0' }}>Portfolio wird geladen…</div>
-
   if (positions.length === 0) return (
     <div className="card" style={{ textAlign: 'center', padding: 32 }}>
       <div style={{ fontSize: 14, color: 'var(--text-muted)', marginBottom: 8 }}>Noch keine Positionen.</div>
@@ -956,12 +1121,10 @@ function PortfolioView({ userId, router }: {
 
   return (
     <div>
-      <div className="section-head">
-        <div className="section-title">Mein Portfolio</div>
-      </div>
+      <div className="section-head"><div className="section-title">Mein Portfolio</div></div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {positions.map((p, i) => {
-          const prob = calcProb(p.q_yes, p.q_no, p.b)
+          const prob  = calcProb(p.q_yes, p.q_no, p.b)
           const isYes = p.direction === 'yes'
           return (
             <div key={i} className="card" style={{ cursor: 'pointer' }}
@@ -971,12 +1134,8 @@ function PortfolioView({ userId, router }: {
                 <span style={{ color: 'var(--text-muted)' }}>
                   Position: <strong style={{ color: isYes ? 'var(--yes)' : 'var(--no)' }}>{isYes ? 'Ja' : 'Nein'}</strong>
                 </span>
-                <span style={{ color: 'var(--text-muted)' }}>
-                  Einsatz: <strong style={{ color: 'var(--text)' }}>{p.amount} ₫</strong>
-                </span>
-                <span style={{ color: 'var(--text-muted)' }}>
-                  Aktuell: <strong style={{ color: 'var(--text)' }}>{prob}%</strong>
-                </span>
+                <span style={{ color: 'var(--text-muted)' }}>Einsatz: <strong>{p.amount} ₫</strong></span>
+                <span style={{ color: 'var(--text-muted)' }}>Aktuell: <strong>{prob}%</strong></span>
                 {p.resolved && (
                   <span className={`pos-badge ${p.resolution === p.direction ? 'pos-yes' : 'pos-no'}`}>
                     {p.resolution === p.direction ? 'Gewonnen' : 'Verloren'}
