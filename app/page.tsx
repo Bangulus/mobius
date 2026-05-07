@@ -172,6 +172,14 @@ function getTeamInitials(name: string): string {
   return (words[0][0] + (words[1]?.[0] ?? '')).toUpperCase()
 }
 
+// Mapping von Nav-ID zu group_title in der DB
+const SPORT_GROUP_FILTERS: Record<string, string> = {
+  'WM':        'Wer wird die WM 2026 gewinnen?',
+  'CL':        'Wer gewinnt die Champions League 2025/26?',
+  'F1':        'Wer wird F1 Champion 2026?',
+  'DFB-Kader': '__null__', // NULL group_title
+}
+
 interface NavItemDef {
   id: string
   label: string
@@ -185,6 +193,10 @@ const NAV_ITEMS: NavItemDef[] = [
     { id: 'Fußball',     label: 'Fußball',       icon: '⚽', children: [
       { id: 'Bundesliga', label: 'Bundesliga',   icon: '🇩🇪' },
     ]},
+    { id: 'WM',          label: 'WM 2026',       icon: '🏆' },
+    { id: 'CL',          label: 'Champions League', icon: '⭐' },
+    { id: 'F1',          label: 'Formel 1',      icon: '🏎️' },
+    { id: 'DFB-Kader',   label: 'DFB-Kader',     icon: '🇩🇪' },
   ]},
   { id: 'Krypto',        label: 'Krypto',        icon: '₿'  },
   { id: 'Entertainment', label: 'Entertainment', icon: '🎬' },
@@ -441,19 +453,35 @@ export default function Home() {
   }
 
   const isSportCategory = category === 'Sport' || category === 'Fußball' || category === 'Bundesliga'
+    || category === 'WM' || category === 'CL' || category === 'F1' || category === 'DFB-Kader'
 
   const filteredMarkets = markets.filter((m) => {
-    const matchCat =
-      category === 'Bundesliga'    ? !!m.match_id :
-      category === 'Fußball'       ? (m.category === 'sport' || m.category === 'Sport') :
-      category === 'Sport'         ? (m.category === 'sport' || m.category === 'Sport') :
-      category === 'Entertainment' ? (m.category === 'Entertainment' || m.category === 'Unterhaltung') :
-      category === 'Krypto'        ? (m.category === 'Krypto' || m.category === 'krypto') :
-      m.category === category || m.category === category.toLowerCase()
+    let matchCat = false
+
+    if (category === 'Bundesliga') {
+      matchCat = !!m.match_id
+    } else if (category === 'Fußball') {
+      matchCat = m.category === 'sport' || m.category === 'Sport'
+    } else if (category === 'Sport') {
+      matchCat = m.category === 'sport' || m.category === 'Sport'
+    } else if (category === 'WM' || category === 'CL' || category === 'F1') {
+      const groupFilter = SPORT_GROUP_FILTERS[category]
+      matchCat = m.group_title === groupFilter
+    } else if (category === 'DFB-Kader') {
+      matchCat = (m.category === 'Sport' || m.category === 'sport') && !m.group_title && !m.match_id
+    } else if (category === 'Entertainment') {
+      matchCat = m.category === 'Entertainment' || m.category === 'Unterhaltung'
+    } else if (category === 'Krypto') {
+      matchCat = m.category === 'Krypto' || m.category === 'krypto'
+    } else {
+      matchCat = m.category === category || m.category === category.toLowerCase()
+    }
+
     const matchSearch = searchQuery === '' ||
       (m.question ?? '').toLowerCase().includes(searchQuery.toLowerCase()) ||
       (m.short_label ?? '').toLowerCase().includes(searchQuery.toLowerCase()) ||
       (m.display_group ?? '').toLowerCase().includes(searchQuery.toLowerCase())
+
     return matchCat && matchSearch
   })
 
