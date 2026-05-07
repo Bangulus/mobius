@@ -30,6 +30,11 @@ interface Market {
   coin?: string
   start_price?: number
   end_price?: number
+  match_id?: string
+  outcome?: string
+  display_group?: string
+  short_label?: string
+  group_title?: string
 }
 
 interface Trade {
@@ -202,6 +207,40 @@ const CAT_CLASS: Record<string, string> = {
 }
 const COIN_COLORS: Record<string, string> = { BTC: '#f59e0b', ETH: '#6366f1', SOL: '#9945ff', XRP: '#00aae4' }
 
+// Teamfarben für bekannte Bundesliga-Vereine
+const TEAM_COLORS: Record<string, string> = {
+  'FC Bayern München': '#dc052d',
+  'Borussia Dortmund': '#fde100',
+  'Bayer 04 Leverkusen': '#e32221',
+  'RB Leipzig': '#dd0741',
+  'Eintracht Frankfurt': '#e1000f',
+  'VfB Stuttgart': '#e32219',
+  'SC Freiburg': '#e30613',
+  'Union Berlin': '#eb1923',
+  'Borussia Mönchengladbach': '#000000',
+  'VfL Wolfsburg': '#65b32e',
+  'TSG Hoffenheim': '#1961ae',
+  'FC Augsburg': '#ba3733',
+  'SV Werder Bremen': '#1d9053',
+  'Mainz 05': '#c1121c',
+  'VfL Bochum': '#005aaa',
+  'FC Heidenheim': '#e2001a',
+  'SV Darmstadt 98': '#004f9f',
+  'Holstein Kiel': '#c8102e',
+  'BV Borussia 09 Dortmund': '#fde100',
+}
+
+function getTeamColor(name: string): string {
+  return TEAM_COLORS[name] ?? '#6366f1'
+}
+
+function getTeamInitials(name: string): string {
+  const clean = name.replace(/^(FC|BV|SV|TSG|VfB|VfL|SC|RB)\s+/i, '')
+  const words = clean.split(' ').filter(Boolean)
+  if (words.length === 1) return words[0].substring(0, 3).toUpperCase()
+  return (words[0][0] + (words[1]?.[0] ?? '')).toUpperCase()
+}
+
 type Tab       = '7T' | '1M' | 'Gesamt'
 type TradeTab  = 'kaufen' | 'verkaufen'
 type OrderType = 'markt' | 'limit'
@@ -217,6 +256,9 @@ export default function MarketPage() {
   const [user, setUser]               = useState<User | null>(null)
   const [loading, setLoading]         = useState(true)
   const [liveMarkets, setLiveMarkets] = useState<Market[]>([])
+
+  // Soccer: Geschwister-Märkte desselben Spiels
+  const [siblingMarkets, setSiblingMarkets] = useState<Market[]>([])
 
   const [tradeTab, setTradeTab]     = useState<TradeTab>('kaufen')
   const [orderType, setOrderType]   = useState<OrderType>('markt')
@@ -245,7 +287,6 @@ export default function MarketPage() {
   const [resultToast, setResultToast] = useState<ResultToast | null>(null)
   const toastShownRef                 = useRef(false)
 
-  // FIX: stable interval refs — prevent watchdog from restarting interval every second
   const currentIntervalMs = useRef(10000)
   const intervalRef       = useRef<ReturnType<typeof setInterval> | null>(null)
 
@@ -289,6 +330,18 @@ export default function MarketPage() {
     setLiveMarkets(data ?? [])
   }, [])
 
+  // Soccer: Geschwister-Märkte laden
+  const loadSiblingMarkets = useCallback(async (matchId: string) => {
+    const data = await dbGet('markets', `match_id=eq.${matchId}&select=*`)
+    setSiblingMarkets(data ?? [])
+  }, [])
+
+  useEffect(() => {
+    if (market?.match_id) {
+      loadSiblingMarkets(market.match_id)
+    }
+  }, [market?.match_id, loadSiblingMarkets])
+
   useEffect(() => {
     if (!market?.resolved || toastShownRef.current) return
     if (!market.is_auto) return
@@ -323,7 +376,6 @@ export default function MarketPage() {
   useEffect(() => {
     loadMarket(); loadTrades(); loadLiveMarkets()
 
-    // FIX: only restart interval when ms value actually changes
     const startInterval = (ms: number) => {
       if (ms === currentIntervalMs.current && intervalRef.current !== null) return
       currentIntervalMs.current = ms
@@ -389,6 +441,7 @@ export default function MarketPage() {
 
   useEffect(() => {
     if (!market?.is_auto || !market?.coin || market?.resolved) return
+    if (market?.match_id) return // Soccer — kein Crypto-Chart
     const coin        = market.coin
     const marketEndMs = parseUTC(market.closes_at).getTime()
     const fetchReal = async () => {
@@ -418,17 +471,19 @@ export default function MarketPage() {
       setLivePrice(last + jitter)
     }, 1000)
     return () => { clearInterval(fetchInterval); clearInterval(interpInterval) }
-  }, [market?.is_auto, market?.coin, market?.resolved, market?.closes_at])
+  }, [market?.is_auto, market?.coin, market?.resolved, market?.closes_at, market?.match_id])
 
   useEffect(() => {
     if (!market?.is_auto || !cryptoCanvasRef.current || !market?.start_price || !market?.closes_at) return
+    if (market?.match_id) return
     const marketEndMs   = parseUTC(market.closes_at).getTime()
     const marketStartMs = marketEndMs - 3 * 60 * 1000
     drawCryptoChart(cryptoCanvasRef.current, priceHistory, market.start_price, marketStartMs, marketEndMs)
-  }, [priceHistory, market?.is_auto, market?.start_price, market?.closes_at, market?.resolved])
+  }, [priceHistory, market?.is_auto, market?.start_price, market?.closes_at, market?.resolved, market?.match_id])
 
   useEffect(() => {
     if (!market?.closes_at || !market?.coin || !market?.id) return
+    if (market?.match_id) return // Soccer hat eigenen Countdown
     resolveTriggeredRef.current = false
     createTriggeredRef.current  = false
 
@@ -482,7 +537,26 @@ export default function MarketPage() {
     tick()
     const id = setInterval(tick, 1000)
     return () => clearInterval(id)
-  }, [market?.closes_at, market?.coin, market?.id, loadMarket, loadLiveMarkets, user?.id])
+  }, [market?.closes_at, market?.coin, market?.id, market?.match_id, loadMarket, loadLiveMarkets, user?.id])
+
+  // Soccer Countdown
+  const [soccerCountdown, setSoccerCountdown] = useState('')
+  useEffect(() => {
+    if (!market?.match_id || !market?.closes_at) return
+    const closesAt = parseUTC(market.closes_at)
+    const tick = () => {
+      const diff = closesAt.getTime() - Date.now()
+      if (diff <= 0) { setSoccerCountdown('Beendet'); return }
+      const h = Math.floor(diff / 3600000)
+      const m = Math.floor((diff % 3600000) / 60000)
+      const s = Math.floor((diff % 60000) / 1000)
+      if (h > 0) setSoccerCountdown(`${h}h ${String(m).padStart(2,'0')}m`)
+      else setSoccerCountdown(`${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`)
+    }
+    tick()
+    const id = setInterval(tick, 1000)
+    return () => clearInterval(id)
+  }, [market?.match_id, market?.closes_at])
 
   const tradeHistory = (() => {
     if (!market || trades.length === 0) return []
@@ -558,6 +632,7 @@ export default function MarketPage() {
     setBetSuccess('Wette platziert ✓')
     setBetLoading(false)
     loadMarket(); loadTrades(); loadPosition(user.id)
+    if (market.match_id) loadSiblingMarkets(market.match_id)
     setTimeout(() => setBetSuccess(''), 2500)
   }
 
@@ -592,21 +667,22 @@ export default function MarketPage() {
     </div>
   )
 
-  const prob         = calcProb(market.q_yes, market.q_no, market.b)
-  const isLow        = prob < 50
-  const catClass     = CAT_CLASS[market.category ?? ''] ?? ''
-  const payout       = Math.round(lmsrSharesForSpend(market.q_yes, market.q_no, market.b, direction, spend))
-  const sharesYes    = position?.shares_yes ?? 0
-  const sharesNo     = position?.shares_no  ?? 0
-  const hasPosition  = sharesYes > 0 || sharesNo > 0
-  const sellSide     = sharesYes >= sharesNo ? 'yes' : 'no'
-  const sellShares   = sellSide === 'yes' ? sharesYes : sharesNo
+  const isSoccer    = !!market.match_id
+  const isKrypto    = !!market.is_auto && !isSoccer
+  const prob        = calcProb(market.q_yes, market.q_no, market.b)
+  const isLow       = prob < 50
+  const catClass    = CAT_CLASS[market.category ?? ''] ?? ''
+  const payout      = Math.round(lmsrSharesForSpend(market.q_yes, market.q_no, market.b, direction, spend))
+  const sharesYes   = position?.shares_yes ?? 0
+  const sharesNo    = position?.shares_no  ?? 0
+  const hasPosition = sharesYes > 0 || sharesNo > 0
+  const sellSide    = sharesYes >= sharesNo ? 'yes' : 'no'
+  const sellShares  = sellSide === 'yes' ? sharesYes : sharesNo
   const returnOnSell = hasPosition ? lmsrSellReturn(market.q_yes, market.q_no, market.b, sellSide, sellShares) : 0
-  const isKrypto     = !!market.is_auto
-  const closesAt     = parseUTC(market.closes_at)
-  const delta        = livePrice && market.start_price ? livePrice - market.start_price : null
-  const endDelta     = market.end_price && market.start_price ? market.end_price - market.start_price : null
-  const isUp         = delta !== null ? delta >= 0 : (endDelta !== null ? endDelta >= 0 : true)
+  const closesAt    = parseUTC(market.closes_at)
+  const delta       = livePrice && market.start_price ? livePrice - market.start_price : null
+  const endDelta    = market.end_price && market.start_price ? market.end_price - market.start_price : null
+  const isUp        = delta !== null ? delta >= 0 : (endDelta !== null ? endDelta >= 0 : true)
   const countdownRed = countdown === '00:00' || (countdown !== '' && parseInt(countdown.split(':')[0]) === 0 && parseInt(countdown.split(':')[1]) <= 30)
   const nextLiveMarket   = liveMarkets.find(m => m.coin === market.coin && m.id !== marketId)
   const otherLiveMarkets = liveMarkets.filter(m => m.coin !== market.coin).slice(0, 4)
@@ -614,9 +690,44 @@ export default function MarketPage() {
     ((market.resolution === 'yes' && sharesYes > 0) || (market.resolution === 'no' && sharesNo > 0))
   const showEndedBanner = market.resolved || countdown === '00:00'
 
+  // Soccer: Teams aus display_group extrahieren
+  const soccerTeams = market.display_group?.split(' vs ') ?? []
+  const homeTeam = soccerTeams[0] ?? ''
+  const awayTeam = soccerTeams[1] ?? ''
+
+  // Soccer: Wahrscheinlichkeiten aus Geschwister-Märkten
+  const homeMarket = siblingMarkets.find(m => m.outcome === 'home')
+  const drawMarket = siblingMarkets.find(m => m.outcome === 'draw')
+  const awayMarket = siblingMarkets.find(m => m.outcome === 'away')
+
+  const homeProb = homeMarket ? calcProb(homeMarket.q_yes, homeMarket.q_no, homeMarket.b) : 33
+  const drawProb = drawMarket ? calcProb(drawMarket.q_yes, drawMarket.q_no, drawMarket.b) : 34
+  const awayProb = awayMarket ? calcProb(awayMarket.q_yes, awayMarket.q_no, awayMarket.b) : 33
+
+  // Normalisieren auf 100%
+  const totalProb = homeProb + drawProb + awayProb
+  const homeNorm  = Math.round((homeProb / totalProb) * 100)
+  const drawNorm  = Math.round((drawProb / totalProb) * 100)
+  const awayNorm  = 100 - homeNorm - drawNorm
+
+  // Welches Outcome hat dieser Markt?
+  const thisOutcome = market.outcome
+
+  // Soccer Auflösungs-Label
+  const soccerResolutionLabel = () => {
+    if (!market.resolved) return ''
+    if (market.resolution === 'yes') {
+      if (thisOutcome === 'home') return `${homeTeam} gewinnt ✓`
+      if (thisOutcome === 'draw') return 'Unentschieden ✓'
+      if (thisOutcome === 'away') return `${awayTeam} gewinnt ✓`
+    }
+    if (market.resolution === 'draw') return 'Einsatz zurück'
+    return 'Nicht eingetreten'
+  }
+
   return (
     <>
-      {resultToast && (
+      {resultToast && !isSoccer && (
         <div style={{
           position: 'fixed', top: 80, right: 16, zIndex: 9999,
           background: '#fff',
@@ -682,6 +793,321 @@ export default function MarketPage() {
 
       <div style={{ maxWidth: 980, margin: '0 auto', padding: '24px 16px' }}>
 
+        {/* ── SOCCER UI ─────────────────────────────────────────────────── */}
+        {isSoccer && (
+          <>
+            {/* Breadcrumb */}
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span>Sport</span>
+              <span>·</span>
+              <span>{market.group_title ?? 'Bundesliga'}</span>
+            </div>
+
+            {/* Spiel-Header */}
+            <div className="card" style={{ marginBottom: 20 }}>
+              {/* Anpfiffzeit */}
+              <div style={{ textAlign: 'center', fontSize: 12, color: 'var(--text-muted)', marginBottom: 20 }}>
+                {market.resolved ? 'Abgeschlossen' : `Schließt in ${soccerCountdown}`}
+              </div>
+
+              {/* Teams */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 32, marginBottom: 24 }}>
+                {/* Heimteam */}
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, flex: 1 }}>
+                  <div style={{
+                    width: 64, height: 64, borderRadius: 16,
+                    background: getTeamColor(homeTeam),
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 22, fontWeight: 900, color: '#fff',
+                    boxShadow: `0 4px 16px ${getTeamColor(homeTeam)}44`,
+                  }}>
+                    {getTeamInitials(homeTeam)}
+                  </div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', textAlign: 'center', maxWidth: 120, lineHeight: 1.3 }}>
+                    {homeTeam}
+                  </div>
+                  <div style={{ fontSize: 24, fontWeight: 800, color: getTeamColor(homeTeam) }}>
+                    {homeNorm}%
+                  </div>
+                </div>
+
+                {/* Mitte */}
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, letterSpacing: 1 }}>VS</div>
+                  <div style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 600 }}>
+                    Unentschieden
+                  </div>
+                  <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-muted)' }}>
+                    {drawNorm}%
+                  </div>
+                </div>
+
+                {/* Auswärtsteam */}
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, flex: 1 }}>
+                  <div style={{
+                    width: 64, height: 64, borderRadius: 16,
+                    background: getTeamColor(awayTeam),
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 22, fontWeight: 900, color: '#fff',
+                    boxShadow: `0 4px 16px ${getTeamColor(awayTeam)}44`,
+                  }}>
+                    {getTeamInitials(awayTeam)}
+                  </div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', textAlign: 'center', maxWidth: 120, lineHeight: 1.3 }}>
+                    {awayTeam}
+                  </div>
+                  <div style={{ fontSize: 24, fontWeight: 800, color: getTeamColor(awayTeam) }}>
+                    {awayNorm}%
+                  </div>
+                </div>
+              </div>
+
+              {/* Wahrscheinlichkeits-Balken */}
+              <div style={{ display: 'flex', height: 6, borderRadius: 3, overflow: 'hidden', gap: 2, marginBottom: 8 }}>
+                <div style={{ width: `${homeNorm}%`, background: getTeamColor(homeTeam), borderRadius: '3px 0 0 3px' }} />
+                <div style={{ width: `${drawNorm}%`, background: '#94a3b8' }} />
+                <div style={{ width: `${awayNorm}%`, background: getTeamColor(awayTeam), borderRadius: '0 3px 3px 0' }} />
+              </div>
+
+              {/* Auflösungs-Banner */}
+              {market.resolved && (
+                <div style={{
+                  marginTop: 16, padding: '12px 16px', borderRadius: 10,
+                  background: market.resolution === 'yes' ? 'rgba(22,163,74,0.1)' : market.resolution === 'draw' ? 'rgba(245,158,11,0.1)' : 'rgba(220,38,38,0.1)',
+                  border: `1px solid ${market.resolution === 'yes' ? 'rgba(22,163,74,0.3)' : market.resolution === 'draw' ? 'rgba(245,158,11,0.3)' : 'rgba(220,38,38,0.3)'}`,
+                  textAlign: 'center', fontSize: 14, fontWeight: 700,
+                  color: market.resolution === 'yes' ? '#16a34a' : market.resolution === 'draw' ? '#b45309' : '#dc2626',
+                }}>
+                  {soccerResolutionLabel()}
+                </div>
+              )}
+            </div>
+
+            {/* Drei-Outcome-Buttons + Trade-Panel */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 20, alignItems: 'start' }}>
+
+              {/* Linke Seite: Outcome-Auswahl */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 4 }}>
+                  Auf welchen Ausgang tippst du?
+                </div>
+
+                {[
+                  { outcome: 'home', market: homeMarket, label: homeTeam, prob: homeNorm, color: getTeamColor(homeTeam), initials: getTeamInitials(homeTeam) },
+                  { outcome: 'draw', market: drawMarket, label: 'Unentschieden', prob: drawNorm, color: '#64748b', initials: 'X' },
+                  { outcome: 'away', market: awayMarket, label: awayTeam, prob: awayNorm, color: getTeamColor(awayTeam), initials: getTeamInitials(awayTeam) },
+                ].map(opt => {
+                  const isActive = thisOutcome === opt.outcome
+                  const isResolved = opt.market?.resolved
+                  const won = isResolved && opt.market?.resolution === 'yes'
+                  return (
+                    <div
+                      key={opt.outcome}
+                      onClick={() => {
+                        if (opt.market && opt.market.id !== marketId) {
+                          router.push(`/markets/${opt.market.id}`)
+                        }
+                      }}
+                      style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        padding: '16px 20px', borderRadius: 14, cursor: opt.market?.id !== marketId ? 'pointer' : 'default',
+                        border: isActive ? `2px solid ${opt.color}` : '2px solid var(--border)',
+                        background: isActive ? `${opt.color}10` : 'var(--card)',
+                        transition: 'all 0.15s',
+                        position: 'relative',
+                        opacity: isResolved && !won ? 0.6 : 1,
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                        <div style={{
+                          width: 44, height: 44, borderRadius: 11,
+                          background: opt.color,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: 16, fontWeight: 900, color: '#fff', flexShrink: 0,
+                        }}>
+                          {opt.initials}
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>{opt.label}</div>
+                          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                            {isResolved ? (won ? '✓ Gewonnen' : 'Nicht eingetreten') : `${opt.market ? Math.round(opt.market.q_yes + opt.market.q_no).toLocaleString('de') : 0} ₫ Volumen`}
+                          </div>
+                        </div>
+                      </div>
+                      <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                        <div style={{ fontSize: 28, fontWeight: 800, color: opt.color, letterSpacing: '-0.5px' }}>
+                          {opt.prob}%
+                        </div>
+                        {isActive && !isResolved && (
+                          <div style={{ fontSize: 11, color: opt.color, fontWeight: 600 }}>← Aktiv</div>
+                        )}
+                        {won && (
+                          <div style={{ fontSize: 11, color: '#16a34a', fontWeight: 700 }}>Gewonnen ✓</div>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+
+                {/* Trade-History */}
+                {trades.filter(t => t.shares > 0).length > 0 && (
+                  <div className="card" style={{ marginTop: 8 }}>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', marginBottom: 14 }}>Letzte Trades</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      {[...trades].filter(t => t.shares > 0).reverse().slice(0, 8).map(t => (
+                        <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, padding: '6px 0', borderBottom: '1px solid var(--border)' }}>
+                          <span style={{ color: t.type.includes('yes') ? 'var(--yes)' : 'var(--no)', fontWeight: 600 }}>
+                            {t.type.includes('yes') ? 'Ja' : 'Nein'}
+                          </span>
+                          <span style={{ color: 'var(--text)' }}>{Math.round(Math.abs(t.cost))} ₫</span>
+                          <span style={{ color: 'var(--text-subtle)' }}>
+                            {new Date(t.created_at).toLocaleDateString('de', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Rechte Seite: Trade-Panel */}
+              <div className="card" style={{ position: 'sticky', top: 'calc(var(--nav-height) + 16px)', padding: 0, overflow: 'hidden' }}>
+                {market.resolved ? (
+                  <div style={{ padding: '24px 16px', textAlign: 'center' }}>
+                    <div style={{ fontSize: 28, marginBottom: 8 }}>{userWon ? '🎉' : hasPosition ? '😔' : '✓'}</div>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 6 }}>
+                      {userWon ? 'Gewonnen!' : hasPosition ? 'Verloren' : 'Markt beendet'}
+                    </div>
+                    <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}>
+                      {soccerResolutionLabel()}
+                    </div>
+                    {userWon && (
+                      <div style={{ fontSize: 32, fontWeight: 800, color: '#16a34a', letterSpacing: '-0.5px', marginBottom: 16 }}>
+                        +{Math.round(market.resolution === 'yes' ? sharesYes : sharesNo)} ₫
+                      </div>
+                    )}
+                    <button onClick={() => router.push('/')}
+                      style={{ width: '100%', padding: '12px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 10, cursor: 'pointer', fontSize: 14, fontWeight: 700 }}>
+                      Weitere Märkte →
+                    </button>
+                  </div>
+                ) : !user ? (
+                  <div style={{ textAlign: 'center', padding: '24px 16px' }}>
+                    <div style={{ fontSize: 14, color: 'var(--text-muted)', marginBottom: 12 }}>Anmelden um zu tippen</div>
+                    <button className="submit-btn yes" onClick={() => router.push('/')}>Zur Anmeldung</button>
+                  </div>
+                ) : (
+                  <>
+                    {/* Header */}
+                    <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border)', background: 'var(--surface)' }}>
+                      <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 2 }}>Du tippst auf</div>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>
+                        {thisOutcome === 'home' ? homeTeam : thisOutcome === 'away' ? awayTeam : 'Unentschieden'}
+                      </div>
+                    </div>
+
+                    <div style={{ padding: 16 }}>
+                      {/* Tabs */}
+                      <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', marginBottom: 16, marginLeft: -16, marginRight: -16, paddingLeft: 16 }}>
+                        {(['kaufen', 'verkaufen'] as TradeTab[]).map(t => (
+                          <button key={t} onClick={() => { setTradeTab(t); setBetError(''); setBetSuccess('') }}
+                            style={{ padding: '10px 14px', fontSize: 13, fontWeight: 600, border: 'none', cursor: 'pointer', background: 'transparent', color: tradeTab === t ? 'var(--text)' : 'var(--text-muted)', borderBottom: tradeTab === t ? '2px solid var(--accent)' : '2px solid transparent', marginBottom: -1 }}>
+                            {t.charAt(0).toUpperCase() + t.slice(1)}
+                          </button>
+                        ))}
+                      </div>
+
+                      {tradeTab === 'kaufen' && (
+                        <>
+                          {/* YES/NO — in Soccer: Ja = dieser Outcome tritt ein */}
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 16 }}>
+                            {(['yes', 'no'] as const).map(d => (
+                              <button key={d} onClick={() => setDirection(d)} style={{
+                                padding: '10px 0', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 13,
+                                background: direction === d ? (d === 'yes' ? 'rgba(22,163,74,0.15)' : 'rgba(220,38,38,0.15)') : 'var(--surface)',
+                                color: direction === d ? (d === 'yes' ? 'var(--yes)' : 'var(--no)') : 'var(--text-muted)',
+                                outline: direction === d ? `2px solid ${d === 'yes' ? 'var(--yes)' : 'var(--no)'}` : '2px solid transparent',
+                              }}>
+                                {d === 'yes' ? `Ja · ${prob}¢` : `Nein · ${100 - prob}¢`}
+                              </button>
+                            ))}
+                          </div>
+
+                          <div style={{ marginBottom: 12 }}>
+                            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>Betrag (₫)</div>
+                            <input type="number" min={1} max={Math.min(user.balance, 1000000)} value={spend}
+                              onChange={e => setSpend(Math.max(1, Math.min(user.balance, parseInt(e.target.value) || 1)))}
+                              style={{ width: '100%', fontSize: 22, fontWeight: 700 }} />
+                            <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+                              {[50, 100, 200, 500].map(v => (
+                                <button key={v} onClick={() => setSpend(v)} style={{ flex: 1, fontSize: 11, padding: '4px 0', borderRadius: 6, border: '1px solid var(--border)', background: spend === v ? 'var(--accent)' : 'var(--surface)', color: spend === v ? '#fff' : 'var(--text-muted)', cursor: 'pointer' }}>+{v}</button>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div style={{ background: 'rgba(22,163,74,0.07)', borderRadius: 10, padding: '14px', marginBottom: 14, textAlign: 'center', border: '1px solid rgba(22,163,74,0.2)' }}>
+                            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>
+                              Auszahlung wenn {direction === 'yes'
+                                ? (thisOutcome === 'home' ? homeTeam : thisOutcome === 'away' ? awayTeam : 'Unentschieden')
+                                : 'anderer Ausgang'} eintritt
+                            </div>
+                            <div style={{ fontSize: 32, fontWeight: 800, color: '#16a34a', letterSpacing: '-0.5px' }}>{payout} ₫</div>
+                          </div>
+                        </>
+                      )}
+
+                      {tradeTab === 'verkaufen' && (
+                        <>
+                          {!hasPosition ? (
+                            <div style={{ textAlign: 'center', padding: '24px 0', fontSize: 13, color: 'var(--text-muted)' }}>
+                              Du hast keine Anteile in diesem Markt.
+                            </div>
+                          ) : (
+                            <>
+                              <div style={{ background: 'var(--surface)', borderRadius: 8, padding: '12px', marginBottom: 16, fontSize: 13 }}>
+                                <div style={{ color: 'var(--text-muted)', marginBottom: 4, fontSize: 12 }}>Deine Position</div>
+                                {sharesYes > 0 && <div style={{ fontWeight: 700, color: 'var(--yes)' }}>Ja · {Math.round(sharesYes)} Anteile</div>}
+                                {sharesNo  > 0 && <div style={{ fontWeight: 700, color: 'var(--no)'  }}>Nein · {Math.round(sharesNo)} Anteile</div>}
+                              </div>
+                              <div style={{ background: 'rgba(22,163,74,0.07)', borderRadius: 10, padding: '14px', marginBottom: 14, textAlign: 'center', border: '1px solid rgba(22,163,74,0.2)' }}>
+                                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Du erhältst jetzt</div>
+                                <div style={{ fontSize: 32, fontWeight: 800, color: '#16a34a', letterSpacing: '-0.5px' }}>{Math.round(returnOnSell)} ₫</div>
+                                <div style={{ fontSize: 11, color: 'var(--text-subtle)', marginTop: 4 }}>alle Anteile verkaufen</div>
+                              </div>
+                            </>
+                          )}
+                        </>
+                      )}
+
+                      {betError   && <div className="alert alert-error"   style={{ marginBottom: 10 }}>{betError}</div>}
+                      {betSuccess  && <div className="alert alert-success" style={{ marginBottom: 10 }}>{betSuccess}</div>}
+
+                      {tradeTab === 'kaufen' ? (
+                        <button
+                          className={`submit-btn ${direction === 'yes' ? 'yes' : 'no'}`}
+                          onClick={handleKaufen}
+                          disabled={betLoading || spend <= 0}
+                          style={{ width: '100%' }}
+                        >
+                          {betLoading ? 'Wird ausgeführt…' : `${direction === 'yes' ? 'Ja' : 'Nein'} kaufen · ${spend} ₫`}
+                        </button>
+                      ) : (
+                        <button className="submit-btn no" onClick={handleVerkaufen} disabled={betLoading || !hasPosition} style={{ width: '100%' }}>
+                          {betLoading ? 'Wird verkauft…' : `Verkaufen · ${Math.round(returnOnSell)} ₫`}
+                        </button>
+                      )}
+                      <div style={{ fontSize: 11, color: 'var(--text-subtle)', textAlign: 'center', marginTop: 8 }}>
+                        Guthaben: {user.balance.toLocaleString('de')} ₫
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* ── CRYPTO UI (unverändert) ───────────────────────────────────── */}
         {isKrypto && showEndedBanner && (
           <div style={{
             marginBottom: 20, padding: '16px 20px', borderRadius: 14,
@@ -787,7 +1213,7 @@ export default function MarketPage() {
           </div>
         )}
 
-        {!isKrypto && (
+        {!isKrypto && !isSoccer && (
           <>
             <div style={{ marginBottom: 20 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
@@ -813,234 +1239,236 @@ export default function MarketPage() {
           </>
         )}
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 20, alignItems: 'start' }}>
+        {!isSoccer && (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 20, alignItems: 'start' }}>
 
-          {!isKrypto && (
-            <div className="card">
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>Preisverlauf</div>
-                <div style={{ display: 'flex', gap: 4 }}>
-                  {(['7T', '1M', 'Gesamt'] as Tab[]).map(t => (
-                    <button key={t} onClick={() => setActiveTab(t)} style={{ fontSize: 12, padding: '3px 10px', borderRadius: 6, border: 'none', cursor: 'pointer', background: activeTab === t ? 'var(--accent)' : 'var(--surface)', color: activeTab === t ? '#fff' : 'var(--text-muted)', fontWeight: activeTab === t ? 600 : 400 }}>{t}</button>
-                  ))}
-                </div>
-              </div>
-              {tradeHistory.length === 0
-                ? <div style={{ height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-subtle)', fontSize: 13 }}>Chart erscheint nach der ersten Wette.</div>
-                : <div style={{ height: 200, position: 'relative' }}><canvas ref={chartRef} /></div>}
-              <div style={{ marginTop: 12, fontSize: 12, color: 'var(--text-subtle)' }}>
-                Volumen: {Math.round(market.q_yes + market.q_no).toLocaleString('de')} ₫ · {trades.filter(t => t.shares > 0).length} Trades
-              </div>
-            </div>
-          )}
-
-          {isKrypto && market.resolved && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <div className="card" style={{ textAlign: 'center', padding: '32px 24px' }}>
-                <div style={{ width: 72, height: 72, borderRadius: '50%', background: market.resolution === 'yes' ? '#dcfce7' : '#fee2e2', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', fontSize: 36 }}>
-                  {market.resolution === 'yes' ? '✓' : '✗'}
-                </div>
-                <div style={{ fontSize: 30, fontWeight: 800, marginBottom: 8, color: market.resolution === 'yes' ? '#16a34a' : '#dc2626' }}>
-                  Ergebnis: {market.resolution === 'yes' ? 'Up ↑' : 'Down ↓'}
-                </div>
-                <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 20 }}>
-                  {market.coin}: ${market.start_price?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} → ${market.end_price?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </div>
-                {nextLiveMarket && (
-                  <button onClick={() => router.push(`/markets/${nextLiveMarket.id}`)}
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '12px 24px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: 20, cursor: 'pointer', fontSize: 14, fontWeight: 700 }}>
-                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#fff', display: 'inline-block' }} />
-                    Zum Live-Markt →
-                  </button>
-                )}
-              </div>
-              {otherLiveMarkets.length > 0 && (
-                <div className="card">
-                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 12 }}>Weitere Live-Märkte</div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {otherLiveMarkets.map(m => {
-                      const mProb = calcProb(m.q_yes, m.q_no, m.b)
-                      const mDiff = parseUTC(m.closes_at).getTime() - Date.now()
-                      const mMins = Math.max(0, Math.floor(mDiff / 60000))
-                      const mSecs = Math.max(0, Math.floor((mDiff % 60000) / 1000))
-                      return (
-                        <div key={m.id} onClick={() => router.push(`/markets/${m.id}`)}
-                          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', background: 'var(--surface)', borderRadius: 10, cursor: 'pointer' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#22c55e' }} />
-                            <span style={{ fontWeight: 700, fontSize: 13, color: COIN_COLORS[m.coin ?? ''] ?? '#888' }}>{m.coin}</span>
-                            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Up or Down</span>
-                          </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                            <span style={{ fontSize: 12, color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>{String(mMins).padStart(2,'0')}:{String(mSecs).padStart(2,'0')}</span>
-                            <span style={{ fontSize: 13, fontWeight: 700, color: mProb >= 50 ? 'var(--yes)' : 'var(--no)' }}>{mProb}%</span>
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {isKrypto && !market.resolved && (
-            <div className="card">
-              <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', marginBottom: 12 }}>Marktregeln</div>
-              <div style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.8 }}>
-                <div>Volumen: <strong style={{ color: 'var(--text)' }}>{Math.round(market.q_yes + market.q_no).toLocaleString('de')} ₫</strong></div>
-                <div>Trades: <strong style={{ color: 'var(--text)' }}>{trades.filter(t => t.shares > 0).length}</strong></div>
-                <div style={{ marginTop: 12, padding: '12px', background: 'var(--surface)', borderRadius: 8, fontSize: 12, lineHeight: 1.7 }}>
-                  Ist der {market.coin}-Preis bei Ablauf <strong style={{ color: 'var(--yes)' }}>höher</strong> → <strong style={{ color: 'var(--yes)' }}>Up gewinnt</strong>.<br />
-                  Ist er <strong style={{ color: 'var(--no)' }}>niedriger</strong> → <strong style={{ color: 'var(--no)' }}>Down gewinnt</strong>.
-                </div>
-              </div>
-            </div>
-          )}
-
-          <div className="card" style={{ position: 'sticky', top: 'calc(var(--nav-height) + 16px)', padding: 0, overflow: 'hidden' }}>
-            {market.resolved ? (
-              <div style={{ padding: '24px 16px' }}>
-                <div style={{ textAlign: 'center', marginBottom: 16 }}>
-                  <div style={{ fontSize: 28, marginBottom: 4 }}>{userWon ? '🎉' : hasPosition ? '😔' : '✓'}</div>
-                  <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', marginBottom: 4 }}>
-                    {userWon ? 'Gewonnen!' : hasPosition ? 'Verloren' : 'Markt beendet'}
-                  </div>
-                  <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-                    Ergebnis: <strong style={{ color: market.resolution === 'yes' ? 'var(--yes)' : 'var(--no)', fontSize: 15 }}>
-                      {market.resolution === 'yes' ? (isKrypto ? '↑ Up' : 'Ja') : (isKrypto ? '↓ Down' : 'Nein')}
-                    </strong>
-                  </div>
-                </div>
-                {hasPosition && (
-                  <div style={{ padding: '14px', borderRadius: 10, textAlign: 'center', marginBottom: 14, background: userWon ? 'rgba(22,163,74,0.08)' : 'rgba(220,38,38,0.08)', border: `1px solid ${userWon ? 'rgba(22,163,74,0.2)' : 'rgba(220,38,38,0.2)'}` }}>
-                    {userWon ? (
-                      <>
-                        <div style={{ fontSize: 12, color: '#16a34a', marginBottom: 4 }}>Auszahlung erfolgt automatisch</div>
-                        <div style={{ fontSize: 28, fontWeight: 800, color: '#16a34a' }}>
-                          +{Math.round(market.resolution === 'yes' ? sharesYes : sharesNo)} ₫
-                        </div>
-                      </>
-                    ) : (
-                      <div style={{ fontSize: 13, color: '#dc2626' }}>Leider verloren — nächsten Markt versuchen!</div>
-                    )}
-                  </div>
-                )}
-                {nextLiveMarket && (
-                  <button onClick={() => router.push(`/markets/${nextLiveMarket.id}`)}
-                    style={{ width: '100%', padding: '12px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: 10, cursor: 'pointer', fontSize: 14, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#fff' }} />
-                    Zum Live-Markt →
-                  </button>
-                )}
-                {!nextLiveMarket && (
-                  <div style={{ textAlign: 'center', fontSize: 12, color: 'var(--text-muted)', marginTop: 8 }}>
-                    Nächster Markt wird erstellt…
-                  </div>
-                )}
-              </div>
-            ) : !user ? (
-              <div style={{ textAlign: 'center', padding: '24px 16px' }}>
-                <div style={{ fontSize: 14, color: 'var(--text-muted)', marginBottom: 12 }}>Anmelden um zu handeln</div>
-                <button className="submit-btn yes" onClick={() => router.push('/')}>Zur Anmeldung</button>
-              </div>
-            ) : (
-              <>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border)', padding: '0 16px' }}>
-                  <div style={{ display: 'flex' }}>
-                    {(['kaufen', 'verkaufen'] as TradeTab[]).map(t => (
-                      <button key={t} onClick={() => { setTradeTab(t); setBetError(''); setBetSuccess('') }}
-                        style={{ padding: '12px 14px', fontSize: 13, fontWeight: 600, border: 'none', cursor: 'pointer', background: 'transparent', color: tradeTab === t ? 'var(--text)' : 'var(--text-muted)', borderBottom: tradeTab === t ? '2px solid var(--accent)' : '2px solid transparent', marginBottom: -1 }}>
-                        {t.charAt(0).toUpperCase() + t.slice(1)}
-                      </button>
+            {!isKrypto && (
+              <div className="card">
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>Preisverlauf</div>
+                  <div style={{ display: 'flex', gap: 4 }}>
+                    {(['7T', '1M', 'Gesamt'] as Tab[]).map(t => (
+                      <button key={t} onClick={() => setActiveTab(t)} style={{ fontSize: 12, padding: '3px 10px', borderRadius: 6, border: 'none', cursor: 'pointer', background: activeTab === t ? 'var(--accent)' : 'var(--surface)', color: activeTab === t ? '#fff' : 'var(--text-muted)', fontWeight: activeTab === t ? 600 : 400 }}>{t}</button>
                     ))}
                   </div>
-                  <select value={orderType} onChange={e => setOrderType(e.target.value as OrderType)}
-                    style={{ fontSize: 12, color: 'var(--text-muted)', background: 'transparent', border: '1px solid var(--border)', borderRadius: 6, padding: '4px 8px', cursor: 'pointer' }}>
-                    <option value="markt">Markt</option>
-                    <option value="limit">Limit</option>
-                  </select>
                 </div>
-                <div style={{ padding: 16 }}>
-                  {tradeTab === 'kaufen' && (
-                    <>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 16 }}>
-                        {(['yes', 'no'] as const).map(d => (
-                          <button key={d} onClick={() => setDirection(d)} style={{ padding: '10px 0', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 14, background: direction === d ? (d === 'yes' ? 'rgba(22,163,74,0.15)' : 'rgba(220,38,38,0.15)') : 'var(--surface)', color: direction === d ? (d === 'yes' ? 'var(--yes)' : 'var(--no)') : 'var(--text-muted)', outline: direction === d ? `2px solid ${d === 'yes' ? 'var(--yes)' : 'var(--no)'}` : '2px solid transparent' }}>
-                            {isKrypto ? (d === 'yes' ? `Up · ${prob}¢` : `Down · ${100 - prob}¢`) : (d === 'yes' ? `Ja · ${prob}¢` : `Nein · ${100 - prob}¢`)}
-                          </button>
-                        ))}
-                      </div>
-                      {orderType === 'limit' && (
-                        <div style={{ marginBottom: 14 }}>
-                          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>Limitpreis (¢, 1–99)</div>
-                          <input type="number" min={1} max={99} value={limitPrice} onChange={e => setLimitPrice(Math.min(99, Math.max(1, parseInt(e.target.value) || 1)))} style={{ width: '100%', fontSize: 16, fontWeight: 600 }} />
-                          <div style={{ fontSize: 11, color: 'var(--text-subtle)', marginTop: 4 }}>Aktuell: {direction === 'yes' ? prob : 100 - prob}¢</div>
-                        </div>
+                {tradeHistory.length === 0
+                  ? <div style={{ height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-subtle)', fontSize: 13 }}>Chart erscheint nach der ersten Wette.</div>
+                  : <div style={{ height: 200, position: 'relative' }}><canvas ref={chartRef} /></div>}
+                <div style={{ marginTop: 12, fontSize: 12, color: 'var(--text-subtle)' }}>
+                  Volumen: {Math.round(market.q_yes + market.q_no).toLocaleString('de')} ₫ · {trades.filter(t => t.shares > 0).length} Trades
+                </div>
+              </div>
+            )}
+
+            {isKrypto && market.resolved && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <div className="card" style={{ textAlign: 'center', padding: '32px 24px' }}>
+                  <div style={{ width: 72, height: 72, borderRadius: '50%', background: market.resolution === 'yes' ? '#dcfce7' : '#fee2e2', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', fontSize: 36 }}>
+                    {market.resolution === 'yes' ? '✓' : '✗'}
+                  </div>
+                  <div style={{ fontSize: 30, fontWeight: 800, marginBottom: 8, color: market.resolution === 'yes' ? '#16a34a' : '#dc2626' }}>
+                    Ergebnis: {market.resolution === 'yes' ? 'Up ↑' : 'Down ↓'}
+                  </div>
+                  <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 20 }}>
+                    {market.coin}: ${market.start_price?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} → ${market.end_price?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
+                  {nextLiveMarket && (
+                    <button onClick={() => router.push(`/markets/${nextLiveMarket.id}`)}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '12px 24px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: 20, cursor: 'pointer', fontSize: 14, fontWeight: 700 }}>
+                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#fff', display: 'inline-block' }} />
+                      Zum Live-Markt →
+                    </button>
+                  )}
+                </div>
+                {otherLiveMarkets.length > 0 && (
+                  <div className="card">
+                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 12 }}>Weitere Live-Märkte</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {otherLiveMarkets.map(m => {
+                        const mProb = calcProb(m.q_yes, m.q_no, m.b)
+                        const mDiff = parseUTC(m.closes_at).getTime() - Date.now()
+                        const mMins = Math.max(0, Math.floor(mDiff / 60000))
+                        const mSecs = Math.max(0, Math.floor((mDiff % 60000) / 1000))
+                        return (
+                          <div key={m.id} onClick={() => router.push(`/markets/${m.id}`)}
+                            style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', background: 'var(--surface)', borderRadius: 10, cursor: 'pointer' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#22c55e' }} />
+                              <span style={{ fontWeight: 700, fontSize: 13, color: COIN_COLORS[m.coin ?? ''] ?? '#888' }}>{m.coin}</span>
+                              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Up or Down</span>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                              <span style={{ fontSize: 12, color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>{String(mMins).padStart(2,'0')}:{String(mSecs).padStart(2,'0')}</span>
+                              <span style={{ fontSize: 13, fontWeight: 700, color: mProb >= 50 ? 'var(--yes)' : 'var(--no)' }}>{mProb}%</span>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {isKrypto && !market.resolved && (
+              <div className="card">
+                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', marginBottom: 12 }}>Marktregeln</div>
+                <div style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.8 }}>
+                  <div>Volumen: <strong style={{ color: 'var(--text)' }}>{Math.round(market.q_yes + market.q_no).toLocaleString('de')} ₫</strong></div>
+                  <div>Trades: <strong style={{ color: 'var(--text)' }}>{trades.filter(t => t.shares > 0).length}</strong></div>
+                  <div style={{ marginTop: 12, padding: '12px', background: 'var(--surface)', borderRadius: 8, fontSize: 12, lineHeight: 1.7 }}>
+                    Ist der {market.coin}-Preis bei Ablauf <strong style={{ color: 'var(--yes)' }}>höher</strong> → <strong style={{ color: 'var(--yes)' }}>Up gewinnt</strong>.<br />
+                    Ist er <strong style={{ color: 'var(--no)' }}>niedriger</strong> → <strong style={{ color: 'var(--no)' }}>Down gewinnt</strong>.
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="card" style={{ position: 'sticky', top: 'calc(var(--nav-height) + 16px)', padding: 0, overflow: 'hidden' }}>
+              {market.resolved ? (
+                <div style={{ padding: '24px 16px' }}>
+                  <div style={{ textAlign: 'center', marginBottom: 16 }}>
+                    <div style={{ fontSize: 28, marginBottom: 4 }}>{userWon ? '🎉' : hasPosition ? '😔' : '✓'}</div>
+                    <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', marginBottom: 4 }}>
+                      {userWon ? 'Gewonnen!' : hasPosition ? 'Verloren' : 'Markt beendet'}
+                    </div>
+                    <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+                      Ergebnis: <strong style={{ color: market.resolution === 'yes' ? 'var(--yes)' : 'var(--no)', fontSize: 15 }}>
+                        {market.resolution === 'yes' ? (isKrypto ? '↑ Up' : 'Ja') : (isKrypto ? '↓ Down' : 'Nein')}
+                      </strong>
+                    </div>
+                  </div>
+                  {hasPosition && (
+                    <div style={{ padding: '14px', borderRadius: 10, textAlign: 'center', marginBottom: 14, background: userWon ? 'rgba(22,163,74,0.08)' : 'rgba(220,38,38,0.08)', border: `1px solid ${userWon ? 'rgba(22,163,74,0.2)' : 'rgba(220,38,38,0.2)'}` }}>
+                      {userWon ? (
+                        <>
+                          <div style={{ fontSize: 12, color: '#16a34a', marginBottom: 4 }}>Auszahlung erfolgt automatisch</div>
+                          <div style={{ fontSize: 28, fontWeight: 800, color: '#16a34a' }}>
+                            +{Math.round(market.resolution === 'yes' ? sharesYes : sharesNo)} ₫
+                          </div>
+                        </>
+                      ) : (
+                        <div style={{ fontSize: 13, color: '#dc2626' }}>Leider verloren — nächsten Markt versuchen!</div>
                       )}
-                      <div style={{ marginBottom: 12 }}>
-                        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>Betrag (₫)</div>
-                        <input type="number" min={1} max={Math.min(user.balance, 1000000)} value={spend} onChange={e => setSpend(Math.max(1, Math.min(user.balance, parseInt(e.target.value) || 1)))} style={{ width: '100%', fontSize: 22, fontWeight: 700 }} />
-                        <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
-                          {[50, 100, 200, 500].map(v => (
-                            <button key={v} onClick={() => setSpend(v)} style={{ flex: 1, fontSize: 11, padding: '4px 0', borderRadius: 6, border: '1px solid var(--border)', background: spend === v ? 'var(--accent)' : 'var(--surface)', color: spend === v ? '#fff' : 'var(--text-muted)', cursor: 'pointer' }}>+{v}</button>
+                    </div>
+                  )}
+                  {nextLiveMarket && (
+                    <button onClick={() => router.push(`/markets/${nextLiveMarket.id}`)}
+                      style={{ width: '100%', padding: '12px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: 10, cursor: 'pointer', fontSize: 14, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#fff' }} />
+                      Zum Live-Markt →
+                    </button>
+                  )}
+                  {!nextLiveMarket && (
+                    <div style={{ textAlign: 'center', fontSize: 12, color: 'var(--text-muted)', marginTop: 8 }}>
+                      Nächster Markt wird erstellt…
+                    </div>
+                  )}
+                </div>
+              ) : !user ? (
+                <div style={{ textAlign: 'center', padding: '24px 16px' }}>
+                  <div style={{ fontSize: 14, color: 'var(--text-muted)', marginBottom: 12 }}>Anmelden um zu handeln</div>
+                  <button className="submit-btn yes" onClick={() => router.push('/')}>Zur Anmeldung</button>
+                </div>
+              ) : (
+                <>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border)', padding: '0 16px' }}>
+                    <div style={{ display: 'flex' }}>
+                      {(['kaufen', 'verkaufen'] as TradeTab[]).map(t => (
+                        <button key={t} onClick={() => { setTradeTab(t); setBetError(''); setBetSuccess('') }}
+                          style={{ padding: '12px 14px', fontSize: 13, fontWeight: 600, border: 'none', cursor: 'pointer', background: 'transparent', color: tradeTab === t ? 'var(--text)' : 'var(--text-muted)', borderBottom: tradeTab === t ? '2px solid var(--accent)' : '2px solid transparent', marginBottom: -1 }}>
+                          {t.charAt(0).toUpperCase() + t.slice(1)}
+                        </button>
+                      ))}
+                    </div>
+                    <select value={orderType} onChange={e => setOrderType(e.target.value as OrderType)}
+                      style={{ fontSize: 12, color: 'var(--text-muted)', background: 'transparent', border: '1px solid var(--border)', borderRadius: 6, padding: '4px 8px', cursor: 'pointer' }}>
+                      <option value="markt">Markt</option>
+                      <option value="limit">Limit</option>
+                    </select>
+                  </div>
+                  <div style={{ padding: 16 }}>
+                    {tradeTab === 'kaufen' && (
+                      <>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 16 }}>
+                          {(['yes', 'no'] as const).map(d => (
+                            <button key={d} onClick={() => setDirection(d)} style={{ padding: '10px 0', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 14, background: direction === d ? (d === 'yes' ? 'rgba(22,163,74,0.15)' : 'rgba(220,38,38,0.15)') : 'var(--surface)', color: direction === d ? (d === 'yes' ? 'var(--yes)' : 'var(--no)') : 'var(--text-muted)', outline: direction === d ? `2px solid ${d === 'yes' ? 'var(--yes)' : 'var(--no)'}` : '2px solid transparent' }}>
+                              {isKrypto ? (d === 'yes' ? `Up · ${prob}¢` : `Down · ${100 - prob}¢`) : (d === 'yes' ? `Ja · ${prob}¢` : `Nein · ${100 - prob}¢`)}
+                            </button>
                           ))}
                         </div>
-                      </div>
-                      {orderType === 'markt' && (
-                        <div style={{ background: 'rgba(22,163,74,0.07)', borderRadius: 10, padding: '14px', marginBottom: 14, textAlign: 'center', border: '1px solid rgba(22,163,74,0.2)' }}>
-                          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Auszahlung wenn {isKrypto ? (direction === 'yes' ? 'Up' : 'Down') : (direction === 'yes' ? 'Ja' : 'Nein')} eintritt</div>
-                          <div style={{ fontSize: 32, fontWeight: 800, color: '#16a34a', letterSpacing: '-0.5px' }}>{payout} ₫</div>
-                        </div>
-                      )}
-                      {orderType === 'limit' && (
-                        <div style={{ background: 'var(--surface)', borderRadius: 10, padding: '12px', marginBottom: 14, fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.6 }}>
-                          Order wird ausgeführt wenn der Kurs {limitPrice}¢ erreicht.
-                        </div>
-                      )}
-                    </>
-                  )}
-                  {tradeTab === 'verkaufen' && (
-                    <>
-                      {!hasPosition ? (
-                        <div style={{ textAlign: 'center', padding: '24px 0', fontSize: 13, color: 'var(--text-muted)' }}>Du hast keine Anteile in diesem Markt.</div>
-                      ) : (
-                        <>
-                          <div style={{ background: 'var(--surface)', borderRadius: 8, padding: '12px', marginBottom: 16, fontSize: 13 }}>
-                            <div style={{ color: 'var(--text-muted)', marginBottom: 4, fontSize: 12 }}>Deine Position</div>
-                            {sharesYes > 0 && <div style={{ fontWeight: 700, color: 'var(--yes)' }}>{isKrypto ? 'Up' : 'Ja'} · {Math.round(sharesYes)} Anteile</div>}
-                            {sharesNo  > 0 && <div style={{ fontWeight: 700, color: 'var(--no)'  }}>{isKrypto ? 'Down' : 'Nein'} · {Math.round(sharesNo)} Anteile</div>}
+                        {orderType === 'limit' && (
+                          <div style={{ marginBottom: 14 }}>
+                            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>Limitpreis (¢, 1–99)</div>
+                            <input type="number" min={1} max={99} value={limitPrice} onChange={e => setLimitPrice(Math.min(99, Math.max(1, parseInt(e.target.value) || 1)))} style={{ width: '100%', fontSize: 16, fontWeight: 600 }} />
+                            <div style={{ fontSize: 11, color: 'var(--text-subtle)', marginTop: 4 }}>Aktuell: {direction === 'yes' ? prob : 100 - prob}¢</div>
                           </div>
-                          {orderType === 'markt' && (
-                            <div style={{ background: 'rgba(22,163,74,0.07)', borderRadius: 10, padding: '14px', marginBottom: 14, textAlign: 'center', border: '1px solid rgba(22,163,74,0.2)' }}>
-                              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Du erhältst jetzt</div>
-                              <div style={{ fontSize: 32, fontWeight: 800, color: '#16a34a', letterSpacing: '-0.5px' }}>{Math.round(returnOnSell)} ₫</div>
-                              <div style={{ fontSize: 11, color: 'var(--text-subtle)', marginTop: 4 }}>alle Anteile verkaufen</div>
+                        )}
+                        <div style={{ marginBottom: 12 }}>
+                          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>Betrag (₫)</div>
+                          <input type="number" min={1} max={Math.min(user.balance, 1000000)} value={spend} onChange={e => setSpend(Math.max(1, Math.min(user.balance, parseInt(e.target.value) || 1)))} style={{ width: '100%', fontSize: 22, fontWeight: 700 }} />
+                          <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+                            {[50, 100, 200, 500].map(v => (
+                              <button key={v} onClick={() => setSpend(v)} style={{ flex: 1, fontSize: 11, padding: '4px 0', borderRadius: 6, border: '1px solid var(--border)', background: spend === v ? 'var(--accent)' : 'var(--surface)', color: spend === v ? '#fff' : 'var(--text-muted)', cursor: 'pointer' }}>+{v}</button>
+                            ))}
+                          </div>
+                        </div>
+                        {orderType === 'markt' && (
+                          <div style={{ background: 'rgba(22,163,74,0.07)', borderRadius: 10, padding: '14px', marginBottom: 14, textAlign: 'center', border: '1px solid rgba(22,163,74,0.2)' }}>
+                            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Auszahlung wenn {isKrypto ? (direction === 'yes' ? 'Up' : 'Down') : (direction === 'yes' ? 'Ja' : 'Nein')} eintritt</div>
+                            <div style={{ fontSize: 32, fontWeight: 800, color: '#16a34a', letterSpacing: '-0.5px' }}>{payout} ₫</div>
+                          </div>
+                        )}
+                        {orderType === 'limit' && (
+                          <div style={{ background: 'var(--surface)', borderRadius: 10, padding: '12px', marginBottom: 14, fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.6 }}>
+                            Order wird ausgeführt wenn der Kurs {limitPrice}¢ erreicht.
+                          </div>
+                        )}
+                      </>
+                    )}
+                    {tradeTab === 'verkaufen' && (
+                      <>
+                        {!hasPosition ? (
+                          <div style={{ textAlign: 'center', padding: '24px 0', fontSize: 13, color: 'var(--text-muted)' }}>Du hast keine Anteile in diesem Markt.</div>
+                        ) : (
+                          <>
+                            <div style={{ background: 'var(--surface)', borderRadius: 8, padding: '12px', marginBottom: 16, fontSize: 13 }}>
+                              <div style={{ color: 'var(--text-muted)', marginBottom: 4, fontSize: 12 }}>Deine Position</div>
+                              {sharesYes > 0 && <div style={{ fontWeight: 700, color: 'var(--yes)' }}>{isKrypto ? 'Up' : 'Ja'} · {Math.round(sharesYes)} Anteile</div>}
+                              {sharesNo  > 0 && <div style={{ fontWeight: 700, color: 'var(--no)'  }}>{isKrypto ? 'Down' : 'Nein'} · {Math.round(sharesNo)} Anteile</div>}
                             </div>
-                          )}
-                        </>
-                      )}
-                    </>
-                  )}
-                  {betError   && <div className="alert alert-error"   style={{ marginBottom: 10 }}>{betError}</div>}
-                  {betSuccess  && <div className="alert alert-success" style={{ marginBottom: 10 }}>{betSuccess}</div>}
-                  {tradeTab === 'kaufen' ? (
-                    <button className={`submit-btn ${direction === 'yes' ? 'yes' : 'no'}`} onClick={handleKaufen} disabled={betLoading || spend <= 0} style={{ width: '100%' }}>
-                      {betLoading ? 'Wird ausgeführt…' : orderType === 'limit' ? `Limit: ${isKrypto ? (direction === 'yes' ? 'Up' : 'Down') : (direction === 'yes' ? 'Ja' : 'Nein')} @ ${limitPrice}¢` : `${isKrypto ? (direction === 'yes' ? 'Up' : 'Down') : (direction === 'yes' ? 'Ja' : 'Nein')} kaufen · ${spend} ₫`}
-                    </button>
-                  ) : (
-                    <button className="submit-btn no" onClick={handleVerkaufen} disabled={betLoading || !hasPosition} style={{ width: '100%' }}>
-                      {betLoading ? 'Wird verkauft…' : `Verkaufen · ${Math.round(returnOnSell)} ₫`}
-                    </button>
-                  )}
-                  <div style={{ fontSize: 11, color: 'var(--text-subtle)', textAlign: 'center', marginTop: 8 }}>Guthaben: {user.balance.toLocaleString('de')} ₫</div>
-                </div>
-              </>
-            )}
+                            {orderType === 'markt' && (
+                              <div style={{ background: 'rgba(22,163,74,0.07)', borderRadius: 10, padding: '14px', marginBottom: 14, textAlign: 'center', border: '1px solid rgba(22,163,74,0.2)' }}>
+                                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Du erhältst jetzt</div>
+                                <div style={{ fontSize: 32, fontWeight: 800, color: '#16a34a', letterSpacing: '-0.5px' }}>{Math.round(returnOnSell)} ₫</div>
+                                <div style={{ fontSize: 11, color: 'var(--text-subtle)', marginTop: 4 }}>alle Anteile verkaufen</div>
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </>
+                    )}
+                    {betError   && <div className="alert alert-error"   style={{ marginBottom: 10 }}>{betError}</div>}
+                    {betSuccess  && <div className="alert alert-success" style={{ marginBottom: 10 }}>{betSuccess}</div>}
+                    {tradeTab === 'kaufen' ? (
+                      <button className={`submit-btn ${direction === 'yes' ? 'yes' : 'no'}`} onClick={handleKaufen} disabled={betLoading || spend <= 0} style={{ width: '100%' }}>
+                        {betLoading ? 'Wird ausgeführt…' : orderType === 'limit' ? `Limit: ${isKrypto ? (direction === 'yes' ? 'Up' : 'Down') : (direction === 'yes' ? 'Ja' : 'Nein')} @ ${limitPrice}¢` : `${isKrypto ? (direction === 'yes' ? 'Up' : 'Down') : (direction === 'yes' ? 'Ja' : 'Nein')} kaufen · ${spend} ₫`}
+                      </button>
+                    ) : (
+                      <button className="submit-btn no" onClick={handleVerkaufen} disabled={betLoading || !hasPosition} style={{ width: '100%' }}>
+                        {betLoading ? 'Wird verkauft…' : `Verkaufen · ${Math.round(returnOnSell)} ₫`}
+                      </button>
+                    )}
+                    <div style={{ fontSize: 11, color: 'var(--text-subtle)', textAlign: 'center', marginTop: 8 }}>Guthaben: {user.balance.toLocaleString('de')} ₫</div>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
-        </div>
+        )}
 
-        {trades.filter(t => t.shares > 0).length > 0 && (
+        {!isSoccer && trades.filter(t => t.shares > 0).length > 0 && (
           <div className="card" style={{ marginTop: 20 }}>
             <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', marginBottom: 14 }}>Letzte Trades</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -1069,4 +1497,3 @@ export default function MarketPage() {
     </>
   )
 }
-
