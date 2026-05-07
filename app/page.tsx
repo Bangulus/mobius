@@ -99,6 +99,20 @@ function parseUTC(raw: string): Date {
   return new Date(raw.replace(' ', 'T') + 'Z')
 }
 
+const AVATAR_COLORS = [
+  { bg: '#eff6ff', color: '#1d4ed8' },
+  { bg: '#f0fdf4', color: '#166534' },
+  { bg: '#fdf4ff', color: '#6b21a8' },
+  { bg: '#fffbeb', color: '#92400e' },
+  { bg: '#f0f9ff', color: '#075985' },
+]
+
+function avatarColor(str: string) {
+  let h = 0
+  for (let i = 0; i < str.length; i++) h = str.charCodeAt(i) + ((h << 5) - h)
+  return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length]
+}
+
 const COINS = ['BTC', 'ETH', 'SOL', 'XRP']
 
 const CAT_CLASS: Record<string, string> = {
@@ -156,37 +170,30 @@ function getTeamInitials(name: string): string {
   return (words[0][0] + (words[1]?.[0] ?? '')).toUpperCase()
 }
 
-const AVATAR_COLORS = [
-  { bg: '#eff6ff', color: '#1d4ed8' },
-  { bg: '#f0fdf4', color: '#166534' },
-  { bg: '#fdf4ff', color: '#6b21a8' },
-  { bg: '#fffbeb', color: '#92400e' },
-  { bg: '#f0f9ff', color: '#075985' },
+const NAV_ITEMS: NavItemDef[] = [
+  { id: 'Politik',       label: 'Politik',      icon: '🏛️' },
+  { id: 'Sport',         label: 'Sport',         icon: '⚽', children: [
+    { id: 'Fußball',     label: 'Fußball',       icon: '⚽', children: [
+      { id: 'Bundesliga', label: 'Bundesliga',   icon: '🇩🇪' },
+    ]},
+  ]},
+  { id: 'Krypto',        label: 'Krypto',        icon: '₿'  },
+  { id: 'Entertainment', label: 'Entertainment', icon: '🎬' },
+  { id: 'Wirtschaft',    label: 'Wirtschaft',    icon: '📈' },
+  { id: 'Geopolitik',    label: 'Geopolitik',    icon: '🌍' },
+  { id: 'Finanzen',      label: 'Finanzen',      icon: '💰' },
+  { id: 'Wetter',        label: 'Wetter',        icon: '🌤️' },
+  { id: 'Kultur',        label: 'Kultur',        icon: '🎭' },
 ]
-function avatarColor(str: string) {
-  let h = 0
-  for (let i = 0; i < str.length; i++) h = str.charCodeAt(i) + ((h << 5) - h)
-  return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length]
+
+interface NavItemDef {
+  id: string
+  label: string
+  icon: string
+  children?: NavItemDef[]
 }
 
 type AuthMode = 'login' | 'register'
-
-// Sidebar Navigation Struktur
-const NAV_ITEMS = [
-  { id: 'Politik',       label: 'Politik',       icon: '🏛️' },
-  { id: 'Sport',         label: 'Sport',          icon: '⚽', children: [
-    { id: 'Fußball',     label: 'Fußball',        icon: '⚽', children: [
-      { id: 'Bundesliga', label: 'Bundesliga',    icon: '🇩🇪' },
-    ]},
-  ]},
-  { id: 'Krypto',        label: 'Krypto',         icon: '₿'  },
-  { id: 'Entertainment', label: 'Entertainment',  icon: '🎬' },
-  { id: 'Wirtschaft',    label: 'Wirtschaft',     icon: '📈' },
-  { id: 'Geopolitik',    label: 'Geopolitik',     icon: '🌍' },
-  { id: 'Finanzen',      label: 'Finanzen',       icon: '💰' },
-  { id: 'Wetter',        label: 'Wetter',         icon: '🌤️' },
-  { id: 'Kultur',        label: 'Kultur',         icon: '🎭' },
-]
 
 export default function Home() {
   const router = useRouter()
@@ -450,15 +457,8 @@ export default function Home() {
     return matchCat && matchSearch
   })
 
-  const toggleNav = (id: string) => {
-    setExpandedNav(prev => ({ ...prev, [id]: !prev[id] }))
-  }
-
-  const selectCategory = (id: string) => {
-    setCategory(id)
-    setView('markets')
-    setSearchQuery('')
-  }
+  const toggleNav = (id: string) => setExpandedNav(prev => ({ ...prev, [id]: !prev[id] }))
+  const selectCategory = (id: string) => { setCategory(id); setView('markets'); setSearchQuery('') }
 
   return (
     <>
@@ -585,7 +585,7 @@ export default function Home() {
         </div>
       </nav>
 
-      {/* Haupt-Layout: Sidebar + Content */}
+      {/* Layout: Sidebar + Content */}
       <div style={{ display: 'flex', minHeight: 'calc(100vh - var(--nav-height, 56px))', maxWidth: 1400, margin: '0 auto' }}>
 
         {/* Sidebar */}
@@ -595,7 +595,6 @@ export default function Home() {
           height: 'calc(100vh - var(--nav-height, 56px))', overflowY: 'auto',
           background: 'var(--bg)',
         }}>
-          {/* User-Bereich in Sidebar */}
           {user && (
             <div style={{ padding: '0 16px 16px', borderBottom: '1px solid var(--border)', marginBottom: 12 }}>
               <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Guthaben</div>
@@ -603,7 +602,6 @@ export default function Home() {
             </div>
           )}
 
-          {/* Navigation Items */}
           <div style={{ padding: '0 8px' }}>
             {NAV_ITEMS.map(item => (
               <NavItem
@@ -618,10 +616,8 @@ export default function Home() {
             ))}
           </div>
 
-          {/* Divider */}
           <div style={{ borderTop: '1px solid var(--border)', margin: '16px 0' }} />
 
-          {/* Bestenliste in Sidebar */}
           <div style={{ padding: '0 16px' }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: 0.5, marginBottom: 10, textTransform: 'uppercase' }}>
               Bestenliste
@@ -672,50 +668,21 @@ export default function Home() {
           to   { transform: translateX(0);    opacity: 1; }
         }
         .nav-item-btn {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          width: 100%;
-          padding: 8px 12px;
-          border: none;
-          background: transparent;
-          border-radius: 8px;
-          cursor: pointer;
-          font-size: 13px;
-          font-weight: 500;
-          color: var(--text-muted);
-          text-align: left;
-          transition: background 0.1s, color 0.1s;
+          display: flex; align-items: center; gap: 8px; width: 100%;
+          padding: 8px 12px; border: none; background: transparent;
+          border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 500;
+          color: var(--text-muted); text-align: left; transition: background 0.1s, color 0.1s;
         }
-        .nav-item-btn:hover {
-          background: var(--surface);
-          color: var(--text);
-        }
+        .nav-item-btn:hover { background: var(--surface); color: var(--text); }
         .nav-item-btn.active {
           background: var(--accent-light, rgba(99,102,241,0.1));
-          color: var(--accent, #6366f1);
-          font-weight: 700;
+          color: var(--accent, #6366f1); font-weight: 700;
         }
-        .nav-item-btn .nav-chevron {
-          margin-left: auto;
-          font-size: 10px;
-          opacity: 0.5;
-          transition: transform 0.2s;
-        }
-        .nav-item-btn .nav-chevron.open {
-          transform: rotate(180deg);
-        }
+        .nav-chevron { margin-left: auto; font-size: 10px; opacity: 0.5; transition: transform 0.2s; }
+        .nav-chevron.open { transform: rotate(180deg); }
       `}</style>
     </>
   )
-}
-
-// Nav Item Komponente (rekursiv)
-interface NavItemDef {
-  id: string
-  label: string
-  icon: string
-  children?: NavItemDef[]
 }
 
 function NavItem({ item, category, expandedNav, onSelect, onToggle, depth }: {
@@ -742,22 +709,12 @@ function NavItem({ item, category, expandedNav, onSelect, onToggle, depth }: {
       >
         <span style={{ fontSize: 14 }}>{item.icon}</span>
         <span>{item.label}</span>
-        {hasChildren && (
-          <span className={`nav-chevron ${isExpanded ? 'open' : ''}`}>▼</span>
-        )}
+        {hasChildren && <span className={`nav-chevron ${isExpanded ? 'open' : ''}`}>▼</span>}
       </button>
       {hasChildren && isExpanded && (
         <div>
           {item.children!.map(child => (
-            <NavItem
-              key={child.id}
-              item={child}
-              category={category}
-              expandedNav={expandedNav}
-              onSelect={onSelect}
-              onToggle={onToggle}
-              depth={depth + 1}
-            />
+            <NavItem key={child.id} item={child} category={category} expandedNav={expandedNav} onSelect={onSelect} onToggle={onToggle} depth={depth + 1} />
           ))}
         </div>
       )}
@@ -769,16 +726,11 @@ function SidebarLeaderboard({ entries, currentUserId }: { entries: LeaderboardEn
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       {entries.slice(0, 5).map((e, i) => {
-        const av = avatarColor(e.username)
+        const av   = avatarColor(e.username)
         const isMe = e.user_id === currentUserId
         const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`
         return (
-          <div key={e.user_id} style={{
-            display: 'flex', alignItems: 'center', gap: 8,
-            padding: '4px 0',
-            background: isMe ? 'var(--accent-light)' : 'transparent',
-            borderRadius: 6,
-          }}>
+          <div key={e.user_id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0' }}>
             <span style={{ fontSize: 12, width: 20, textAlign: 'center', flexShrink: 0 }}>{medal}</span>
             <div style={{ width: 24, height: 24, borderRadius: '50%', background: av.bg, color: av.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, flexShrink: 0 }}>
               {e.username.slice(0, 2).toUpperCase()}
@@ -796,17 +748,23 @@ function SidebarLeaderboard({ entries, currentUserId }: { entries: LeaderboardEn
   )
 }
 
-function avatarColor(str: string) {
-  const AVATAR_COLORS = [
-    { bg: '#eff6ff', color: '#1d4ed8' },
-    { bg: '#f0fdf4', color: '#166534' },
-    { bg: '#fdf4ff', color: '#6b21a8' },
-    { bg: '#fffbeb', color: '#92400e' },
-    { bg: '#f0f9ff', color: '#075985' },
-  ]
-  let h = 0
-  for (let i = 0; i < str.length; i++) h = str.charCodeAt(i) + ((h << 5) - h)
-  return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length]
+function TeamLogo({ iconUrl, teamName, color, size = 36 }: { iconUrl?: string; teamName: string; color: string; size?: number }) {
+  const [imgError, setImgError] = useState(false)
+
+  if (iconUrl && !imgError) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img src={iconUrl} alt={teamName} onError={() => setImgError(true)}
+        style={{ width: size, height: size, borderRadius: 6, objectFit: 'contain', background: '#fff', padding: 2 }} />
+    )
+  }
+
+  const initials = getTeamInitials(teamName)
+  return (
+    <div style={{ width: size, height: size, borderRadius: 6, flexShrink: 0, background: color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: size * 0.36, fontWeight: 900, color: '#fff' }}>
+      {initials}
+    </div>
+  )
 }
 
 function MarketsGrid({ markets, onOpen, isSoccer }: { markets: Market[]; onOpen: (id: string) => void; isSoccer: boolean }) {
@@ -839,7 +797,6 @@ function MarketsGrid({ markets, onOpen, isSoccer }: { markets: Market[]; onOpen:
 
   const soccerEntries = Object.entries(soccerGroups)
 
-  // Soccer: nach Datum gruppieren
   const soccerByDate: Record<string, [string, Market[]][]> = {}
   soccerEntries.forEach(([matchId, matchMarkets]) => {
     const anyMarket = matchMarkets[0]
@@ -887,40 +844,6 @@ function MarketsGrid({ markets, onOpen, isSoccer }: { markets: Market[]; onOpen:
   )
 }
 
-function TeamLogo({ iconUrl, teamName, color, size = 36 }: { iconUrl?: string; teamName: string; color: string; size?: number }) {
-  const [imgError, setImgError] = useState(false)
-
-  if (iconUrl && !imgError) {
-    return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src={iconUrl}
-        alt={teamName}
-        onError={() => setImgError(true)}
-        style={{ width: size, height: size, borderRadius: 6, objectFit: 'contain', background: '#fff', padding: 2 }}
-      />
-    )
-  }
-
-  // Fallback: Initialen
-  const clean = teamName.replace(/^(1\.\s*)?(FC|BV|SV|TSG|VfB|VfL|SC|RB|FSV)\s+/i, '')
-  const words = clean.split(' ').filter(Boolean)
-  const initials = words.length === 1
-    ? words[0].substring(0, 3).toUpperCase()
-    : (words[0][0] + (words[1]?.[0] ?? '')).toUpperCase()
-
-  return (
-    <div style={{
-      width: size, height: size, borderRadius: 6, flexShrink: 0,
-      background: color,
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      fontSize: size * 0.36, fontWeight: 900, color: '#fff',
-    }}>
-      {initials}
-    </div>
-  )
-}
-
 function SoccerMatchCard({ markets, onOpen }: { markets: Market[]; onOpen: (id: string) => void }) {
   const homeMarket = markets.find(m => m.outcome === 'home')
   const drawMarket = markets.find(m => m.outcome === 'draw')
@@ -930,7 +853,7 @@ function SoccerMatchCard({ markets, onOpen }: { markets: Market[]; onOpen: (id: 
   if (!anyMarket) return null
 
   const displayGroup = anyMarket.display_group ?? ''
-  const teams = displayGroup.split(' vs ')
+  const teams    = displayGroup.split(' vs ')
   const homeTeam = teams[0] ?? ''
   const awayTeam = teams[1] ?? ''
 
@@ -943,94 +866,56 @@ function SoccerMatchCard({ markets, onOpen }: { markets: Market[]; onOpen: (id: 
   const drawNorm = Math.round((drawProb / total) * 100)
   const awayNorm = 100 - homeNorm - drawNorm
 
-  // Uhrzeit aus match_date extrahieren
-  const matchDate = anyMarket.match_date ?? ''
-  const timePart  = matchDate.split(', ')[1] ?? ''
-
+  const matchDate  = anyMarket.match_date ?? ''
+  const timePart   = matchDate.split(', ')[1] ?? ''
   const totalVolume = markets.reduce((s, m) => s + m.q_yes + m.q_no, 0)
-
-  const homeColor = getTeamColor(homeTeam)
-  const awayColor = getTeamColor(awayTeam)
+  const homeColor  = getTeamColor(homeTeam)
+  const awayColor  = getTeamColor(awayTeam)
 
   return (
     <div className="market-card" style={{ padding: '14px 18px', cursor: 'pointer' }}
       onClick={() => onOpen((homeMarket ?? anyMarket).id)}>
 
-      {/* Header: Liga + Uhrzeit + Volumen */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: 0.3 }}>
-            Bundesliga
-          </span>
-          {timePart && (
-            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>· {timePart} Uhr</span>
-          )}
-          {totalVolume > 0 && (
-            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-              · {Math.round(totalVolume).toLocaleString('de')} ₫
-            </span>
-          )}
+          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)' }}>Bundesliga</span>
+          {timePart && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>· {timePart} Uhr</span>}
+          {totalVolume > 0 && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>· {Math.round(totalVolume).toLocaleString('de')} ₫</span>}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <div className="live-dot" />
-          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Live</span>
         </div>
       </div>
 
-      {/* Teams + Quoten — Polymarket Style */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-
-        {/* Heimteam */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 }}>
-          <TeamLogo
-            iconUrl={anyMarket.home_team_icon}
-            teamName={homeTeam}
-            color={homeColor}
-            size={40}
-          />
+          <TeamLogo iconUrl={anyMarket.home_team_icon} teamName={homeTeam} color={homeColor} size={40} />
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {homeTeam}
-            </div>
-            <div style={{ fontSize: 20, fontWeight: 800, color: homeColor, lineHeight: 1.1 }}>
-              {homeNorm}¢
-            </div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{homeTeam}</div>
+            <div style={{ fontSize: 20, fontWeight: 800, color: homeColor, lineHeight: 1.1 }}>{homeNorm}¢</div>
           </div>
         </div>
 
-        {/* Draw */}
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, flexShrink: 0, padding: '0 8px' }}>
           <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: 0.5 }}>DRAW</div>
           <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-muted)' }}>{drawNorm}¢</div>
         </div>
 
-        {/* Auswärtsteam */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0, justifyContent: 'flex-end' }}>
           <div style={{ minWidth: 0, textAlign: 'right' }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {awayTeam}
-            </div>
-            <div style={{ fontSize: 20, fontWeight: 800, color: awayColor, lineHeight: 1.1 }}>
-              {awayNorm}¢
-            </div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{awayTeam}</div>
+            <div style={{ fontSize: 20, fontWeight: 800, color: awayColor, lineHeight: 1.1 }}>{awayNorm}¢</div>
           </div>
-          <TeamLogo
-            iconUrl={anyMarket.away_team_icon}
-            teamName={awayTeam}
-            color={awayColor}
-            size={40}
-          />
+          <TeamLogo iconUrl={anyMarket.away_team_icon} teamName={awayTeam} color={awayColor} size={40} />
         </div>
       </div>
 
-      {/* Wahrscheinlichkeits-Balken */}
       <div style={{ display: 'flex', height: 4, borderRadius: 2, overflow: 'hidden', gap: 2, marginTop: 12 }}>
         <div style={{ width: `${homeNorm}%`, background: homeColor }} />
         <div style={{ width: `${drawNorm}%`, background: '#94a3b8' }} />
         <div style={{ width: `${awayNorm}%`, background: awayColor }} />
       </div>
 
-      {/* Tipp-Buttons */}
       <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
         {[
           { label: homeTeam.split(' ').slice(-1)[0], id: homeMarket?.id, color: homeColor },
@@ -1041,8 +926,7 @@ function SoccerMatchCard({ markets, onOpen }: { markets: Market[]; onOpen: (id: 
             onClick={(e) => { e.stopPropagation(); onOpen(btn.id!) }}
             style={{
               flex: 1, fontSize: 12, fontWeight: 700, padding: '7px 0', borderRadius: 8,
-              border: `1px solid ${btn.color}44`,
-              background: `${btn.color}18`,
+              border: `1px solid ${btn.color}44`, background: `${btn.color}18`,
               color: btn.color, cursor: 'pointer',
               overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
             }}>
@@ -1055,8 +939,8 @@ function SoccerMatchCard({ markets, onOpen }: { markets: Market[]; onOpen: (id: 
 }
 
 function MarketCard({ market, onClick }: { market: Market; onClick: () => void }) {
-  const prob = calcProb(market.q_yes, market.q_no, market.b)
-  const isLow = prob < 50
+  const prob     = calcProb(market.q_yes, market.q_no, market.b)
+  const isLow    = prob < 50
   const catClass = CAT_CLASS[market.category ?? ''] ?? ''
 
   return (
