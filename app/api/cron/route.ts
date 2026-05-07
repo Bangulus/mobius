@@ -80,12 +80,13 @@ export async function POST(req: NextRequest) {
   const now    = new Date();
   const nowISO = now.toISOString();
 
+  // ── CRYPTO: abgelaufene Märkte auflösen ──────────────────────────────
   const expiredMarkets = await dbGet(
     'markets',
-    `is_auto=eq.true&resolved=eq.false&closes_at=lt.${nowISO}&select=id,coin`
+    `is_auto=eq.true&resolved=eq.false&closes_at=lt.${nowISO}&category=eq.Krypto&select=id,coin`
   );
 
-  results.push(`Abgelaufene unaufgelöste Märkte: ${expiredMarkets?.length ?? 0}`);
+  results.push(`Abgelaufene Crypto-Märkte: ${expiredMarkets?.length ?? 0}`);
 
   for (const market of (expiredMarkets ?? [])) {
     try {
@@ -105,19 +106,44 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const openMarkets = await dbGet(
+  // ── CRYPTO: neue Märkte erstellen ────────────────────────────────────
+  const openCryptoMarkets = await dbGet(
     'markets',
-    `is_auto=eq.true&resolved=eq.false&select=id,coin`
+    `is_auto=eq.true&resolved=eq.false&category=eq.Krypto&select=id,coin`
   );
 
   for (const coin of COINS) {
-    const has = (openMarkets ?? []).some((m: { coin: string }) => m.coin === coin);
+    const has = (openCryptoMarkets ?? []).some((m: { coin: string }) => m.coin === coin);
     if (!has) {
       results.push(`${coin}: kein offener Markt → Fallback erstellen`);
       await createMarket(coin, results);
     } else {
       results.push(`${coin}: offen ✓`);
     }
+  }
+
+  // ── SOCCER: neue Bundesliga-Märkte erstellen ──────────────────────────
+  try {
+    const soccerCreate = await fetch(`${APP_URL}/api/create-soccer-market`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    const soccerCreateData = await soccerCreate.json();
+    results.push(`Soccer Märkte erstellt: ${soccerCreateData.created ?? 0}`);
+  } catch (e) {
+    results.push(`Soccer create Fehler: ${String(e)}`);
+  }
+
+  // ── SOCCER: abgelaufene Bundesliga-Märkte auflösen ────────────────────
+  try {
+    const soccerResolve = await fetch(`${APP_URL}/api/resolve-soccer-market`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    const soccerResolveData = await soccerResolve.json();
+    results.push(`Soccer Märkte aufgelöst: ${soccerResolveData.resolved ?? 0}`);
+  } catch (e) {
+    results.push(`Soccer resolve Fehler: ${String(e)}`);
   }
 
   return NextResponse.json({ success: true, timestamp: nowISO, results });
