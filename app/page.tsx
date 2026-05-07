@@ -96,7 +96,7 @@ function parseUTC(raw: string): Date {
   return new Date(raw.replace(' ', 'T') + 'Z')
 }
 
-const CATEGORIES = ['Alle', 'Politik', 'Sport', 'Krypto', 'Entertainment', 'Wirtschaft', 'Geopolitik', 'Finanzen', 'Wetter', 'Kultur']
+const CATEGORIES = ['Politik', 'Sport', 'Krypto', 'Entertainment', 'Wirtschaft', 'Geopolitik', 'Finanzen', 'Wetter', 'Kultur']
 const COINS      = ['BTC', 'ETH', 'SOL', 'XRP']
 
 const CAT_CLASS: Record<string, string> = {
@@ -173,7 +173,7 @@ export default function Home() {
   const [markets, setMarkets]           = useState<Market[]>([])
   const [user, setUser]                 = useState<User | null>(null)
   const [leaderboard, setLeaderboard]   = useState<LeaderboardEntry[]>([])
-  const [category, setCategory]         = useState('Alle')
+  const [category, setCategory]         = useState('Politik')
   const [view, setView]                 = useState<'markets' | 'portfolio' | 'admin' | 'profil'>('markets')
   const [loading, setLoading]           = useState(true)
   const [darkMode, setDarkMode]         = useState(() => {
@@ -417,8 +417,14 @@ export default function Home() {
     setShowAuth(true)
   }
 
+  const isSportCategory = category === 'Sport' || category === 'Fußball' || category === 'Bundesliga'
+
   const filteredMarkets = markets.filter((m) => {
-    const matchCat = category === 'Alle' || m.category === category
+    const matchCat =
+      category === 'Bundesliga' ? !!m.match_id :
+      category === 'Fußball'    ? m.category === 'sport' :
+      category === 'Sport'      ? m.category === 'sport' :
+      m.category === category
     const matchSearch = searchQuery === '' ||
       (m.question ?? '').toLowerCase().includes(searchQuery.toLowerCase()) ||
       (m.short_label ?? '').toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -506,7 +512,7 @@ export default function Home() {
         <div className="nav-left">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/logo-weiss.png" alt="Möbius" className="nav-logo"
-            onClick={() => { setView('markets'); setSearchQuery('') }} />
+            onClick={() => { setView('markets'); setSearchQuery(''); setCategory('Politik') }} />
           <div className="nav-search-wrap">
             <span className="nav-search-icon">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -559,14 +565,38 @@ export default function Home() {
         </div>
       </nav>
 
+      {/* Haupt-Kategorien */}
       <div className="cat-bar">
         {CATEGORIES.map((cat) => (
-          <button key={cat} className={`cat-bar-btn ${category === cat ? 'active' : ''}`}
+          <button key={cat}
+            className={`cat-bar-btn ${cat === 'Sport' && isSportCategory ? 'active' : category === cat ? 'active' : ''}`}
             onClick={() => { setCategory(cat); setView('markets') }}>
             {cat}
           </button>
         ))}
       </div>
+
+      {/* Sport Unternavigation */}
+      {isSportCategory && (
+        <div className="cat-bar" style={{ borderTop: '1px solid var(--border)', paddingTop: 0 }}>
+          <span style={{ fontSize: 11, color: 'var(--text-muted)', padding: '0 8px', alignSelf: 'center' }}>↳</span>
+          <button
+            className={`cat-bar-btn ${category === 'Fußball' || category === 'Bundesliga' ? 'active' : ''}`}
+            onClick={() => { setCategory('Fußball'); setView('markets') }}>
+            Fußball
+          </button>
+          {(category === 'Fußball' || category === 'Bundesliga') && (
+            <>
+              <span style={{ fontSize: 11, color: 'var(--text-muted)', padding: '0 4px', alignSelf: 'center' }}>↳</span>
+              <button
+                className={`cat-bar-btn ${category === 'Bundesliga' ? 'active' : ''}`}
+                onClick={() => { setCategory('Bundesliga'); setView('markets') }}>
+                Bundesliga
+              </button>
+            </>
+          )}
+        </div>
+      )}
 
       <main className="page-container">
         {view === 'admin' && user?.id === ADMIN_ID && (
@@ -597,9 +627,7 @@ export default function Home() {
               </div>
             )}
             <div className="section-head">
-              <div className="section-title">
-                {searchQuery ? `Suche: „${searchQuery}"` : category === 'Alle' ? 'Alle Märkte' : category}
-              </div>
+              <div className="section-title">{searchQuery ? `Suche: „${searchQuery}"` : category}</div>
               <div className="section-link" onClick={() => loadMarkets()}>Aktualisieren</div>
             </div>
             {loading ? (
@@ -631,7 +659,6 @@ export default function Home() {
 }
 
 function MarketsGrid({ markets, onOpen }: { markets: Market[]; onOpen: (id: string) => void }) {
-  // Soccer-Märkte nach match_id gruppieren
   const soccerGroups: Record<string, Market[]> = {}
   const otherMarkets: Market[] = []
 
@@ -644,7 +671,6 @@ function MarketsGrid({ markets, onOpen }: { markets: Market[]; onOpen: (id: stri
     }
   })
 
-  // Restliche Märkte nach group_title / display_group gruppieren
   const groups: Record<string, Market[]> = {}
   const ungrouped: Market[] = []
 
@@ -664,23 +690,16 @@ function MarketsGrid({ markets, onOpen }: { markets: Market[]; onOpen: (id: stri
 
   return (
     <div>
-      {/* Soccer-Spiele als eigene Karten */}
       {soccerEntries.length > 0 && (
         <div style={{ marginBottom: 24 }}>
           <div className="group-header">⚽ Bundesliga</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {soccerEntries.map(([matchId, matchMarkets]) => (
-              <SoccerMatchCard
-                key={matchId}
-                markets={matchMarkets}
-                onOpen={onOpen}
-              />
+              <SoccerMatchCard key={matchId} markets={matchMarkets} onOpen={onOpen} />
             ))}
           </div>
         </div>
       )}
-
-      {/* Normale Märkte */}
       {ungrouped.length > 0 && (
         <div className="markets-grid">
           {ungrouped.map((m) => <MarketCard key={m.id} market={m} onClick={() => onOpen(m.id)} />)}
@@ -740,7 +759,6 @@ function SoccerMatchCard({ markets, onOpen }: { markets: Market[]; onOpen: (id: 
     <div className="market-card" style={{ padding: '16px 20px', cursor: 'pointer' }}
       onClick={() => onOpen((homeMarket ?? anyMarket).id)}>
 
-      {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <span className="cat-badge cat-sport">Sport</span>
@@ -752,10 +770,7 @@ function SoccerMatchCard({ markets, onOpen }: { markets: Market[]; onOpen: (id: 
         </div>
       </div>
 
-      {/* Teams */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
-
-        {/* Heimteam */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
           <div style={{
             width: 36, height: 36, borderRadius: 9, flexShrink: 0,
@@ -775,13 +790,11 @@ function SoccerMatchCard({ markets, onOpen }: { markets: Market[]; onOpen: (id: 
           </div>
         </div>
 
-        {/* Mitte */}
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, flexShrink: 0 }}>
           <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 600, letterSpacing: 0.5 }}>VS</div>
           <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>X {drawNorm}%</div>
         </div>
 
-        {/* Auswärtsteam */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0, justifyContent: 'flex-end' }}>
           <div style={{ minWidth: 0, textAlign: 'right' }}>
             <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -802,14 +815,12 @@ function SoccerMatchCard({ markets, onOpen }: { markets: Market[]; onOpen: (id: 
         </div>
       </div>
 
-      {/* Wahrscheinlichkeits-Balken */}
       <div style={{ display: 'flex', height: 5, borderRadius: 3, overflow: 'hidden', gap: 2, marginBottom: 12 }}>
         <div style={{ width: `${homeNorm}%`, background: getTeamColor(homeTeam) }} />
         <div style={{ width: `${drawNorm}%`, background: '#94a3b8' }} />
         <div style={{ width: `${awayNorm}%`, background: getTeamColor(awayTeam) }} />
       </div>
 
-      {/* Footer */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
           {Math.round(totalVolume).toLocaleString('de')} ₫ Vol.
