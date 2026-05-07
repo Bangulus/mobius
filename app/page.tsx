@@ -121,11 +121,13 @@ const CAT_CLASS: Record<string, string> = {
   sport:         'cat-sport',
   Krypto:        'cat-krypto',
   Entertainment: 'cat-entertainment',
+  Unterhaltung:  'cat-entertainment',
   Wirtschaft:    'cat-wirtschaft',
   Geopolitik:    'cat-politik',
   Finanzen:      'cat-wirtschaft',
   Wetter:        'cat-sport',
   Kultur:        'cat-entertainment',
+  Tech:          'cat-krypto',
 }
 
 const COIN_COLORS: Record<string, string> = {
@@ -187,6 +189,7 @@ const NAV_ITEMS: NavItemDef[] = [
   { id: 'Krypto',        label: 'Krypto',        icon: '₿'  },
   { id: 'Entertainment', label: 'Entertainment', icon: '🎬' },
   { id: 'Wirtschaft',    label: 'Wirtschaft',    icon: '📈' },
+  { id: 'Tech',          label: 'Tech',          icon: '💻' },
   { id: 'Geopolitik',    label: 'Geopolitik',    icon: '🌍' },
   { id: 'Finanzen',      label: 'Finanzen',      icon: '💰' },
   { id: 'Wetter',        label: 'Wetter',        icon: '🌤️' },
@@ -430,25 +433,22 @@ export default function Home() {
   }
 
   const resetAuthForm = () => {
-    setAuthEmail('')
-    setAuthPassword('')
-    setAuthUsername('')
-    setAuthError('')
+    setAuthEmail(''); setAuthPassword(''); setAuthUsername(''); setAuthError('')
   }
 
   const openAuth = (mode: AuthMode) => {
-    resetAuthForm()
-    setAuthMode(mode)
-    setShowAuth(true)
+    resetAuthForm(); setAuthMode(mode); setShowAuth(true)
   }
 
   const isSportCategory = category === 'Sport' || category === 'Fußball' || category === 'Bundesliga'
 
   const filteredMarkets = markets.filter((m) => {
     const matchCat =
-      category === 'Bundesliga' ? !!m.match_id :
-      category === 'Fußball'    ? (m.category === 'sport' || m.category === 'Sport') :
-      category === 'Sport'      ? (m.category === 'sport' || m.category === 'Sport') :
+      category === 'Bundesliga'    ? !!m.match_id :
+      category === 'Fußball'       ? (m.category === 'sport' || m.category === 'Sport') :
+      category === 'Sport'         ? (m.category === 'sport' || m.category === 'Sport') :
+      category === 'Entertainment' ? (m.category === 'Entertainment' || m.category === 'Unterhaltung') :
+      category === 'Krypto'        ? (m.category === 'Krypto' || m.category === 'krypto') :
       m.category === category || m.category === category.toLowerCase()
     const matchSearch = searchQuery === '' ||
       (m.question ?? '').toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -866,7 +866,6 @@ function SoccerMatchCard({ markets, onOpen }: { markets: Market[]; onOpen: (id: 
   const awayNorm = 100 - homeNorm - drawNorm
 
   const matchDate   = anyMarket.match_date ?? ''
-  // Format: "So., 10.05., 15:30" → split by ', ' → ['So.', '10.05.', '15:30']
   const parts       = matchDate.split(', ')
   const timePart    = parts[2] ?? parts[1] ?? ''
   const totalVolume = markets.reduce((s, m) => s + m.q_yes + m.q_no, 0)
