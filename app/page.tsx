@@ -77,6 +77,12 @@ interface LeaderboardEntry {
   avatar_url?: string
 }
 
+interface WeeklyEntry {
+  user_id: string
+  username: string
+  weekly_gain: number
+}
+
 interface WinToast {
   id: string
   coin?: string
@@ -84,6 +90,7 @@ interface WinToast {
   amount: number
   isKrypto: boolean
   direction: 'yes' | 'no'
+  loserPct?: number
 }
 
 function calcProb(qYes: number, qNo: number, b: number): number {
@@ -215,30 +222,32 @@ type AuthMode = 'login' | 'register'
 
 export default function Home() {
   const router = useRouter()
-  const [markets, setMarkets]           = useState<Market[]>([])
-  const [user, setUser]                 = useState<User | null>(null)
-  const [leaderboard, setLeaderboard]   = useState<LeaderboardEntry[]>([])
-  const [category, setCategory]         = useState('Politik-Deutschland')
-  const [view, setView]                 = useState<'markets' | 'portfolio' | 'admin' | 'profil'>('markets')
-  const [loading, setLoading]           = useState(true)
-  const [darkMode, setDarkMode]         = useState(() => {
+  const [markets, setMarkets]               = useState<Market[]>([])
+  const [user, setUser]                     = useState<User | null>(null)
+  const [leaderboard, setLeaderboard]       = useState<LeaderboardEntry[]>([])
+  const [weeklyBoard, setWeeklyBoard]       = useState<WeeklyEntry[]>([])
+  const [showLeaderboard, setShowLeaderboard] = useState(false)
+  const [category, setCategory]             = useState('Politik-Deutschland')
+  const [view, setView]                     = useState<'markets' | 'portfolio' | 'admin' | 'profil'>('markets')
+  const [loading, setLoading]               = useState(true)
+  const [darkMode, setDarkMode]             = useState(() => {
     if (typeof window === 'undefined') return false
     return localStorage.getItem('mobius_darkmode') === 'true'
   })
-  const [showAuth, setShowAuth]         = useState(false)
-  const [authMode, setAuthMode]         = useState<AuthMode>('login')
-  const [authEmail, setAuthEmail]       = useState('')
-  const [authPassword, setAuthPassword] = useState('')
-  const [authUsername, setAuthUsername] = useState('')
-  const [authError, setAuthError]       = useState('')
-  const [authLoading, setAuthLoading]   = useState(false)
-  const [searchQuery, setSearchQuery]   = useState('')
-  const [winToasts, setWinToasts]       = useState<WinToast[]>([])
-  const [expandedNav, setExpandedNav]   = useState<Record<string, boolean>>({ Sport: true, Fußball: true, Politik: true })
-  const shownToastsRef                  = useRef<Set<string>>(new Set())
-  const userRef                         = useRef<User | null>(null)
-  const marketsRef                      = useRef<Market[]>([])
-  const triggeredCoinsRef               = useRef<Record<string, number>>({})
+  const [showAuth, setShowAuth]             = useState(false)
+  const [authMode, setAuthMode]             = useState<AuthMode>('login')
+  const [authEmail, setAuthEmail]           = useState('')
+  const [authPassword, setAuthPassword]     = useState('')
+  const [authUsername, setAuthUsername]     = useState('')
+  const [authError, setAuthError]           = useState('')
+  const [authLoading, setAuthLoading]       = useState(false)
+  const [searchQuery, setSearchQuery]       = useState('')
+  const [winToasts, setWinToasts]           = useState<WinToast[]>([])
+  const [expandedNav, setExpandedNav]       = useState<Record<string, boolean>>({ Sport: true, Fußball: true, Politik: true })
+  const shownToastsRef                      = useRef<Set<string>>(new Set())
+  const userRef                             = useRef<User | null>(null)
+  const marketsRef                          = useRef<Market[]>([])
+  const triggeredCoinsRef                   = useRef<Record<string, number>>({})
 
   const ADMIN_ID = 'b75edaf4-141d-41f1-9555-887a8ddbac58'
 
@@ -279,6 +288,38 @@ export default function Home() {
         avatar_url: u.avatar_url,
       }))
     )
+  }, [])
+
+  const loadWeeklyBoard = useCallback(async () => {
+    // Trades der letzten 7 Tage laden
+    const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+    const trades = await dbGet('trades', `type=in.(sell_yes,sell_no)&created_at=gte.${since}&select=user_id,shares`)
+    if (!trades || trades.length === 0) { setWeeklyBoard([]); return }
+
+    // Shares pro User summieren
+    const gainMap: Record<string, number> = {}
+    trades.forEach((t: { user_id: string; shares: number }) => {
+      gainMap[t.user_id] = (gainMap[t.user_id] ?? 0) + (t.shares ?? 0)
+    })
+
+    const topIds = Object.entries(gainMap)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([id]) => id)
+
+    if (topIds.length === 0) { setWeeklyBoard([]); return }
+
+    const users = await dbGet('users', `id=in.(${topIds.join(',')})&select=id,username`)
+    const userMap: Record<string, string> = {}
+    users?.forEach((u: { id: string; username: string }) => { userMap[u.id] = u.username })
+
+    const board: WeeklyEntry[] = topIds.map(id => ({
+      user_id: id,
+      username: userMap[id] ?? 'Unbekannt',
+      weekly_gain: Math.round(gainMap[id]),
+    }))
+
+    setWeeklyBoard(board)
   }, [])
 
   useEffect(() => {
@@ -339,7 +380,7 @@ export default function Home() {
       if (!seen[t.market_id]) { seen[t.market_id] = true; marketIds.push(t.market_id) }
     })
 
-    const resolvedMarkets = await dbGet('markets', `id=in.(${marketIds.join(',')})&resolved=eq.true&select=id,question,resolution,is_auto,coin`)
+    const resolvedMarkets = await dbGet('markets', `id=in.(${marketIds.join(',')})&resolved=eq.true&select=id,question,resolution,is_auto,coin,q_yes,q_no,b`)
     if (!resolvedMarkets || resolvedMarkets.length === 0) return
 
     const newToasts: WinToast[] = []
@@ -355,6 +396,11 @@ export default function Home() {
       const totalShares = wonTrades.reduce((s: number, t: { shares: number }) => s + (t.shares ?? 0), 0)
       const amount = Math.round(totalShares)
       if (amount <= 0) continue
+
+      // Berechne wie viele % auf die falsche Seite gesetzt haben
+      const probAtResolution = calcProb(market.q_yes, market.q_no, market.b)
+      const loserPct = market.resolution === 'yes' ? (100 - probAtResolution) : probAtResolution
+
       shownToastsRef.current.add(market.id)
       newToasts.push({
         id: market.id,
@@ -363,6 +409,7 @@ export default function Home() {
         amount,
         isKrypto: !!market.is_auto,
         direction: market.resolution as 'yes' | 'no',
+        loserPct,
       })
     }
 
@@ -374,7 +421,7 @@ export default function Home() {
         userRef.current = { ...userRef.current!, balance: freshUser[0].balance }
       }
       newToasts.forEach(toast => {
-        setTimeout(() => setWinToasts(prev => prev.filter(t => t.id !== toast.id)), 6000)
+        setTimeout(() => setWinToasts(prev => prev.filter(t => t.id !== toast.id)), 7000)
       })
     }
   }, [])
@@ -458,20 +505,17 @@ export default function Home() {
   const isSportCategory = category === 'Sport' || category === 'Fußball' || category === 'Bundesliga'
     || category === 'WM' || category === 'CL' || category === 'F1' || category === 'DFB-Kader'
 
-  // Hilfsfunktion: ist ein Markt ein "Deutschland"-Politikmarkt?
   function isPolitikDeutschland(m: Market): boolean {
     return m.category === 'Politik' && !!(m.group_title && m.group_title.toLowerCase().includes('landtag'))
   }
 
-  // Hilfsfunktion: ist ein Markt ein "USA"-Politikmarkt?
   function isPolitikUSA(m: Market): boolean {
     if (m.category !== 'Politik') return false
-    if (m.group_title) return false // hat eine Gruppe → kein NULL-Markt
+    if (m.group_title) return false
     const q = (m.question ?? '').toLowerCase()
     return q.includes('trump') || q.includes('demokraten') || q.includes('us-senat') || q.includes('usa') || q.includes('senat 2026')
   }
 
-  // Hilfsfunktion: ist ein Markt ein "Welt"-Politikmarkt?
   function isPolitikWelt(m: Market): boolean {
     if (m.category !== 'Politik') return false
     if (isPolitikDeutschland(m)) return false
@@ -482,10 +526,7 @@ export default function Home() {
   const filteredMarkets = markets.filter((m) => {
     let matchCat = false
 
-    if (category === 'Politik') {
-      // Klick auf Elternelement → zeigt Deutschland
-      matchCat = isPolitikDeutschland(m)
-    } else if (category === 'Politik-Deutschland') {
+    if (category === 'Politik' || category === 'Politik-Deutschland') {
       matchCat = isPolitikDeutschland(m)
     } else if (category === 'Politik-USA') {
       matchCat = isPolitikUSA(m)
@@ -521,7 +562,6 @@ export default function Home() {
   const toggleNav = (id: string) => setExpandedNav(prev => ({ ...prev, [id]: !prev[id] }))
 
   const selectCategory = (id: string) => {
-    // Klick auf "Politik" → automatisch Deutschland als aktiv setzen + aufklappen
     if (id === 'Politik') {
       setExpandedNav(prev => ({ ...prev, Politik: !prev['Politik'] }))
       setCategory('Politik-Deutschland')
@@ -532,7 +572,6 @@ export default function Home() {
     setSearchQuery('')
   }
 
-  // Label für die Seitenüberschrift
   const categoryLabel: Record<string, string> = {
     'Politik-Deutschland': 'Politik · Deutschland',
     'Politik-USA':         'Politik · USA',
@@ -541,36 +580,98 @@ export default function Home() {
 
   return (
     <>
-      {/* Win Toasts */}
+      {/* Win Toasts — Feature 5: mit Loser-Context */}
       <div style={{ position: 'fixed', top: 80, right: 16, zIndex: 9999, display: 'flex', flexDirection: 'column', gap: 10, pointerEvents: 'none' }}>
         {winToasts.map(toast => (
           <div key={toast.id} style={{
-            pointerEvents: 'all', background: '#fff',
+            pointerEvents: 'all', background: 'var(--bg, #fff)',
             border: '1px solid rgba(22,163,74,0.3)', borderLeft: '4px solid #16a34a',
-            borderRadius: 12, padding: '14px 16px', minWidth: 260, maxWidth: 320,
-            boxShadow: '0 4px 24px rgba(0,0,0,0.10)', animation: 'slideInRight 0.3s ease',
+            borderRadius: 12, padding: '14px 16px', minWidth: 270, maxWidth: 330,
+            boxShadow: '0 4px 24px rgba(0,0,0,0.12)', animation: 'slideInRight 0.3s ease',
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 {toast.isKrypto && toast.coin && (
-                  <span style={{ width: 24, height: 24, borderRadius: 6, background: COIN_COLORS[toast.coin] ?? '#f97316', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, color: '#fff', flexShrink: 0 }}>
+                  <span style={{ width: 22, height: 22, borderRadius: 6, background: COIN_COLORS[toast.coin] ?? '#f97316', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, color: '#fff', flexShrink: 0 }}>
                     {toast.coin.charAt(0)}
                   </span>
                 )}
-                <span style={{ fontSize: 13, fontWeight: 700, color: '#16a34a' }}>🎉 Gewonnen!</span>
+                <span style={{ fontSize: 12, fontWeight: 700, color: '#16a34a', letterSpacing: 0.3 }}>POSITION GEWONNEN</span>
               </div>
               <button onClick={() => setWinToasts(prev => prev.filter(t => t.id !== toast.id))}
                 style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, color: '#9ca3af', padding: 0, lineHeight: 1 }}>×</button>
             </div>
-            <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 8, lineHeight: 1.4 }}>
-              {toast.isKrypto ? `${toast.coin} ${toast.direction === 'yes' ? 'Up ↑' : 'Down ↓'}` : toast.question.length > 50 ? toast.question.slice(0, 50) + '…' : toast.question}
+
+            <div style={{ fontSize: 11, color: 'var(--text-muted, #6b7280)', marginBottom: 8, lineHeight: 1.4 }}>
+              {toast.isKrypto
+                ? `${toast.coin} · ${toast.direction === 'yes' ? 'UP ↑' : 'DOWN ↓'}`
+                : (toast.question.length > 55 ? toast.question.slice(0, 55) + '…' : toast.question)}
             </div>
-            <div style={{ fontSize: 28, fontWeight: 800, color: '#16a34a', letterSpacing: '-0.5px', lineHeight: 1 }}>
+
+            <div style={{ fontSize: 26, fontWeight: 900, color: '#16a34a', letterSpacing: '-0.5px', lineHeight: 1, marginBottom: 6 }}>
               +{toast.amount.toLocaleString('de')} ₫
             </div>
+
+            {toast.loserPct !== undefined && toast.loserPct > 5 && (
+              <div style={{ fontSize: 11, color: 'var(--text-muted, #9ca3af)', borderTop: '1px solid rgba(0,0,0,0.06)', paddingTop: 6, marginTop: 2 }}>
+                {toast.loserPct}% der Marktteilnehmer lagen falsch.
+              </div>
+            )}
           </div>
         ))}
       </div>
+
+      {/* Wöchentliches Leaderboard Modal — Feature 1 */}
+      {showLeaderboard && (
+        <div className="modal-backdrop" onClick={() => setShowLeaderboard(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 400 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+              <div>
+                <div className="modal-title" style={{ marginBottom: 2 }}>Wochenranking</div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Top-Händler der letzten 7 Tage</div>
+              </div>
+              <button onClick={() => setShowLeaderboard(false)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 20, color: 'var(--text-muted)', lineHeight: 1 }}>×</button>
+            </div>
+
+            {weeklyBoard.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '24px 0', color: 'var(--text-muted)', fontSize: 13 }}>
+                Noch keine Daten für diese Woche.
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {weeklyBoard.map((e, i) => {
+                  const av     = avatarColor(e.username)
+                  const isMe   = e.user_id === user?.id
+                  const medal  = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`
+                  return (
+                    <div key={e.user_id} style={{
+                      display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px',
+                      borderRadius: 10, background: isMe ? 'var(--accent-light, rgba(99,102,241,0.08))' : 'var(--surface)',
+                      border: isMe ? '1px solid rgba(99,102,241,0.2)' : '1px solid transparent',
+                    }}>
+                      <span style={{ fontSize: 16, width: 24, textAlign: 'center', flexShrink: 0 }}>{medal}</span>
+                      <div style={{ width: 30, height: 30, borderRadius: '50%', background: av.bg, color: av.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>
+                        {e.username.slice(0, 2).toUpperCase()}
+                      </div>
+                      <span style={{ fontSize: 13, color: 'var(--text)', fontWeight: isMe ? 700 : 500, flex: 1 }}>
+                        {e.username}{isMe ? ' (du)' : ''}
+                      </span>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: '#16a34a' }}>
+                        +{e.weekly_gain.toLocaleString('de')} ₫
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
+            <div style={{ fontSize: 11, color: 'var(--text-subtle)', textAlign: 'center', marginTop: 16 }}>
+              Resets jeden Montag · Basiert auf realisierten Gewinnen
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Auth Modal */}
       {showAuth && (
@@ -626,6 +727,16 @@ export default function Home() {
         <div className="nav-right">
           {user ? (
             <>
+              {/* Feature 1: Wochenranking Button im Header */}
+              <button
+                className="nav-pill"
+                onClick={() => { loadWeeklyBoard(); setShowLeaderboard(true) }}
+                style={{ display: 'flex', alignItems: 'center', gap: 5, fontWeight: 600 }}
+              >
+                <span style={{ fontSize: 13 }}>🏆</span>
+                <span>Ranking</span>
+              </button>
+
               <div className="nav-stat">
                 <div className="nav-stat-label">Guthaben</div>
                 <div className="nav-stat-value">{user.balance.toLocaleString('de')} ₫</div>
@@ -664,7 +775,7 @@ export default function Home() {
         </div>
       </nav>
 
-      {/* Layout: Sidebar + Content */}
+      {/* Layout */}
       <div style={{ display: 'flex', minHeight: 'calc(100vh - var(--nav-height, 56px))', maxWidth: 1400, margin: '0 auto' }}>
 
         {/* Sidebar */}
@@ -774,9 +885,7 @@ function NavItem({ item, category, expandedNav, onSelect, onToggle, depth }: {
 }) {
   const hasChildren = item.children && item.children.length > 0
   const isExpanded  = expandedNav[item.id]
-
-  // Elternelement gilt als aktiv wenn ein Kind aktiv ist
-  const isActive = category === item.id ||
+  const isActive    = category === item.id ||
     (item.id === 'Politik' && category.startsWith('Politik-'))
 
   return (
@@ -1090,19 +1199,26 @@ function PortfolioView({ userId, router }: { userId: string; router: ReturnType<
         {positions.map((p, i) => {
           const prob  = calcProb(p.q_yes, p.q_no, p.b)
           const isYes = p.direction === 'yes'
+          // UP/DOWN statt Gewonnen/Verloren
+          const isWin = p.resolution === p.direction
           return (
             <div key={i} className="card" style={{ cursor: 'pointer' }}
               onClick={() => router.push(`/markets/${p.market_id}`)}>
               <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 8, color: 'var(--text)' }}>{p.question}</div>
               <div style={{ display: 'flex', gap: 16, fontSize: 13, flexWrap: 'wrap' }}>
                 <span style={{ color: 'var(--text-muted)' }}>
-                  Position: <strong style={{ color: isYes ? 'var(--yes)' : 'var(--no)' }}>{isYes ? 'Ja' : 'Nein'}</strong>
+                  Position: <strong style={{ color: isYes ? 'var(--yes)' : 'var(--no)' }}>{isYes ? 'JA' : 'NEIN'}</strong>
                 </span>
                 <span style={{ color: 'var(--text-muted)' }}>Einsatz: <strong>{p.amount} ₫</strong></span>
                 <span style={{ color: 'var(--text-muted)' }}>Aktuell: <strong>{prob}%</strong></span>
                 {p.resolved && (
-                  <span className={`pos-badge ${p.resolution === p.direction ? 'pos-yes' : 'pos-no'}`}>
-                    {p.resolution === p.direction ? 'Gewonnen' : 'Verloren'}
+                  <span style={{
+                    fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 4,
+                    background: isWin ? 'rgba(22,163,74,0.1)' : 'rgba(239,68,68,0.1)',
+                    color: isWin ? '#16a34a' : '#ef4444',
+                    letterSpacing: 0.5,
+                  }}>
+                    {isWin ? 'UP' : 'DOWN'}
                   </span>
                 )}
               </div>
