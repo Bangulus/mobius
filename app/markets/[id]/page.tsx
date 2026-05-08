@@ -207,7 +207,6 @@ const CAT_CLASS: Record<string, string> = {
 }
 const COIN_COLORS: Record<string, string> = { BTC: '#f59e0b', ETH: '#6366f1', SOL: '#9945ff', XRP: '#00aae4' }
 
-// Teamfarben für bekannte Bundesliga-Vereine
 const TEAM_COLORS: Record<string, string> = {
   'FC Bayern München': '#dc052d',
   'Borussia Dortmund': '#fde100',
@@ -241,6 +240,70 @@ function getTeamInitials(name: string): string {
   return (words[0][0] + (words[1]?.[0] ?? '')).toUpperCase()
 }
 
+// Feature 4: Live-Positions-Anzeige
+function LivePositionsBar({ trades, isKrypto }: { trades: Trade[]; isKrypto: boolean }) {
+  const buyTrades = trades.filter(t => t.type === 'buy_yes' || t.type === 'buy_no')
+  if (buyTrades.length < 3) return null // Erst ab 3 Trades anzeigen
+
+  const yesCount = buyTrades.filter(t => t.type === 'buy_yes').length
+  const noCount  = buyTrades.filter(t => t.type === 'buy_no').length
+  const total    = yesCount + noCount
+  const yesPct   = Math.round((yesCount / total) * 100)
+  const noPct    = 100 - yesPct
+
+  const majority     = yesPct >= noPct ? 'yes' : 'no'
+  const majorityPct  = majority === 'yes' ? yesPct : noPct
+  const majorityLabel = isKrypto
+    ? (majority === 'yes' ? 'UP ↑' : 'DOWN ↓')
+    : (majority === 'yes' ? 'Ja' : 'Nein')
+  const minorityLabel = isKrypto
+    ? (majority === 'yes' ? 'DOWN ↓' : 'UP ↑')
+    : (majority === 'yes' ? 'Nein' : 'Ja')
+
+  return (
+    <div style={{
+      padding: '14px 16px',
+      background: 'var(--surface)',
+      borderRadius: 12,
+      border: '1px solid var(--border)',
+      marginBottom: 16,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#22c55e', animation: 'pulse 2s infinite' }} />
+          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+            Aktuelle Positionen
+          </span>
+        </div>
+        <span style={{ fontSize: 11, color: 'var(--text-subtle)' }}>{total} Trades</span>
+      </div>
+
+      {/* Balken */}
+      <div style={{ display: 'flex', height: 6, borderRadius: 3, overflow: 'hidden', gap: 2, marginBottom: 10 }}>
+        <div style={{ width: `${yesPct}%`, background: 'var(--yes)', borderRadius: '3px 0 0 3px', transition: 'width 0.4s ease' }} />
+        <div style={{ width: `${noPct}%`, background: 'var(--no)', borderRadius: '0 3px 3px 0', transition: 'width 0.4s ease' }} />
+      </div>
+
+      {/* Labels */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--yes)' }}>
+          {isKrypto ? 'UP ↑' : 'Ja'} · {yesPct}%
+        </span>
+        <div style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', flex: 1, padding: '0 8px' }}>
+          {majorityPct >= 70 && (
+            <span style={{ fontSize: 11, color: 'var(--text-subtle)', fontStyle: 'italic' }}>
+              {majorityPct}% setzen auf {majorityLabel} — {minorityLabel}?
+            </span>
+          )}
+        </div>
+        <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--no)' }}>
+          {noPct}% · {isKrypto ? 'DOWN ↓' : 'Nein'}
+        </span>
+      </div>
+    </div>
+  )
+}
+
 type Tab       = '7T' | '1M' | 'Gesamt'
 type TradeTab  = 'kaufen' | 'verkaufen'
 type OrderType = 'markt' | 'limit'
@@ -257,7 +320,6 @@ export default function MarketPage() {
   const [loading, setLoading]         = useState(true)
   const [liveMarkets, setLiveMarkets] = useState<Market[]>([])
 
-  // Soccer: Geschwister-Märkte desselben Spiels
   const [siblingMarkets, setSiblingMarkets] = useState<Market[]>([])
 
   const [tradeTab, setTradeTab]     = useState<TradeTab>('kaufen')
@@ -330,7 +392,6 @@ export default function MarketPage() {
     setLiveMarkets(data ?? [])
   }, [])
 
-  // Soccer: Geschwister-Märkte laden
   const loadSiblingMarkets = useCallback(async (matchId: string) => {
     const data = await dbGet('markets', `match_id=eq.${matchId}&select=*`)
     setSiblingMarkets(data ?? [])
@@ -441,7 +502,7 @@ export default function MarketPage() {
 
   useEffect(() => {
     if (!market?.is_auto || !market?.coin || market?.resolved) return
-    if (market?.match_id) return // Soccer — kein Crypto-Chart
+    if (market?.match_id) return
     const coin        = market.coin
     const marketEndMs = parseUTC(market.closes_at).getTime()
     const fetchReal = async () => {
@@ -483,7 +544,7 @@ export default function MarketPage() {
 
   useEffect(() => {
     if (!market?.closes_at || !market?.coin || !market?.id) return
-    if (market?.match_id) return // Soccer hat eigenen Countdown
+    if (market?.match_id) return
     resolveTriggeredRef.current = false
     createTriggeredRef.current  = false
 
@@ -539,7 +600,6 @@ export default function MarketPage() {
     return () => clearInterval(id)
   }, [market?.closes_at, market?.coin, market?.id, market?.match_id, loadMarket, loadLiveMarkets, user?.id])
 
-  // Soccer Countdown
   const [soccerCountdown, setSoccerCountdown] = useState('')
   useEffect(() => {
     if (!market?.match_id || !market?.closes_at) return
@@ -690,12 +750,10 @@ export default function MarketPage() {
     ((market.resolution === 'yes' && sharesYes > 0) || (market.resolution === 'no' && sharesNo > 0))
   const showEndedBanner = market.resolved || countdown === '00:00'
 
-  // Soccer: Teams aus display_group extrahieren
   const soccerTeams = market.display_group?.split(' vs ') ?? []
   const homeTeam = soccerTeams[0] ?? ''
   const awayTeam = soccerTeams[1] ?? ''
 
-  // Soccer: Wahrscheinlichkeiten aus Geschwister-Märkten
   const homeMarket = siblingMarkets.find(m => m.outcome === 'home')
   const drawMarket = siblingMarkets.find(m => m.outcome === 'draw')
   const awayMarket = siblingMarkets.find(m => m.outcome === 'away')
@@ -704,16 +762,13 @@ export default function MarketPage() {
   const drawProb = drawMarket ? calcProb(drawMarket.q_yes, drawMarket.q_no, drawMarket.b) : 34
   const awayProb = awayMarket ? calcProb(awayMarket.q_yes, awayMarket.q_no, awayMarket.b) : 33
 
-  // Normalisieren auf 100%
   const totalProb = homeProb + drawProb + awayProb
   const homeNorm  = Math.round((homeProb / totalProb) * 100)
   const drawNorm  = Math.round((drawProb / totalProb) * 100)
   const awayNorm  = 100 - homeNorm - drawNorm
 
-  // Welches Outcome hat dieser Markt?
   const thisOutcome = market.outcome
 
-  // Soccer Auflösungs-Label
   const soccerResolutionLabel = () => {
     if (!market.resolved) return ''
     if (market.resolution === 'yes') {
@@ -745,7 +800,7 @@ export default function MarketPage() {
                 </span>
               )}
               <span style={{ fontSize: 14, fontWeight: 700, color: resultToast.won ? '#16a34a' : '#dc2626' }}>
-                {resultToast.won ? '🎉 Gewonnen!' : '😔 Verloren'}
+                {resultToast.won ? 'POSITION GEWONNEN' : 'POSITION VERLOREN'}
               </span>
             </div>
             <button onClick={() => setResultToast(null)}
@@ -793,100 +848,58 @@ export default function MarketPage() {
 
       <div style={{ maxWidth: 980, margin: '0 auto', padding: '24px 16px' }}>
 
-        {/* ── SOCCER UI ─────────────────────────────────────────────────── */}
+        {/* ── SOCCER UI ── */}
         {isSoccer && (
           <>
-            {/* Breadcrumb */}
             <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 6 }}>
               <span>Sport</span>
               <span>·</span>
               <span>{market.group_title ?? 'Bundesliga'}</span>
             </div>
 
-            {/* Spiel-Header */}
             <div className="card" style={{ marginBottom: 20 }}>
-              {/* Anpfiffzeit */}
               <div style={{ textAlign: 'center', fontSize: 12, color: 'var(--text-muted)', marginBottom: 20 }}>
                 {market.resolved ? 'Abgeschlossen' : `Schließt in ${soccerCountdown}`}
               </div>
 
-              {/* Teams */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 32, marginBottom: 24 }}>
-                {/* Heimteam */}
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, flex: 1 }}>
-                  <div style={{
-                    width: 64, height: 64, borderRadius: 16,
-                    background: getTeamColor(homeTeam),
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 22, fontWeight: 900, color: '#fff',
-                    boxShadow: `0 4px 16px ${getTeamColor(homeTeam)}44`,
-                  }}>
+                  <div style={{ width: 64, height: 64, borderRadius: 16, background: getTeamColor(homeTeam), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, fontWeight: 900, color: '#fff', boxShadow: `0 4px 16px ${getTeamColor(homeTeam)}44` }}>
                     {getTeamInitials(homeTeam)}
                   </div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', textAlign: 'center', maxWidth: 120, lineHeight: 1.3 }}>
-                    {homeTeam}
-                  </div>
-                  <div style={{ fontSize: 24, fontWeight: 800, color: getTeamColor(homeTeam) }}>
-                    {homeNorm}%
-                  </div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', textAlign: 'center', maxWidth: 120, lineHeight: 1.3 }}>{homeTeam}</div>
+                  <div style={{ fontSize: 24, fontWeight: 800, color: getTeamColor(homeTeam) }}>{homeNorm}%</div>
                 </div>
 
-                {/* Mitte */}
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
                   <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, letterSpacing: 1 }}>VS</div>
-                  <div style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 600 }}>
-                    Unentschieden
-                  </div>
-                  <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-muted)' }}>
-                    {drawNorm}%
-                  </div>
+                  <div style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 600 }}>Unentschieden</div>
+                  <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-muted)' }}>{drawNorm}%</div>
                 </div>
 
-                {/* Auswärtsteam */}
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, flex: 1 }}>
-                  <div style={{
-                    width: 64, height: 64, borderRadius: 16,
-                    background: getTeamColor(awayTeam),
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 22, fontWeight: 900, color: '#fff',
-                    boxShadow: `0 4px 16px ${getTeamColor(awayTeam)}44`,
-                  }}>
+                  <div style={{ width: 64, height: 64, borderRadius: 16, background: getTeamColor(awayTeam), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, fontWeight: 900, color: '#fff', boxShadow: `0 4px 16px ${getTeamColor(awayTeam)}44` }}>
                     {getTeamInitials(awayTeam)}
                   </div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', textAlign: 'center', maxWidth: 120, lineHeight: 1.3 }}>
-                    {awayTeam}
-                  </div>
-                  <div style={{ fontSize: 24, fontWeight: 800, color: getTeamColor(awayTeam) }}>
-                    {awayNorm}%
-                  </div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', textAlign: 'center', maxWidth: 120, lineHeight: 1.3 }}>{awayTeam}</div>
+                  <div style={{ fontSize: 24, fontWeight: 800, color: getTeamColor(awayTeam) }}>{awayNorm}%</div>
                 </div>
               </div>
 
-              {/* Wahrscheinlichkeits-Balken */}
               <div style={{ display: 'flex', height: 6, borderRadius: 3, overflow: 'hidden', gap: 2, marginBottom: 8 }}>
                 <div style={{ width: `${homeNorm}%`, background: getTeamColor(homeTeam), borderRadius: '3px 0 0 3px' }} />
                 <div style={{ width: `${drawNorm}%`, background: '#94a3b8' }} />
                 <div style={{ width: `${awayNorm}%`, background: getTeamColor(awayTeam), borderRadius: '0 3px 3px 0' }} />
               </div>
 
-              {/* Auflösungs-Banner */}
               {market.resolved && (
-                <div style={{
-                  marginTop: 16, padding: '12px 16px', borderRadius: 10,
-                  background: market.resolution === 'yes' ? 'rgba(22,163,74,0.1)' : market.resolution === 'draw' ? 'rgba(245,158,11,0.1)' : 'rgba(220,38,38,0.1)',
-                  border: `1px solid ${market.resolution === 'yes' ? 'rgba(22,163,74,0.3)' : market.resolution === 'draw' ? 'rgba(245,158,11,0.3)' : 'rgba(220,38,38,0.3)'}`,
-                  textAlign: 'center', fontSize: 14, fontWeight: 700,
-                  color: market.resolution === 'yes' ? '#16a34a' : market.resolution === 'draw' ? '#b45309' : '#dc2626',
-                }}>
+                <div style={{ marginTop: 16, padding: '12px 16px', borderRadius: 10, background: market.resolution === 'yes' ? 'rgba(22,163,74,0.1)' : market.resolution === 'draw' ? 'rgba(245,158,11,0.1)' : 'rgba(220,38,38,0.1)', border: `1px solid ${market.resolution === 'yes' ? 'rgba(22,163,74,0.3)' : market.resolution === 'draw' ? 'rgba(245,158,11,0.3)' : 'rgba(220,38,38,0.3)'}`, textAlign: 'center', fontSize: 14, fontWeight: 700, color: market.resolution === 'yes' ? '#16a34a' : market.resolution === 'draw' ? '#b45309' : '#dc2626' }}>
                   {soccerResolutionLabel()}
                 </div>
               )}
             </div>
 
-            {/* Drei-Outcome-Buttons + Trade-Panel */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 20, alignItems: 'start' }}>
-
-              {/* Linke Seite: Outcome-Auswahl */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 4 }}>
                   Auf welchen Ausgang tippst du?
@@ -897,34 +910,15 @@ export default function MarketPage() {
                   { outcome: 'draw', market: drawMarket, label: 'Unentschieden', prob: drawNorm, color: '#64748b', initials: 'X' },
                   { outcome: 'away', market: awayMarket, label: awayTeam, prob: awayNorm, color: getTeamColor(awayTeam), initials: getTeamInitials(awayTeam) },
                 ].map(opt => {
-                  const isActive = thisOutcome === opt.outcome
+                  const isActive   = thisOutcome === opt.outcome
                   const isResolved = opt.market?.resolved
-                  const won = isResolved && opt.market?.resolution === 'yes'
+                  const won        = isResolved && opt.market?.resolution === 'yes'
                   return (
-                    <div
-                      key={opt.outcome}
-                      onClick={() => {
-                        if (opt.market && opt.market.id !== marketId) {
-                          router.push(`/markets/${opt.market.id}`)
-                        }
-                      }}
-                      style={{
-                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                        padding: '16px 20px', borderRadius: 14, cursor: opt.market?.id !== marketId ? 'pointer' : 'default',
-                        border: isActive ? `2px solid ${opt.color}` : '2px solid var(--border)',
-                        background: isActive ? `${opt.color}10` : 'var(--card)',
-                        transition: 'all 0.15s',
-                        position: 'relative',
-                        opacity: isResolved && !won ? 0.6 : 1,
-                      }}
-                    >
+                    <div key={opt.outcome}
+                      onClick={() => { if (opt.market && opt.market.id !== marketId) router.push(`/markets/${opt.market.id}`) }}
+                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderRadius: 14, cursor: opt.market?.id !== marketId ? 'pointer' : 'default', border: isActive ? `2px solid ${opt.color}` : '2px solid var(--border)', background: isActive ? `${opt.color}10` : 'var(--card)', transition: 'all 0.15s', position: 'relative', opacity: isResolved && !won ? 0.6 : 1 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                        <div style={{
-                          width: 44, height: 44, borderRadius: 11,
-                          background: opt.color,
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          fontSize: 16, fontWeight: 900, color: '#fff', flexShrink: 0,
-                        }}>
+                        <div style={{ width: 44, height: 44, borderRadius: 11, background: opt.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 900, color: '#fff', flexShrink: 0 }}>
                           {opt.initials}
                         </div>
                         <div>
@@ -935,34 +929,26 @@ export default function MarketPage() {
                         </div>
                       </div>
                       <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                        <div style={{ fontSize: 28, fontWeight: 800, color: opt.color, letterSpacing: '-0.5px' }}>
-                          {opt.prob}%
-                        </div>
-                        {isActive && !isResolved && (
-                          <div style={{ fontSize: 11, color: opt.color, fontWeight: 600 }}>← Aktiv</div>
-                        )}
-                        {won && (
-                          <div style={{ fontSize: 11, color: '#16a34a', fontWeight: 700 }}>Gewonnen ✓</div>
-                        )}
+                        <div style={{ fontSize: 28, fontWeight: 800, color: opt.color, letterSpacing: '-0.5px' }}>{opt.prob}%</div>
+                        {isActive && !isResolved && <div style={{ fontSize: 11, color: opt.color, fontWeight: 600 }}>← Aktiv</div>}
+                        {won && <div style={{ fontSize: 11, color: '#16a34a', fontWeight: 700 }}>Gewonnen ✓</div>}
                       </div>
                     </div>
                   )
                 })}
 
-                {/* Trade-History */}
+                {/* Feature 4: Live-Positionen bei Soccer */}
+                {!market.resolved && <LivePositionsBar trades={trades} isKrypto={false} />}
+
                 {trades.filter(t => t.shares > 0).length > 0 && (
                   <div className="card" style={{ marginTop: 8 }}>
                     <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', marginBottom: 14 }}>Letzte Trades</div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                       {[...trades].filter(t => t.shares > 0).reverse().slice(0, 8).map(t => (
                         <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, padding: '6px 0', borderBottom: '1px solid var(--border)' }}>
-                          <span style={{ color: t.type.includes('yes') ? 'var(--yes)' : 'var(--no)', fontWeight: 600 }}>
-                            {t.type.includes('yes') ? 'Ja' : 'Nein'}
-                          </span>
+                          <span style={{ color: t.type.includes('yes') ? 'var(--yes)' : 'var(--no)', fontWeight: 600 }}>{t.type.includes('yes') ? 'Ja' : 'Nein'}</span>
                           <span style={{ color: 'var(--text)' }}>{Math.round(Math.abs(t.cost))} ₫</span>
-                          <span style={{ color: 'var(--text-subtle)' }}>
-                            {new Date(t.created_at).toLocaleDateString('de', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
-                          </span>
+                          <span style={{ color: 'var(--text-subtle)' }}>{new Date(t.created_at).toLocaleDateString('de', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
                         </div>
                       ))}
                     </div>
@@ -970,7 +956,7 @@ export default function MarketPage() {
                 )}
               </div>
 
-              {/* Rechte Seite: Trade-Panel */}
+              {/* Trade-Panel Soccer */}
               <div className="card" style={{ position: 'sticky', top: 'calc(var(--nav-height) + 16px)', padding: 0, overflow: 'hidden' }}>
                 {market.resolved ? (
                   <div style={{ padding: '24px 16px', textAlign: 'center' }}>
@@ -978,16 +964,13 @@ export default function MarketPage() {
                     <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 6 }}>
                       {userWon ? 'Gewonnen!' : hasPosition ? 'Verloren' : 'Markt beendet'}
                     </div>
-                    <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}>
-                      {soccerResolutionLabel()}
-                    </div>
+                    <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}>{soccerResolutionLabel()}</div>
                     {userWon && (
                       <div style={{ fontSize: 32, fontWeight: 800, color: '#16a34a', letterSpacing: '-0.5px', marginBottom: 16 }}>
                         +{Math.round(market.resolution === 'yes' ? sharesYes : sharesNo)} ₫
                       </div>
                     )}
-                    <button onClick={() => router.push('/')}
-                      style={{ width: '100%', padding: '12px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 10, cursor: 'pointer', fontSize: 14, fontWeight: 700 }}>
+                    <button onClick={() => router.push('/')} style={{ width: '100%', padding: '12px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 10, cursor: 'pointer', fontSize: 14, fontWeight: 700 }}>
                       Weitere Märkte →
                     </button>
                   </div>
@@ -998,16 +981,13 @@ export default function MarketPage() {
                   </div>
                 ) : (
                   <>
-                    {/* Header */}
                     <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border)', background: 'var(--surface)' }}>
                       <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 2 }}>Du tippst auf</div>
                       <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>
                         {thisOutcome === 'home' ? homeTeam : thisOutcome === 'away' ? awayTeam : 'Unentschieden'}
                       </div>
                     </div>
-
                     <div style={{ padding: 16 }}>
-                      {/* Tabs */}
                       <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', marginBottom: 16, marginLeft: -16, marginRight: -16, paddingLeft: 16 }}>
                         {(['kaufen', 'verkaufen'] as TradeTab[]).map(t => (
                           <button key={t} onClick={() => { setTradeTab(t); setBetError(''); setBetSuccess('') }}
@@ -1019,20 +999,13 @@ export default function MarketPage() {
 
                       {tradeTab === 'kaufen' && (
                         <>
-                          {/* YES/NO — in Soccer: Ja = dieser Outcome tritt ein */}
                           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 16 }}>
                             {(['yes', 'no'] as const).map(d => (
-                              <button key={d} onClick={() => setDirection(d)} style={{
-                                padding: '10px 0', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 13,
-                                background: direction === d ? (d === 'yes' ? 'rgba(22,163,74,0.15)' : 'rgba(220,38,38,0.15)') : 'var(--surface)',
-                                color: direction === d ? (d === 'yes' ? 'var(--yes)' : 'var(--no)') : 'var(--text-muted)',
-                                outline: direction === d ? `2px solid ${d === 'yes' ? 'var(--yes)' : 'var(--no)'}` : '2px solid transparent',
-                              }}>
+                              <button key={d} onClick={() => setDirection(d)} style={{ padding: '10px 0', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 13, background: direction === d ? (d === 'yes' ? 'rgba(22,163,74,0.15)' : 'rgba(220,38,38,0.15)') : 'var(--surface)', color: direction === d ? (d === 'yes' ? 'var(--yes)' : 'var(--no)') : 'var(--text-muted)', outline: direction === d ? `2px solid ${d === 'yes' ? 'var(--yes)' : 'var(--no)'}` : '2px solid transparent' }}>
                                 {d === 'yes' ? `Ja · ${prob}¢` : `Nein · ${100 - prob}¢`}
                               </button>
                             ))}
                           </div>
-
                           <div style={{ marginBottom: 12 }}>
                             <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>Betrag (₫)</div>
                             <input type="number" min={1} max={Math.min(user.balance, 1000000)} value={spend}
@@ -1044,12 +1017,9 @@ export default function MarketPage() {
                               ))}
                             </div>
                           </div>
-
                           <div style={{ background: 'rgba(22,163,74,0.07)', borderRadius: 10, padding: '14px', marginBottom: 14, textAlign: 'center', border: '1px solid rgba(22,163,74,0.2)' }}>
                             <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>
-                              Auszahlung wenn {direction === 'yes'
-                                ? (thisOutcome === 'home' ? homeTeam : thisOutcome === 'away' ? awayTeam : 'Unentschieden')
-                                : 'anderer Ausgang'} eintritt
+                              Auszahlung wenn {direction === 'yes' ? (thisOutcome === 'home' ? homeTeam : thisOutcome === 'away' ? awayTeam : 'Unentschieden') : 'anderer Ausgang'} eintritt
                             </div>
                             <div style={{ fontSize: 32, fontWeight: 800, color: '#16a34a', letterSpacing: '-0.5px' }}>{payout} ₫</div>
                           </div>
@@ -1059,9 +1029,7 @@ export default function MarketPage() {
                       {tradeTab === 'verkaufen' && (
                         <>
                           {!hasPosition ? (
-                            <div style={{ textAlign: 'center', padding: '24px 0', fontSize: 13, color: 'var(--text-muted)' }}>
-                              Du hast keine Anteile in diesem Markt.
-                            </div>
+                            <div style={{ textAlign: 'center', padding: '24px 0', fontSize: 13, color: 'var(--text-muted)' }}>Du hast keine Anteile in diesem Markt.</div>
                           ) : (
                             <>
                               <div style={{ background: 'var(--surface)', borderRadius: 8, padding: '12px', marginBottom: 16, fontSize: 13 }}>
@@ -1083,12 +1051,7 @@ export default function MarketPage() {
                       {betSuccess  && <div className="alert alert-success" style={{ marginBottom: 10 }}>{betSuccess}</div>}
 
                       {tradeTab === 'kaufen' ? (
-                        <button
-                          className={`submit-btn ${direction === 'yes' ? 'yes' : 'no'}`}
-                          onClick={handleKaufen}
-                          disabled={betLoading || spend <= 0}
-                          style={{ width: '100%' }}
-                        >
+                        <button className={`submit-btn ${direction === 'yes' ? 'yes' : 'no'}`} onClick={handleKaufen} disabled={betLoading || spend <= 0} style={{ width: '100%' }}>
                           {betLoading ? 'Wird ausgeführt…' : `${direction === 'yes' ? 'Ja' : 'Nein'} kaufen · ${spend} ₫`}
                         </button>
                       ) : (
@@ -1107,18 +1070,9 @@ export default function MarketPage() {
           </>
         )}
 
-        {/* ── CRYPTO UI (unverändert) ───────────────────────────────────── */}
+        {/* ── CRYPTO UI ── */}
         {isKrypto && showEndedBanner && (
-          <div style={{
-            marginBottom: 20, padding: '16px 20px', borderRadius: 14,
-            background: market.resolved
-              ? (market.resolution === 'yes' ? 'rgba(22,163,74,0.12)' : 'rgba(220,38,38,0.12)')
-              : 'rgba(245,158,11,0.12)',
-            border: `1px solid ${market.resolved
-              ? (market.resolution === 'yes' ? 'rgba(22,163,74,0.3)' : 'rgba(220,38,38,0.3)')
-              : 'rgba(245,158,11,0.3)'}`,
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12,
-          }}>
+          <div style={{ marginBottom: 20, padding: '16px 20px', borderRadius: 14, background: market.resolved ? (market.resolution === 'yes' ? 'rgba(22,163,74,0.12)' : 'rgba(220,38,38,0.12)') : 'rgba(245,158,11,0.12)', border: `1px solid ${market.resolved ? (market.resolution === 'yes' ? 'rgba(22,163,74,0.3)' : 'rgba(220,38,38,0.3)') : 'rgba(245,158,11,0.3)'}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <span style={{ fontSize: 28 }}>{market.resolved ? (market.resolution === 'yes' ? '↑' : '↓') : '⏳'}</span>
               <div>
@@ -1133,8 +1087,7 @@ export default function MarketPage() {
               </div>
             </div>
             {nextLiveMarket ? (
-              <button onClick={() => router.push(`/markets/${nextLiveMarket.id}`)}
-                style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 20px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: 20, cursor: 'pointer', fontSize: 14, fontWeight: 700, whiteSpace: 'nowrap' }}>
+              <button onClick={() => router.push(`/markets/${nextLiveMarket.id}`)} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 20px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: 20, cursor: 'pointer', fontSize: 14, fontWeight: 700, whiteSpace: 'nowrap' }}>
                 <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#fff', display: 'inline-block' }} />
                 Zum Live-Markt →
               </button>
@@ -1202,6 +1155,13 @@ export default function MarketPage() {
               </div>
             </div>
 
+            {/* Feature 4: Live-Positionen unter Chart bei Krypto */}
+            {!market.resolved && (
+              <div style={{ marginTop: 12 }}>
+                <LivePositionsBar trades={trades} isKrypto={true} />
+              </div>
+            )}
+
             <div style={{ position: 'relative', width: '100%', height: 240 }}>
               <canvas ref={cryptoCanvasRef} width={860} height={240} style={{ width: '100%', height: '100%', display: 'block' }} />
               {priceHistory.length < 2 && !market.resolved && (
@@ -1232,9 +1192,11 @@ export default function MarketPage() {
                 <span style={{ fontSize: 36, fontWeight: 700, color: isLow ? 'var(--no)' : 'var(--yes)' }}>{prob}%</span>
                 <span style={{ fontSize: 14, color: 'var(--text-muted)' }}>Wahrscheinlichkeit Ja</span>
               </div>
-              <div className="prob-bar" style={{ height: 8, marginBottom: 0 }}>
+              <div className="prob-bar" style={{ height: 8, marginBottom: 12 }}>
                 <div className={`prob-bar-fill ${isLow ? 'low' : ''}`} style={{ width: `${prob}%` }} />
               </div>
+              {/* Feature 4: Live-Positionen bei normalen Märkten */}
+              {!market.resolved && <LivePositionsBar trades={trades} isKrypto={false} />}
             </div>
           </>
         )}
@@ -1274,8 +1236,7 @@ export default function MarketPage() {
                     {market.coin}: ${market.start_price?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} → ${market.end_price?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </div>
                   {nextLiveMarket && (
-                    <button onClick={() => router.push(`/markets/${nextLiveMarket.id}`)}
-                      style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '12px 24px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: 20, cursor: 'pointer', fontSize: 14, fontWeight: 700 }}>
+                    <button onClick={() => router.push(`/markets/${nextLiveMarket.id}`)} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '12px 24px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: 20, cursor: 'pointer', fontSize: 14, fontWeight: 700 }}>
                       <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#fff', display: 'inline-block' }} />
                       Zum Live-Markt →
                     </button>
@@ -1291,8 +1252,7 @@ export default function MarketPage() {
                         const mMins = Math.max(0, Math.floor(mDiff / 60000))
                         const mSecs = Math.max(0, Math.floor((mDiff % 60000) / 1000))
                         return (
-                          <div key={m.id} onClick={() => router.push(`/markets/${m.id}`)}
-                            style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', background: 'var(--surface)', borderRadius: 10, cursor: 'pointer' }}>
+                          <div key={m.id} onClick={() => router.push(`/markets/${m.id}`)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', background: 'var(--surface)', borderRadius: 10, cursor: 'pointer' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                               <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#22c55e' }} />
                               <span style={{ fontWeight: 700, fontSize: 13, color: COIN_COLORS[m.coin ?? ''] ?? '#888' }}>{m.coin}</span>
@@ -1354,8 +1314,7 @@ export default function MarketPage() {
                     </div>
                   )}
                   {nextLiveMarket && (
-                    <button onClick={() => router.push(`/markets/${nextLiveMarket.id}`)}
-                      style={{ width: '100%', padding: '12px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: 10, cursor: 'pointer', fontSize: 14, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                    <button onClick={() => router.push(`/markets/${nextLiveMarket.id}`)} style={{ width: '100%', padding: '12px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: 10, cursor: 'pointer', fontSize: 14, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
                       <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#fff' }} />
                       Zum Live-Markt →
                     </button>
@@ -1492,6 +1451,10 @@ export default function MarketPage() {
         @keyframes slideInRight {
           from { transform: translateX(120%); opacity: 0; }
           to   { transform: translateX(0);    opacity: 1; }
+        }
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.4; }
         }
       `}</style>
     </>
