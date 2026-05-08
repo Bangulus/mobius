@@ -172,12 +172,11 @@ function getTeamInitials(name: string): string {
   return (words[0][0] + (words[1]?.[0] ?? '')).toUpperCase()
 }
 
-// Mapping von Nav-ID zu group_title in der DB
 const SPORT_GROUP_FILTERS: Record<string, string> = {
   'WM':        'Wer wird die WM 2026 gewinnen?',
   'CL':        'Wer gewinnt die Champions League 2025/26?',
   'F1':        'Wer wird F1 Champion 2026?',
-  'DFB-Kader': '__null__', // NULL group_title
+  'DFB-Kader': '__null__',
 }
 
 interface NavItemDef {
@@ -188,15 +187,19 @@ interface NavItemDef {
 }
 
 const NAV_ITEMS: NavItemDef[] = [
-  { id: 'Politik',       label: 'Politik',      icon: '🏛️' },
-  { id: 'Sport',         label: 'Sport',         icon: '⚽', children: [
-    { id: 'Fußball',     label: 'Fußball',       icon: '⚽', children: [
-      { id: 'Bundesliga', label: 'Bundesliga',   icon: '🇩🇪' },
+  { id: 'Politik', label: 'Politik', icon: '🏛️', children: [
+    { id: 'Politik-Deutschland', label: 'Deutschland', icon: '🇩🇪' },
+    { id: 'Politik-USA',        label: 'USA',         icon: '🇺🇸' },
+    { id: 'Politik-Welt',       label: 'Welt',        icon: '🌍' },
+  ]},
+  { id: 'Sport', label: 'Sport', icon: '⚽', children: [
+    { id: 'Fußball', label: 'Fußball', icon: '⚽', children: [
+      { id: 'Bundesliga', label: 'Bundesliga', icon: '🇩🇪' },
     ]},
-    { id: 'WM',          label: 'WM 2026',       icon: '🏆' },
-    { id: 'CL',          label: 'Champions League', icon: '⭐' },
-    { id: 'F1',          label: 'Formel 1',      icon: '🏎️' },
-    { id: 'DFB-Kader',   label: 'DFB-Kader',     icon: '🇩🇪' },
+    { id: 'WM',        label: 'WM 2026',          icon: '🏆' },
+    { id: 'CL',        label: 'Champions League', icon: '⭐' },
+    { id: 'F1',        label: 'Formel 1',         icon: '🏎️' },
+    { id: 'DFB-Kader', label: 'DFB-Kader',        icon: '🇩🇪' },
   ]},
   { id: 'Krypto',        label: 'Krypto',        icon: '₿'  },
   { id: 'Entertainment', label: 'Entertainment', icon: '🎬' },
@@ -215,7 +218,7 @@ export default function Home() {
   const [markets, setMarkets]           = useState<Market[]>([])
   const [user, setUser]                 = useState<User | null>(null)
   const [leaderboard, setLeaderboard]   = useState<LeaderboardEntry[]>([])
-  const [category, setCategory]         = useState('Politik')
+  const [category, setCategory]         = useState('Politik-Deutschland')
   const [view, setView]                 = useState<'markets' | 'portfolio' | 'admin' | 'profil'>('markets')
   const [loading, setLoading]           = useState(true)
   const [darkMode, setDarkMode]         = useState(() => {
@@ -231,7 +234,7 @@ export default function Home() {
   const [authLoading, setAuthLoading]   = useState(false)
   const [searchQuery, setSearchQuery]   = useState('')
   const [winToasts, setWinToasts]       = useState<WinToast[]>([])
-  const [expandedNav, setExpandedNav]   = useState<Record<string, boolean>>({ Sport: true, Fußball: true })
+  const [expandedNav, setExpandedNav]   = useState<Record<string, boolean>>({ Sport: true, Fußball: true, Politik: true })
   const shownToastsRef                  = useRef<Set<string>>(new Set())
   const userRef                         = useRef<User | null>(null)
   const marketsRef                      = useRef<Market[]>([])
@@ -455,10 +458,40 @@ export default function Home() {
   const isSportCategory = category === 'Sport' || category === 'Fußball' || category === 'Bundesliga'
     || category === 'WM' || category === 'CL' || category === 'F1' || category === 'DFB-Kader'
 
+  // Hilfsfunktion: ist ein Markt ein "Deutschland"-Politikmarkt?
+  function isPolitikDeutschland(m: Market): boolean {
+    return m.category === 'Politik' && !!(m.group_title && m.group_title.toLowerCase().includes('landtag'))
+  }
+
+  // Hilfsfunktion: ist ein Markt ein "USA"-Politikmarkt?
+  function isPolitikUSA(m: Market): boolean {
+    if (m.category !== 'Politik') return false
+    if (m.group_title) return false // hat eine Gruppe → kein NULL-Markt
+    const q = (m.question ?? '').toLowerCase()
+    return q.includes('trump') || q.includes('demokraten') || q.includes('us-senat') || q.includes('usa') || q.includes('senat 2026')
+  }
+
+  // Hilfsfunktion: ist ein Markt ein "Welt"-Politikmarkt?
+  function isPolitikWelt(m: Market): boolean {
+    if (m.category !== 'Politik') return false
+    if (isPolitikDeutschland(m)) return false
+    if (isPolitikUSA(m)) return false
+    return true
+  }
+
   const filteredMarkets = markets.filter((m) => {
     let matchCat = false
 
-    if (category === 'Bundesliga') {
+    if (category === 'Politik') {
+      // Klick auf Elternelement → zeigt Deutschland
+      matchCat = isPolitikDeutschland(m)
+    } else if (category === 'Politik-Deutschland') {
+      matchCat = isPolitikDeutschland(m)
+    } else if (category === 'Politik-USA') {
+      matchCat = isPolitikUSA(m)
+    } else if (category === 'Politik-Welt') {
+      matchCat = isPolitikWelt(m)
+    } else if (category === 'Bundesliga') {
       matchCat = !!m.match_id
     } else if (category === 'Fußball') {
       matchCat = m.category === 'sport' || m.category === 'Sport'
@@ -486,7 +519,25 @@ export default function Home() {
   })
 
   const toggleNav = (id: string) => setExpandedNav(prev => ({ ...prev, [id]: !prev[id] }))
-  const selectCategory = (id: string) => { setCategory(id); setView('markets'); setSearchQuery('') }
+
+  const selectCategory = (id: string) => {
+    // Klick auf "Politik" → automatisch Deutschland als aktiv setzen + aufklappen
+    if (id === 'Politik') {
+      setExpandedNav(prev => ({ ...prev, Politik: !prev['Politik'] }))
+      setCategory('Politik-Deutschland')
+    } else {
+      setCategory(id)
+    }
+    setView('markets')
+    setSearchQuery('')
+  }
+
+  // Label für die Seitenüberschrift
+  const categoryLabel: Record<string, string> = {
+    'Politik-Deutschland': 'Politik · Deutschland',
+    'Politik-USA':         'Politik · USA',
+    'Politik-Welt':        'Politik · Welt',
+  }
 
   return (
     <>
@@ -561,7 +612,7 @@ export default function Home() {
         <div className="nav-left">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/logo-weiss.png" alt="Möbius" className="nav-logo"
-            onClick={() => { setView('markets'); setSearchQuery(''); setCategory('Politik') }} />
+            onClick={() => { setView('markets'); setSearchQuery(''); setCategory('Politik-Deutschland') }} />
           <div className="nav-search-wrap">
             <span className="nav-search-icon">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -671,7 +722,7 @@ export default function Home() {
             <>
               <div className="section-head">
                 <div className="section-title" style={{ fontSize: 22, fontWeight: 800 }}>
-                  {searchQuery ? `Suche: „${searchQuery}"` : category}
+                  {searchQuery ? `Suche: „${searchQuery}"` : (categoryLabel[category] ?? category)}
                 </div>
                 <div className="section-link" onClick={() => loadMarkets()}>Aktualisieren</div>
               </div>
@@ -723,7 +774,10 @@ function NavItem({ item, category, expandedNav, onSelect, onToggle, depth }: {
 }) {
   const hasChildren = item.children && item.children.length > 0
   const isExpanded  = expandedNav[item.id]
-  const isActive    = category === item.id
+
+  // Elternelement gilt als aktiv wenn ein Kind aktiv ist
+  const isActive = category === item.id ||
+    (item.id === 'Politik' && category.startsWith('Politik-'))
 
   return (
     <div>
