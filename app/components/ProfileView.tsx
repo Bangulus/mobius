@@ -67,7 +67,6 @@ function avatarColor(str: string) {
   return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length];
 }
 
-// Streak berechnen: wie viele aufeinanderfolgende Tage (bis heute) hatte der User mindestens einen Trade?
 function calcStreak(trades: TradeRow[]): number {
   if (trades.length === 0) return 0;
   const days = new Set(
@@ -88,7 +87,6 @@ function calcStreak(trades: TradeRow[]): number {
   return streak;
 }
 
-// Trefferquote: aufgelöste Märkte bei denen User auf die richtige Seite gesetzt hat
 function calcTrefferquote(entries: PortfolioEntry[]): number | null {
   const resolved = entries.filter(e => e.market.resolved && e.market.resolution);
   if (resolved.length === 0) return null;
@@ -307,7 +305,7 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, o
             </div>
           </div>
 
-          {/* Feature 2 + 3: Streak & Trefferquote — nebeneinander */}
+          {/* Streak & Trefferquote */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
 
             {/* Streak */}
@@ -327,10 +325,10 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, o
                 {streak === 0
                   ? 'Heute noch nicht aktiv'
                   : streak >= 7
-                  ? '🔥 Auf Feuer!'
+                  ? 'Serie läuft'
                   : streak >= 3
-                  ? '⚡ Gute Serie'
-                  : 'Am laufen bleiben'}
+                  ? 'Konstant aktiv'
+                  : 'Starte heute'}
               </div>
             </div>
 
