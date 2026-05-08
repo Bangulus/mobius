@@ -191,10 +191,11 @@ interface NavItemDef {
   label: string
   icon: string
   children?: NavItemDef[]
+  parentOnly?: boolean // wenn true: Klick toggelt nur, setzt keine Kategorie
 }
 
 const NAV_ITEMS: NavItemDef[] = [
-  { id: 'Politik', label: 'Politik', icon: '🏛️', children: [
+  { id: 'Politik', label: 'Politik', icon: '🏛️', parentOnly: true, children: [
     { id: 'Politik-Deutschland', label: 'Deutschland', icon: '🇩🇪' },
     { id: 'Politik-USA',        label: 'USA',         icon: '🇺🇸' },
     { id: 'Politik-Welt',       label: 'Welt',        icon: '🌍' },
@@ -222,32 +223,32 @@ type AuthMode = 'login' | 'register'
 
 export default function Home() {
   const router = useRouter()
-  const [markets, setMarkets]               = useState<Market[]>([])
-  const [user, setUser]                     = useState<User | null>(null)
-  const [leaderboard, setLeaderboard]       = useState<LeaderboardEntry[]>([])
-  const [weeklyBoard, setWeeklyBoard]       = useState<WeeklyEntry[]>([])
+  const [markets, setMarkets]                 = useState<Market[]>([])
+  const [user, setUser]                       = useState<User | null>(null)
+  const [leaderboard, setLeaderboard]         = useState<LeaderboardEntry[]>([])
+  const [weeklyBoard, setWeeklyBoard]         = useState<WeeklyEntry[]>([])
   const [showLeaderboard, setShowLeaderboard] = useState(false)
-  const [category, setCategory]             = useState('Politik-Deutschland')
-  const [view, setView]                     = useState<'markets' | 'portfolio' | 'admin' | 'profil'>('markets')
-  const [loading, setLoading]               = useState(true)
-  const [darkMode, setDarkMode]             = useState(() => {
+  const [category, setCategory]               = useState('Politik-Deutschland')
+  const [view, setView]                       = useState<'markets' | 'portfolio' | 'admin' | 'profil'>('markets')
+  const [loading, setLoading]                 = useState(true)
+  const [darkMode, setDarkMode]               = useState(() => {
     if (typeof window === 'undefined') return false
     return localStorage.getItem('mobius_darkmode') === 'true'
   })
-  const [showAuth, setShowAuth]             = useState(false)
-  const [authMode, setAuthMode]             = useState<AuthMode>('login')
-  const [authEmail, setAuthEmail]           = useState('')
-  const [authPassword, setAuthPassword]     = useState('')
-  const [authUsername, setAuthUsername]     = useState('')
-  const [authError, setAuthError]           = useState('')
-  const [authLoading, setAuthLoading]       = useState(false)
-  const [searchQuery, setSearchQuery]       = useState('')
-  const [winToasts, setWinToasts]           = useState<WinToast[]>([])
-  const [expandedNav, setExpandedNav]       = useState<Record<string, boolean>>({ Sport: true, Fußball: true, Politik: true })
-  const shownToastsRef                      = useRef<Set<string>>(new Set())
-  const userRef                             = useRef<User | null>(null)
-  const marketsRef                          = useRef<Market[]>([])
-  const triggeredCoinsRef                   = useRef<Record<string, number>>({})
+  const [showAuth, setShowAuth]               = useState(false)
+  const [authMode, setAuthMode]               = useState<AuthMode>('login')
+  const [authEmail, setAuthEmail]             = useState('')
+  const [authPassword, setAuthPassword]       = useState('')
+  const [authUsername, setAuthUsername]       = useState('')
+  const [authError, setAuthError]             = useState('')
+  const [authLoading, setAuthLoading]         = useState(false)
+  const [searchQuery, setSearchQuery]         = useState('')
+  const [winToasts, setWinToasts]             = useState<WinToast[]>([])
+  const [expandedNav, setExpandedNav]         = useState<Record<string, boolean>>({ Sport: true, Fußball: true, Politik: true })
+  const shownToastsRef                        = useRef<Set<string>>(new Set())
+  const userRef                               = useRef<User | null>(null)
+  const marketsRef                            = useRef<Market[]>([])
+  const triggeredCoinsRef                     = useRef<Record<string, number>>({})
 
   const ADMIN_ID = 'b75edaf4-141d-41f1-9555-887a8ddbac58'
 
@@ -291,12 +292,10 @@ export default function Home() {
   }, [])
 
   const loadWeeklyBoard = useCallback(async () => {
-    // Trades der letzten 7 Tage laden
     const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
     const trades = await dbGet('trades', `type=in.(sell_yes,sell_no)&created_at=gte.${since}&select=user_id,shares`)
     if (!trades || trades.length === 0) { setWeeklyBoard([]); return }
 
-    // Shares pro User summieren
     const gainMap: Record<string, number> = {}
     trades.forEach((t: { user_id: string; shares: number }) => {
       gainMap[t.user_id] = (gainMap[t.user_id] ?? 0) + (t.shares ?? 0)
@@ -313,13 +312,11 @@ export default function Home() {
     const userMap: Record<string, string> = {}
     users?.forEach((u: { id: string; username: string }) => { userMap[u.id] = u.username })
 
-    const board: WeeklyEntry[] = topIds.map(id => ({
+    setWeeklyBoard(topIds.map(id => ({
       user_id: id,
       username: userMap[id] ?? 'Unbekannt',
       weekly_gain: Math.round(gainMap[id]),
-    }))
-
-    setWeeklyBoard(board)
+    })))
   }, [])
 
   useEffect(() => {
@@ -397,7 +394,6 @@ export default function Home() {
       const amount = Math.round(totalShares)
       if (amount <= 0) continue
 
-      // Berechne wie viele % auf die falsche Seite gesetzt haben
       const probAtResolution = calcProb(market.q_yes, market.q_no, market.b)
       const loserPct = market.resolution === 'yes' ? (100 - probAtResolution) : probAtResolution
 
@@ -526,7 +522,7 @@ export default function Home() {
   const filteredMarkets = markets.filter((m) => {
     let matchCat = false
 
-    if (category === 'Politik' || category === 'Politik-Deutschland') {
+    if (category === 'Politik-Deutschland') {
       matchCat = isPolitikDeutschland(m)
     } else if (category === 'Politik-USA') {
       matchCat = isPolitikUSA(m)
@@ -559,15 +555,11 @@ export default function Home() {
     return matchCat && matchSearch
   })
 
+  // Nur expandedNav togglen, keine Kategorie setzen
   const toggleNav = (id: string) => setExpandedNav(prev => ({ ...prev, [id]: !prev[id] }))
 
   const selectCategory = (id: string) => {
-    if (id === 'Politik') {
-      setExpandedNav(prev => ({ ...prev, Politik: !prev['Politik'] }))
-      setCategory('Politik-Deutschland')
-    } else {
-      setCategory(id)
-    }
+    setCategory(id)
     setView('markets')
     setSearchQuery('')
   }
@@ -580,7 +572,7 @@ export default function Home() {
 
   return (
     <>
-      {/* Win Toasts — Feature 5: mit Loser-Context */}
+      {/* Win Toasts */}
       <div style={{ position: 'fixed', top: 80, right: 16, zIndex: 9999, display: 'flex', flexDirection: 'column', gap: 10, pointerEvents: 'none' }}>
         {winToasts.map(toast => (
           <div key={toast.id} style={{
@@ -601,17 +593,14 @@ export default function Home() {
               <button onClick={() => setWinToasts(prev => prev.filter(t => t.id !== toast.id))}
                 style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, color: '#9ca3af', padding: 0, lineHeight: 1 }}>×</button>
             </div>
-
             <div style={{ fontSize: 11, color: 'var(--text-muted, #6b7280)', marginBottom: 8, lineHeight: 1.4 }}>
               {toast.isKrypto
                 ? `${toast.coin} · ${toast.direction === 'yes' ? 'UP ↑' : 'DOWN ↓'}`
                 : (toast.question.length > 55 ? toast.question.slice(0, 55) + '…' : toast.question)}
             </div>
-
             <div style={{ fontSize: 26, fontWeight: 900, color: '#16a34a', letterSpacing: '-0.5px', lineHeight: 1, marginBottom: 6 }}>
               +{toast.amount.toLocaleString('de')} ₫
             </div>
-
             {toast.loserPct !== undefined && toast.loserPct > 5 && (
               <div style={{ fontSize: 11, color: 'var(--text-muted, #9ca3af)', borderTop: '1px solid rgba(0,0,0,0.06)', paddingTop: 6, marginTop: 2 }}>
                 {toast.loserPct}% der Marktteilnehmer lagen falsch.
@@ -621,7 +610,7 @@ export default function Home() {
         ))}
       </div>
 
-      {/* Wöchentliches Leaderboard Modal — Feature 1 */}
+      {/* Wöchentliches Leaderboard Modal */}
       {showLeaderboard && (
         <div className="modal-backdrop" onClick={() => setShowLeaderboard(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 400 }}>
@@ -633,7 +622,6 @@ export default function Home() {
               <button onClick={() => setShowLeaderboard(false)}
                 style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 20, color: 'var(--text-muted)', lineHeight: 1 }}>×</button>
             </div>
-
             {weeklyBoard.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '24px 0', color: 'var(--text-muted)', fontSize: 13 }}>
                 Noch keine Daten für diese Woche.
@@ -641,9 +629,9 @@ export default function Home() {
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {weeklyBoard.map((e, i) => {
-                  const av     = avatarColor(e.username)
-                  const isMe   = e.user_id === user?.id
-                  const medal  = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`
+                  const av    = avatarColor(e.username)
+                  const isMe  = e.user_id === user?.id
+                  const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`
                   return (
                     <div key={e.user_id} style={{
                       display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px',
@@ -665,7 +653,6 @@ export default function Home() {
                 })}
               </div>
             )}
-
             <div style={{ fontSize: 11, color: 'var(--text-subtle)', textAlign: 'center', marginTop: 16 }}>
               Resets jeden Montag · Basiert auf realisierten Gewinnen
             </div>
@@ -727,7 +714,6 @@ export default function Home() {
         <div className="nav-right">
           {user ? (
             <>
-              {/* Feature 1: Wochenranking Button im Header */}
               <button
                 className="nav-pill"
                 onClick={() => { loadWeeklyBoard(); setShowLeaderboard(true) }}
@@ -736,7 +722,6 @@ export default function Home() {
                 <span style={{ fontSize: 13 }}>🏆</span>
                 <span>Ranking</span>
               </button>
-
               <div className="nav-stat">
                 <div className="nav-stat-label">Guthaben</div>
                 <div className="nav-stat-value">{user.balance.toLocaleString('de')} ₫</div>
@@ -778,7 +763,7 @@ export default function Home() {
       {/* Layout */}
       <div style={{ display: 'flex', minHeight: 'calc(100vh - var(--nav-height, 56px))', maxWidth: 1400, margin: '0 auto' }}>
 
-        {/* Sidebar */}
+        {/* Sidebar — ohne Bestenliste */}
         <aside style={{
           width: 220, flexShrink: 0, borderRight: '1px solid var(--border)',
           padding: '20px 0', position: 'sticky', top: 'var(--nav-height, 56px)',
@@ -791,7 +776,6 @@ export default function Home() {
               <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--text)' }}>{user.balance.toLocaleString('de')} ₫</div>
             </div>
           )}
-
           <div style={{ padding: '0 8px' }}>
             {NAV_ITEMS.map(item => (
               <NavItem
@@ -804,15 +788,6 @@ export default function Home() {
                 depth={0}
               />
             ))}
-          </div>
-
-          <div style={{ borderTop: '1px solid var(--border)', margin: '16px 0' }} />
-
-          <div style={{ padding: '0 16px' }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: 0.5, marginBottom: 10, textTransform: 'uppercase' }}>
-              Bestenliste
-            </div>
-            <SidebarLeaderboard entries={leaderboard} currentUserId={user?.id} />
           </div>
         </aside>
 
@@ -888,15 +863,24 @@ function NavItem({ item, category, expandedNav, onSelect, onToggle, depth }: {
   const isActive    = category === item.id ||
     (item.id === 'Politik' && category.startsWith('Politik-'))
 
+  const handleClick = () => {
+    if (item.parentOnly) {
+      // Nur ein-/ausklappen, keine Kategorie setzen
+      onToggle(item.id)
+    } else if (hasChildren) {
+      onToggle(item.id)
+      onSelect(item.id)
+    } else {
+      onSelect(item.id)
+    }
+  }
+
   return (
     <div>
       <button
         className={`nav-item-btn ${isActive ? 'active' : ''}`}
         style={{ paddingLeft: 12 + depth * 12 }}
-        onClick={() => {
-          if (hasChildren) onToggle(item.id)
-          onSelect(item.id)
-        }}
+        onClick={handleClick}
       >
         <span style={{ fontSize: 14 }}>{item.icon}</span>
         <span>{item.label}</span>
@@ -909,32 +893,6 @@ function NavItem({ item, category, expandedNav, onSelect, onToggle, depth }: {
           ))}
         </div>
       )}
-    </div>
-  )
-}
-
-function SidebarLeaderboard({ entries, currentUserId }: { entries: LeaderboardEntry[]; currentUserId?: string }) {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-      {entries.slice(0, 5).map((e, i) => {
-        const av   = avatarColor(e.username)
-        const isMe = e.user_id === currentUserId
-        const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`
-        return (
-          <div key={e.user_id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0' }}>
-            <span style={{ fontSize: 12, width: 20, textAlign: 'center', flexShrink: 0 }}>{medal}</span>
-            <div style={{ width: 24, height: 24, borderRadius: '50%', background: av.bg, color: av.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, flexShrink: 0 }}>
-              {e.username.slice(0, 2).toUpperCase()}
-            </div>
-            <span style={{ fontSize: 12, color: 'var(--text)', fontWeight: isMe ? 700 : 400, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {e.username}
-            </span>
-            <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>
-              {(e.total_balance / 1000).toFixed(1)}K
-            </span>
-          </div>
-        )
-      })}
     </div>
   )
 }
@@ -1066,7 +1024,6 @@ function SoccerMatchCard({ markets, onOpen }: { markets: Market[]; onOpen: (id: 
   return (
     <div className="market-card" style={{ padding: '14px 18px', cursor: 'pointer' }}
       onClick={() => onOpen((homeMarket ?? anyMarket).id)}>
-
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)' }}>Bundesliga</span>
@@ -1075,7 +1032,6 @@ function SoccerMatchCard({ markets, onOpen }: { markets: Market[]; onOpen: (id: 
         </div>
         <div className="live-dot" />
       </div>
-
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 }}>
           <TeamLogo iconUrl={anyMarket.home_team_icon} teamName={homeTeam} color={homeColor} size={40} />
@@ -1084,12 +1040,10 @@ function SoccerMatchCard({ markets, onOpen }: { markets: Market[]; onOpen: (id: 
             <div style={{ fontSize: 20, fontWeight: 800, color: homeColor, lineHeight: 1.1 }}>{homeNorm}¢</div>
           </div>
         </div>
-
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, flexShrink: 0, padding: '0 8px' }}>
           <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: 0.5 }}>DRAW</div>
           <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-muted)' }}>{drawNorm}¢</div>
         </div>
-
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0, justifyContent: 'flex-end' }}>
           <div style={{ minWidth: 0, textAlign: 'right' }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{awayTeam}</div>
@@ -1098,13 +1052,11 @@ function SoccerMatchCard({ markets, onOpen }: { markets: Market[]; onOpen: (id: 
           <TeamLogo iconUrl={anyMarket.away_team_icon} teamName={awayTeam} color={awayColor} size={40} />
         </div>
       </div>
-
       <div style={{ display: 'flex', height: 4, borderRadius: 2, overflow: 'hidden', gap: 2, marginTop: 12 }}>
         <div style={{ width: `${homeNorm}%`, background: homeColor }} />
         <div style={{ width: `${drawNorm}%`, background: '#94a3b8' }} />
         <div style={{ width: `${awayNorm}%`, background: awayColor }} />
       </div>
-
       <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
         {[
           { label: homeTeam.split(' ').slice(-1)[0], id: homeMarket?.id, color: homeColor },
@@ -1199,7 +1151,6 @@ function PortfolioView({ userId, router }: { userId: string; router: ReturnType<
         {positions.map((p, i) => {
           const prob  = calcProb(p.q_yes, p.q_no, p.b)
           const isYes = p.direction === 'yes'
-          // UP/DOWN statt Gewonnen/Verloren
           const isWin = p.resolution === p.direction
           return (
             <div key={i} className="card" style={{ cursor: 'pointer' }}
