@@ -1,6 +1,16 @@
 import { NextResponse } from 'next/server'
 import { FINANCE_ASSETS, finnhubQuote, isMarketOpen, getDayMarketCloseISO, getWeekMarketCloseISO, getBerlinTime } from '@/lib/finnhub'
-import { supabaseUrl, supabaseKey } from '@/lib/supabase'
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+
+function getAdminHeaders() {
+  return {
+    apikey: supabaseServiceKey,
+    Authorization: `Bearer ${supabaseServiceKey}`,
+    'Content-Type': 'application/json',
+  }
+}
 
 const B = 50
 
@@ -8,10 +18,7 @@ async function getActiveFinanceMarkets() {
   const res = await fetch(
     `${supabaseUrl}/rest/v1/markets?is_auto=eq.true&category=eq.finance&status=eq.open&select=coin,group_title`,
     {
-      headers: {
-        apikey: supabaseKey,
-        Authorization: `Bearer ${supabaseKey}`,
-      },
+      headers: getAdminHeaders(),
       cache: 'no-store',
     }
   )
@@ -23,9 +30,7 @@ async function createMarket(payload: Record<string, unknown>) {
   const res = await fetch(`${supabaseUrl}/rest/v1/markets`, {
     method: 'POST',
     headers: {
-      apikey: supabaseKey,
-      Authorization: `Bearer ${supabaseKey}`,
-      'Content-Type': 'application/json',
+      ...getAdminHeaders(),
       Prefer: 'return=representation',
     },
     body: JSON.stringify(payload),
@@ -37,7 +42,6 @@ export async function POST() {
   try {
     const activeMarkets = await getActiveFinanceMarkets()
 
-    // Key: "symbol|marketType" → verhindert Duplikate
     const activeKeys = new Set<string>(
       activeMarkets.map((m: { coin: string; group_title: string }) => `${m.coin}|${m.group_title}`)
     )
@@ -79,11 +83,9 @@ export async function POST() {
         }
       }
 
-      // --- Tagesmarkt (öffnet um 00:00, einmal pro Tag) ---
+      // --- Tagesmarkt ---
       if (isWeekday && !activeKeys.has(`${asset.symbol}|Aktueller Handelstag`)) {
         const price = await finnhubQuote(asset.symbol)
-        // Auch wenn Markt gerade geschlossen: Preis vom Vortag als Startpreis ist ok
-        // Hauptsache ein Preis existiert
         if (price) {
           const closesAt = getDayMarketCloseISO(asset)
           const ok = await createMarket({
@@ -110,7 +112,7 @@ export async function POST() {
         }
       }
 
-      // --- Wochenmarkt (öffnet Montag, schließt Freitag) ---
+      // --- Wochenmarkt ---
       if (isWeekday && !activeKeys.has(`${asset.symbol}|Aktuelle Handelswoche`)) {
         const price = await finnhubQuote(asset.symbol)
         if (price) {
