@@ -67,6 +67,35 @@ function avatarColor(str: string) {
   return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length];
 }
 
+// Streak berechnen: wie viele aufeinanderfolgende Tage (bis heute) hatte der User mindestens einen Trade?
+function calcStreak(trades: TradeRow[]): number {
+  if (trades.length === 0) return 0;
+  const days = new Set(
+    trades.map(t => {
+      const d = new Date(t.created_at);
+      return `${d.getUTCFullYear()}-${d.getUTCMonth()}-${d.getUTCDate()}`;
+    })
+  );
+  let streak = 0;
+  const now = new Date();
+  const check = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  while (true) {
+    const key = `${check.getUTCFullYear()}-${check.getUTCMonth()}-${check.getUTCDate()}`;
+    if (!days.has(key)) break;
+    streak++;
+    check.setUTCDate(check.getUTCDate() - 1);
+  }
+  return streak;
+}
+
+// Trefferquote: aufgelöste Märkte bei denen User auf die richtige Seite gesetzt hat
+function calcTrefferquote(entries: PortfolioEntry[]): number | null {
+  const resolved = entries.filter(e => e.market.resolved && e.market.resolution);
+  if (resolved.length === 0) return null;
+  const correct = resolved.filter(e => e.market.resolution === e.direction).length;
+  return Math.round((correct / resolved.length) * 100);
+}
+
 type TabType = 'positionen' | 'aktivitaet';
 type SubTabType = 'aktiv' | 'geschlossen';
 
@@ -79,6 +108,7 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, o
   const [tab, setTab]                           = useState<TabType>('positionen');
   const [subTab, setSubTab]                     = useState<SubTabType>('aktiv');
   const [allRows, setAllRows]                   = useState<PortfolioEntry[]>([]);
+  const [allTrades, setAllTrades]               = useState<TradeRow[]>([]);
   const [portfolioLoading, setPortfolioLoading] = useState(true);
 
   const totalEinsatz     = allRows.reduce((s, r) => s + r.einsatz, 0);
@@ -90,9 +120,13 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, o
   const geschlosseneRows = allRows.filter(r => r.market.resolved);
   const displayRows      = subTab === 'aktiv' ? aktiveRows : geschlosseneRows;
 
+  const streak       = calcStreak(allTrades);
+  const trefferquote = calcTrefferquote(allRows);
+
   const loadPortfolio = useCallback(async () => {
     setPortfolioLoading(true);
     const trades: TradeRow[] = await dbGet('trades', `user_id=eq.${userId}&select=*&order=created_at.desc`);
+    setAllTrades(trades ?? []);
     if (!trades || trades.length === 0) { setPortfolioLoading(false); return; }
 
     const seen: Record<string, boolean> = {};
@@ -179,7 +213,7 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, o
       {/* ── HEADER ── */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 16, marginBottom: 24 }}>
 
-        {/* Links */}
+        {/* Links: Avatar + Stats */}
         <div className="card" style={{ padding: '28px 28px 24px' }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 20, marginBottom: 24 }}>
             <div style={{ flexShrink: 0 }}>
@@ -229,6 +263,7 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, o
             </label>
           </div>
 
+          {/* Stats-Zeile */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', borderTop: '1px solid var(--border)', paddingTop: 20 }}>
             {[
               { label: 'Portfoliowert',  value: `${Math.round(balance ?? 0).toLocaleString('de')} ₫`, color: 'var(--text)' },
@@ -243,29 +278,88 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, o
           </div>
         </div>
 
-        {/* Rechts: Gewinn/Verlust */}
-        <div className="card" style={{ padding: '24px 24px 20px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-            <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--yes)' }} />
-            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Gewinn / Verlust</span>
+        {/* Rechts: Gewinn/Verlust + Streak + Trefferquote */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+
+          {/* Gewinn/Verlust */}
+          <div className="card" style={{ padding: '24px 24px 20px', flex: 1 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+              <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--yes)' }} />
+              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Gewinn / Verlust</span>
+            </div>
+            <div style={{ fontSize: 32, fontWeight: 800, color: totalAusbe - totalEinsatz >= 0 ? 'var(--yes)' : 'var(--no)', letterSpacing: '-1px', marginBottom: 4 }}>
+              {totalAusbe - totalEinsatz >= 0 ? '+' : ''}{Math.round(totalAusbe - totalEinsatz).toLocaleString('de')} ₫
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 16 }}>Gesamt</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <div style={{ background: 'rgba(22,163,74,0.06)', borderRadius: 10, padding: '10px 14px' }}>
+                <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Eingesetzt</div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>{Math.round(totalEinsatz).toLocaleString('de')} ₫</div>
+              </div>
+              <div style={{ background: 'rgba(22,163,74,0.06)', borderRadius: 10, padding: '10px 14px' }}>
+                <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Gewonnen</div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--yes)' }}>+{Math.round(totalAusbe).toLocaleString('de')} ₫</div>
+              </div>
+            </div>
+            <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Offene Positionen</span>
+              <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>{offeneCount}</span>
+            </div>
           </div>
-          <div style={{ fontSize: 32, fontWeight: 800, color: totalAusbe - totalEinsatz >= 0 ? 'var(--yes)' : 'var(--no)', letterSpacing: '-1px', marginBottom: 4 }}>
-            {totalAusbe - totalEinsatz >= 0 ? '+' : ''}{Math.round(totalAusbe - totalEinsatz).toLocaleString('de')} ₫
-          </div>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 20 }}>Gesamt</div>
+
+          {/* Feature 2 + 3: Streak & Trefferquote — nebeneinander */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <div style={{ background: 'rgba(22,163,74,0.06)', borderRadius: 10, padding: '10px 14px' }}>
-              <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Eingesetzt</div>
-              <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>{Math.round(totalEinsatz).toLocaleString('de')} ₫</div>
+
+            {/* Streak */}
+            <div className="card" style={{ padding: '16px 18px' }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>
+                Streak
+              </div>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                <span style={{ fontSize: 28, fontWeight: 900, color: streak >= 3 ? '#f59e0b' : 'var(--text)', letterSpacing: '-1px', lineHeight: 1 }}>
+                  {streak}
+                </span>
+                <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 500 }}>
+                  {streak === 1 ? 'Tag' : 'Tage'}
+                </span>
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6, lineHeight: 1.4 }}>
+                {streak === 0
+                  ? 'Heute noch nicht aktiv'
+                  : streak >= 7
+                  ? '🔥 Auf Feuer!'
+                  : streak >= 3
+                  ? '⚡ Gute Serie'
+                  : 'Am laufen bleiben'}
+              </div>
             </div>
-            <div style={{ background: 'rgba(22,163,74,0.06)', borderRadius: 10, padding: '10px 14px' }}>
-              <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Gewonnen</div>
-              <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--yes)' }}>+{Math.round(totalAusbe).toLocaleString('de')} ₫</div>
+
+            {/* Trefferquote */}
+            <div className="card" style={{ padding: '16px 18px' }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>
+                Trefferquote
+              </div>
+              {trefferquote === null ? (
+                <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>Noch keine Daten</div>
+              ) : (
+                <>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
+                    <span style={{ fontSize: 28, fontWeight: 900, letterSpacing: '-1px', lineHeight: 1, color: trefferquote >= 60 ? 'var(--yes)' : trefferquote >= 40 ? 'var(--text)' : 'var(--no)' }}>
+                      {trefferquote}
+                    </span>
+                    <span style={{ fontSize: 14, color: 'var(--text-muted)', fontWeight: 600 }}>%</span>
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6, lineHeight: 1.4 }}>
+                    {trefferquote >= 60
+                      ? 'Überdurchschnittlich'
+                      : trefferquote >= 40
+                      ? 'Solide'
+                      : 'Noch Luft nach oben'}
+                  </div>
+                </>
+              )}
             </div>
-          </div>
-          <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Offene Positionen</span>
-            <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>{offeneCount}</span>
+
           </div>
         </div>
       </div>
@@ -359,7 +453,7 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, o
                             <span style={{ fontSize: 12, padding: '3px 10px', borderRadius: 20, background: 'rgba(245,158,11,0.12)', color: '#b45309', fontWeight: 600 }}>Läuft</span>
                           ) : (
                             <span style={{ fontSize: 12, padding: '3px 10px', borderRadius: 20, fontWeight: 600, background: m.resolution === 'yes' ? 'rgba(22,163,74,0.12)' : 'rgba(220,38,38,0.12)', color: m.resolution === 'yes' ? '#15803d' : '#b91c1c' }}>
-                              {m.is_auto ? (m.resolution === 'yes' ? 'Up ↑' : 'Down ↓') : (m.resolution === 'yes' ? 'Ja' : 'Nein')}
+                              {m.is_auto ? (m.resolution === 'yes' ? 'UP ↑' : 'DOWN ↓') : (m.resolution === 'yes' ? 'Ja' : 'Nein')}
                             </span>
                           )}
                         </td>
@@ -409,7 +503,7 @@ interface FeedMarket {
 interface FeedItem {
   id: string;
   market_id: string;
-  type: string; // 'buy_yes' | 'buy_no' | 'sell_yes' | 'sell_no' | 'win'
+  type: string;
   shares: number;
   cost: number;
   created_at: string;
@@ -436,7 +530,6 @@ function AktivitaetsFeed({ userId }: { userId: string }) {
 
       const withMarkets: FeedItem[] = raw.map(t => ({ ...t, market: mMap[t.market_id] }));
 
-      // Gewinn-Zeilen synthetisch erstellen
       const winItems: FeedItem[] = [];
       const processedWins = new Set<string>();
 
@@ -457,7 +550,6 @@ function AktivitaetsFeed({ userId }: { userId: string }) {
         const totalShares = myBuys.reduce((s, x) => s + (x.shares ?? 0), 0);
         if (totalShares <= 0) continue;
 
-        // Zeitstempel ~3 Min nach erstem Kauf
         const firstBuyTime = new Date(myBuys[myBuys.length - 1].created_at).getTime();
         winItems.push({
           id: `win_${t.market_id}`,
@@ -521,13 +613,11 @@ function AktivitaetsFeed({ userId }: { userId: string }) {
           ? (isYes ? 'Up ↑' : 'Down ↓')
           : (isYes ? 'Ja' : 'Nein');
 
-        // Icon
         let iconBg      = 'rgba(99,102,241,0.12)';
         let iconContent = '⇄';
         if (isWin)       { iconBg = 'rgba(22,163,74,0.15)'; iconContent = '🏆'; }
         else if (isBuy)  { iconBg = isYes ? 'rgba(22,163,74,0.12)' : 'rgba(220,38,38,0.12)'; iconContent = isYes ? '↑' : '↓'; }
 
-        // Text + Betrag
         let subText     = '';
         let amountLabel = '';
         let amountColor = 'var(--text)';
@@ -555,7 +645,6 @@ function AktivitaetsFeed({ userId }: { userId: string }) {
             padding: '14px 20px',
             borderBottom: idx < items.length - 1 ? '1px solid var(--border)' : 'none',
           }}>
-            {/* Icon */}
             {coinColor ? (
               <div style={{ width: 36, height: 36, borderRadius: 10, flexShrink: 0, background: coinColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, color: '#fff' }}>
                 {m?.coin?.charAt(0)}
@@ -565,8 +654,6 @@ function AktivitaetsFeed({ userId }: { userId: string }) {
                 {iconContent}
               </div>
             )}
-
-            {/* Text */}
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 13, fontWeight: isWin ? 600 : 500, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {marketLabel}
@@ -577,8 +664,6 @@ function AktivitaetsFeed({ userId }: { userId: string }) {
                 </div>
               )}
             </div>
-
-            {/* Betrag + Zeit */}
             <div style={{ textAlign: 'right', flexShrink: 0 }}>
               <div style={{ fontSize: 13, fontWeight: 700, color: amountColor }}>{amountLabel}</div>
               <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{formatTime(item.created_at)}</div>
