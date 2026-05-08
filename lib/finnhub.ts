@@ -6,14 +6,13 @@ export type FinanceAsset = {
   category: 'index' | 'stock' | 'commodity' | 'forex'
   tradingHours: {
     timezone: 'Europe/Berlin'
-    open: string  // HH:MM
-    close: string // HH:MM
-    days: number[] // 0=So, 1=Mo, ..., 5=Fr, 6=Sa
+    open: string
+    close: string
+    days: number[]
   }
 }
 
 export const FINANCE_ASSETS: FinanceAsset[] = [
-  // Indizes
   {
     symbol: '^GDAXI',
     label: 'DAX',
@@ -38,7 +37,6 @@ export const FINANCE_ASSETS: FinanceAsset[] = [
     category: 'index',
     tradingHours: { timezone: 'Europe/Berlin', open: '09:00', close: '17:30', days: [1,2,3,4,5] }
   },
-  // US Stocks
   {
     symbol: 'NVDA',
     label: 'NVIDIA',
@@ -87,14 +85,12 @@ export const FINANCE_ASSETS: FinanceAsset[] = [
     category: 'stock',
     tradingHours: { timezone: 'Europe/Berlin', open: '15:30', close: '22:00', days: [1,2,3,4,5] }
   },
-  // DE/EU Stocks
   {
     symbol: 'SAP',
     label: 'SAP',
     category: 'stock',
     tradingHours: { timezone: 'Europe/Berlin', open: '09:00', close: '17:30', days: [1,2,3,4,5] }
   },
-  // Rohstoffe
   {
     symbol: 'OANDA:XAU_USD',
     label: 'Gold',
@@ -113,7 +109,6 @@ export const FINANCE_ASSETS: FinanceAsset[] = [
     category: 'commodity',
     tradingHours: { timezone: 'Europe/Berlin', open: '01:00', close: '23:59', days: [1,2,3,4,5] }
   },
-  // Forex
   {
     symbol: 'OANDA:EUR_USD',
     label: 'EUR/USD',
@@ -131,8 +126,6 @@ export async function finnhubQuote(symbol: string): Promise<number | null> {
     )
     if (!res.ok) return null
     const data = await res.json()
-    // c = current price, pc = previous close
-    // Finnhub liefert 0 wenn Markt geschlossen
     if (!data.c || data.c === 0) return null
     return data.c as number
   } catch {
@@ -140,13 +133,15 @@ export async function finnhubQuote(symbol: string): Promise<number | null> {
   }
 }
 
-export function isMarketOpen(asset: FinanceAsset): boolean {
+export function getBerlinTime(): Date {
   const now = new Date()
-  const berlinTime = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/Berlin' }))
-  const day = berlinTime.getDay()
-  const hours = berlinTime.getHours()
-  const minutes = berlinTime.getMinutes()
-  const currentMinutes = hours * 60 + minutes
+  return new Date(now.toLocaleString('en-US', { timeZone: 'Europe/Berlin' }))
+}
+
+export function isMarketOpen(asset: FinanceAsset): boolean {
+  const berlin = getBerlinTime()
+  const day = berlin.getDay()
+  const currentMinutes = berlin.getHours() * 60 + berlin.getMinutes()
 
   if (!asset.tradingHours.days.includes(day)) return false
 
@@ -159,38 +154,26 @@ export function isMarketOpen(asset: FinanceAsset): boolean {
 }
 
 export function isFriday(): boolean {
-  const now = new Date()
-  const berlinTime = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/Berlin' }))
-  return berlinTime.getDay() === 5
+  return getBerlinTime().getDay() === 5
 }
 
 export function isMonday(): boolean {
-  const now = new Date()
-  const berlinTime = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/Berlin' }))
-  return berlinTime.getDay() === 1
+  return getBerlinTime().getDay() === 1
 }
 
-// Gibt Freitag-Schlusskurs zurück (für Wochenmarkt-Auflösung)
-export function getWeekMarketCloseTime(asset: FinanceAsset): Date {
-  const now = new Date()
-  const berlinTime = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/Berlin' }))
-  
-  // Nächsten Freitag berechnen
-  const day = berlinTime.getDay()
-  const daysUntilFriday = (5 - day + 7) % 7 || 7
-  const friday = new Date(berlinTime)
-  friday.setDate(berlinTime.getDate() + daysUntilFriday)
-  
+export function getDayMarketCloseISO(asset: FinanceAsset): string {
+  const berlin = getBerlinTime()
   const [closeH, closeM] = asset.tradingHours.close.split(':').map(Number)
-  friday.setHours(closeH, closeM, 0, 0)
-  return friday
+  berlin.setHours(closeH, closeM, 0, 0)
+  return berlin.toISOString()
 }
 
-// Gibt heutigen Tagesmarkt-Schlusskurs zurück
-export function getDayMarketCloseTime(asset: FinanceAsset): Date {
-  const now = new Date()
-  const berlinTime = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/Berlin' }))
+export function getWeekMarketCloseISO(asset: FinanceAsset): string {
+  const berlin = getBerlinTime()
+  const day = berlin.getDay()
+  const daysUntilFriday = day === 5 ? 0 : (5 - day + 7) % 7
+  berlin.setDate(berlin.getDate() + daysUntilFriday)
   const [closeH, closeM] = asset.tradingHours.close.split(':').map(Number)
-  berlinTime.setHours(closeH, closeM, 0, 0)
-  return berlinTime
+  berlin.setHours(closeH, closeM, 0, 0)
+  return berlin.toISOString()
 }
