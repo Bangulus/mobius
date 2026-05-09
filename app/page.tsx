@@ -132,6 +132,7 @@ const CAT_CLASS: Record<string, string> = {
   Wirtschaft:    'cat-wirtschaft',
   Geopolitik:    'cat-politik',
   Finanzen:      'cat-wirtschaft',
+  finance:       'cat-wirtschaft',
   Wetter:        'cat-sport',
   Kultur:        'cat-entertainment',
   Tech:          'cat-krypto',
@@ -186,12 +187,25 @@ const SPORT_GROUP_FILTERS: Record<string, string> = {
   'DFB-Kader': '__null__',
 }
 
+// Finanzen Unter-Reiter
+const FINANCE_SUB_TABS = [
+  { id: 'Finanzen-3min',  label: '3-Minuten-Markt',      icon: '⚡' },
+  { id: 'Finanzen-Tag',   label: 'Aktueller Handelstag', icon: '📅' },
+  { id: 'Finanzen-Woche', label: 'Aktuelle Handelswoche', icon: '📆' },
+]
+
+const FINANCE_GROUP_MAP: Record<string, string> = {
+  'Finanzen-3min':  '3-Minuten-Markt',
+  'Finanzen-Tag':   'Aktueller Handelstag',
+  'Finanzen-Woche': 'Aktuelle Handelswoche',
+}
+
 interface NavItemDef {
   id: string
   label: string
   icon: string
   children?: NavItemDef[]
-  parentOnly?: boolean // wenn true: Klick toggelt nur, setzt keine Kategorie
+  parentOnly?: boolean
 }
 
 const NAV_ITEMS: NavItemDef[] = [
@@ -214,7 +228,7 @@ const NAV_ITEMS: NavItemDef[] = [
   { id: 'Wirtschaft',    label: 'Wirtschaft',    icon: '📈' },
   { id: 'Tech',          label: 'Tech',          icon: '💻' },
   { id: 'Geopolitik',    label: 'Geopolitik',    icon: '🌍' },
-  { id: 'Finanzen',      label: 'Finanzen',      icon: '💰' },
+  { id: 'Finanzen', label: 'Finanzen', icon: '💰', parentOnly: true, children: FINANCE_SUB_TABS },
   { id: 'Wetter',        label: 'Wetter',        icon: '🌤️' },
   { id: 'Kultur',        label: 'Kultur',        icon: '🎭' },
 ]
@@ -501,6 +515,8 @@ export default function Home() {
   const isSportCategory = category === 'Sport' || category === 'Fußball' || category === 'Bundesliga'
     || category === 'WM' || category === 'CL' || category === 'F1' || category === 'DFB-Kader'
 
+  const isFinanzCategory = category.startsWith('Finanzen-')
+
   function isPolitikDeutschland(m: Market): boolean {
     return m.category === 'Politik' && !!(m.group_title && m.group_title.toLowerCase().includes('landtag'))
   }
@@ -543,6 +559,9 @@ export default function Home() {
       matchCat = m.category === 'Entertainment' || m.category === 'Unterhaltung'
     } else if (category === 'Krypto') {
       matchCat = m.category === 'Krypto' || m.category === 'krypto'
+    } else if (category.startsWith('Finanzen-')) {
+      const groupTitle = FINANCE_GROUP_MAP[category]
+      matchCat = (m.category === 'finance' || m.category === 'Finanzen') && m.group_title === groupTitle
     } else {
       matchCat = m.category === category || m.category === category.toLowerCase()
     }
@@ -555,7 +574,6 @@ export default function Home() {
     return matchCat && matchSearch
   })
 
-  // Nur expandedNav togglen, keine Kategorie setzen
   const toggleNav = (id: string) => setExpandedNav(prev => ({ ...prev, [id]: !prev[id] }))
 
   const selectCategory = (id: string) => {
@@ -565,9 +583,12 @@ export default function Home() {
   }
 
   const categoryLabel: Record<string, string> = {
-    'Politik-Deutschland': 'Politik · Deutschland',
-    'Politik-USA':         'Politik · USA',
-    'Politik-Welt':        'Politik · Welt',
+    'Politik-Deutschland':  'Politik · Deutschland',
+    'Politik-USA':          'Politik · USA',
+    'Politik-Welt':         'Politik · Welt',
+    'Finanzen-3min':        'Finanzen · 3-Minuten-Markt',
+    'Finanzen-Tag':         'Finanzen · Aktueller Handelstag',
+    'Finanzen-Woche':       'Finanzen · Aktuelle Handelswoche',
   }
 
   return (
@@ -763,7 +784,7 @@ export default function Home() {
       {/* Layout */}
       <div style={{ display: 'flex', minHeight: 'calc(100vh - var(--nav-height, 56px))', maxWidth: 1400, margin: '0 auto' }}>
 
-        {/* Sidebar — ohne Bestenliste */}
+        {/* Sidebar */}
         <aside style={{
           width: 220, flexShrink: 0, borderRight: '1px solid var(--border)',
           padding: '20px 0', position: 'sticky', top: 'var(--nav-height, 56px)',
@@ -812,10 +833,46 @@ export default function Home() {
                 </div>
                 <div className="section-link" onClick={() => loadMarkets()}>Aktualisieren</div>
               </div>
+
+              {/* Finanzen Unter-Reiter */}
+              {isFinanzCategory && (
+                <div style={{ display: 'flex', gap: 8, marginBottom: 24, flexWrap: 'wrap' }}>
+                  {FINANCE_SUB_TABS.map(tab => (
+                    <button
+                      key={tab.id}
+                      onClick={() => selectCategory(tab.id)}
+                      style={{
+                        padding: '7px 16px',
+                        borderRadius: 20,
+                        fontSize: 13,
+                        fontWeight: category === tab.id ? 700 : 500,
+                        border: category === tab.id
+                          ? '1px solid var(--accent, #6366f1)'
+                          : '1px solid var(--border)',
+                        background: category === tab.id
+                          ? 'var(--accent-light, rgba(99,102,241,0.1))'
+                          : 'var(--surface)',
+                        color: category === tab.id
+                          ? 'var(--accent, #6366f1)'
+                          : 'var(--text-muted)',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s',
+                      }}
+                    >
+                      {tab.icon} {tab.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+
               {loading ? (
                 <div style={{ color: 'var(--text-muted)', fontSize: 14, padding: '24px 0' }}>Märkte werden geladen…</div>
               ) : filteredMarkets.length === 0 ? (
-                <div style={{ color: 'var(--text-muted)', fontSize: 14, padding: '24px 0' }}>Keine Märkte gefunden.</div>
+                <div style={{ color: 'var(--text-muted)', fontSize: 14, padding: '24px 0' }}>
+                  {isFinanzCategory
+                    ? 'Noch keine Märkte aktiv. Der Cron startet sie automatisch während der Handelszeiten.'
+                    : 'Keine Märkte gefunden.'}
+                </div>
               ) : (
                 <MarketsGrid markets={filteredMarkets} onOpen={(id) => router.push(`/markets/${id}`)} isSoccer={isSportCategory} />
               )}
@@ -861,11 +918,11 @@ function NavItem({ item, category, expandedNav, onSelect, onToggle, depth }: {
   const hasChildren = item.children && item.children.length > 0
   const isExpanded  = expandedNav[item.id]
   const isActive    = category === item.id ||
-    (item.id === 'Politik' && category.startsWith('Politik-'))
+    (item.id === 'Politik' && category.startsWith('Politik-')) ||
+    (item.id === 'Finanzen' && category.startsWith('Finanzen-'))
 
   const handleClick = () => {
     if (item.parentOnly) {
-      // Nur ein-/ausklappen, keine Kategorie setzen
       onToggle(item.id)
     } else if (hasChildren) {
       onToggle(item.id)
@@ -1087,7 +1144,7 @@ function MarketCard({ market, onClick }: { market: Market; onClick: () => void }
   return (
     <div className="market-card" onClick={onClick}>
       <div className="market-card-meta">
-        {market.category && <span className={`cat-badge ${catClass}`}>{market.category}</span>}
+        {market.category && <span className={`cat-badge ${catClass}`}>{market.category === 'finance' ? 'FINANZEN' : market.category}</span>}
         {market.is_auto && <div className="live-dot" title="Live" />}
       </div>
       <div className="market-card-question">{market.short_label ?? market.question}</div>
