@@ -187,10 +187,9 @@ const SPORT_GROUP_FILTERS: Record<string, string> = {
   'DFB-Kader': '__null__',
 }
 
-// Finanzen Unter-Reiter
 const FINANCE_SUB_TABS = [
-  { id: 'Finanzen-3min',  label: '3-Minuten-Markt',      icon: '⚡' },
-  { id: 'Finanzen-Tag',   label: 'Aktueller Handelstag', icon: '📅' },
+  { id: 'Finanzen-3min',  label: '3-Minuten-Markt',       icon: '⚡' },
+  { id: 'Finanzen-Tag',   label: 'Aktueller Handelstag',  icon: '📅' },
   { id: 'Finanzen-Woche', label: 'Aktuelle Handelswoche', icon: '📆' },
 ]
 
@@ -705,7 +704,7 @@ export default function Home() {
             {authError && <div className="alert alert-error">{authError}</div>}
             <button className="submit-btn yes" onClick={authMode === 'login' ? handleLogin : handleRegister}
               disabled={authLoading} style={{ marginTop: 4 }}>
-              {authLoading ? 'Laden…' : authMode === 'login' ? 'Anmelden' : 'Konto erstellen'}
+              {authLoading ? 'Thinking…' : authMode === 'login' ? 'Anmelden' : 'Konto erstellen'}
             </button>
             {authMode === 'register' && (
               <div style={{ fontSize: 12, color: 'var(--text-subtle)', textAlign: 'center' }}>
@@ -866,11 +865,11 @@ export default function Home() {
               )}
 
               {loading ? (
-                <div style={{ color: 'var(--text-muted)', fontSize: 14, padding: '24px 0' }}>Märkte werden geladen…</div>
+                <div style={{ color: 'var(--text-muted)', fontSize: 14, padding: '24px 0' }}>Thinking…</div>
               ) : filteredMarkets.length === 0 ? (
                 <div style={{ color: 'var(--text-muted)', fontSize: 14, padding: '24px 0' }}>
                   {isFinanzCategory
-                    ? 'Noch keine Märkte aktiv. Der Cron startet sie automatisch während der Handelszeiten.'
+                    ? 'Derzeit sind keine Märkte aktiv. Sie starten automatisch zu Beginn der offiziellen Handelszeiten der deutschen (09:00 – 17:30 Uhr) und amerikanischen Börsen (15:30 – 22:00 Uhr).'
                     : 'Keine Märkte gefunden.'}
                 </div>
               ) : (
@@ -1193,7 +1192,7 @@ function PortfolioView({ userId, router }: { userId: string; router: ReturnType<
     })
   }, [userId])
 
-  if (loading) return <div style={{ color: 'var(--text-muted)', padding: '24px 0' }}>Portfolio wird geladen…</div>
+  if (loading) return <div style={{ color: 'var(--text-muted)', padding: '24px 0' }}>Thinking…</div>
   if (positions.length === 0) return (
     <div className="card" style={{ textAlign: 'center', padding: 32 }}>
       <div style={{ fontSize: 14, color: 'var(--text-muted)', marginBottom: 8 }}>Noch keine Positionen.</div>
