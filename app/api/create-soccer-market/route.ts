@@ -22,16 +22,24 @@ async function marketExists(matchId: string): Promise<boolean> {
 
 async function createThreeMarkets(match: OpenLigaMatch) {
   const matchId = `bl1-${match.matchID}`
-  const closesAt = new Date(new Date(match.matchDateTime).getTime() + 115 * 60 * 1000).toISOString()
+
+  // matchDateTimeUTC ist zuverlässig UTC — kein Timezone-Problem
+  const matchUTC = match.matchDateTimeUTC
+    ? new Date(match.matchDateTimeUTC.endsWith('Z') ? match.matchDateTimeUTC : match.matchDateTimeUTC + 'Z')
+    : new Date(match.matchDateTime + 'Z')
+
+  const closesAt = new Date(matchUTC.getTime() + 115 * 60 * 1000).toISOString()
   const displayGroup = `${match.team1.teamName} vs ${match.team2.teamName}`
-  const matchDate = new Date(match.matchDateTime).toLocaleString('de-DE', {
+
+  // Uhrzeit korrekt in Berliner Zeit — nur HH:MM, klar und einfach
+  const timeLabel = matchUTC.toLocaleTimeString('de-DE', {
     timeZone: 'Europe/Berlin',
-    weekday: 'short',
-    day: '2-digit',
-    month: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
   })
+
+  // match_date nur als Uhrzeit speichern — das ist alles was wir anzeigen
+  const matchDate = timeLabel
 
   const outcomes = [
     {
@@ -54,7 +62,7 @@ async function createThreeMarkets(match: OpenLigaMatch) {
   for (const o of outcomes) {
     const body = {
       question: o.question,
-      description: `Bundesliga · ${displayGroup} · Anpfiff: ${matchDate}`,
+      description: `Bundesliga · ${displayGroup} · Anpfiff: ${timeLabel} Uhr`,
       status: 'open',
       b: 100,
       q_yes: 0,
@@ -91,14 +99,12 @@ export async function GET() {
   try {
     const allMatches = await getCurrentMatches()
     const upcoming = getUpcomingMatches(allMatches)
-
     let created = 0
 
     for (const match of upcoming) {
       const matchId = `bl1-${match.matchID}`
       const exists = await marketExists(matchId)
       if (exists) continue
-
       await createThreeMarkets(match)
       created++
     }
