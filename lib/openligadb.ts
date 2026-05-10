@@ -1,6 +1,7 @@
 export interface OpenLigaMatch {
   matchID: number
   matchDateTime: string
+  matchDateTimeUTC?: string
   team1: { teamId: number; teamName: string; teamIconUrl: string }
   team2: { teamId: number; teamName: string; teamIconUrl: string }
   matchIsFinished: boolean
