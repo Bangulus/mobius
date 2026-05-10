@@ -281,6 +281,8 @@ const TEAM_COLORS: Record<string, string> = {
 
 
 function getTeamColor(name: string): string {
+  return TEAM_COLORS[name] ?? '#6366f1'
+}
 
 function getTeamInitials(name: string): string {
   const clean = name.replace(/^(FC|BV|SV|TSG|VfB|VfL|SC|RB|1\.|FSV)\s+/i, '')
