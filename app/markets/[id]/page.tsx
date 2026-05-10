@@ -208,26 +208,56 @@ const CAT_CLASS: Record<string, string> = {
 }
 const COIN_COLORS: Record<string, string> = { BTC: '#f59e0b', ETH: '#6366f1', SOL: '#9945ff', XRP: '#00aae4' }
 
+const TEAM_LOGOS: Record<string, string> = {
+  'FC Bayern München':         'https://upload.wikimedia.org/wikipedia/commons/1/1f/Logo_FC_Bayern_M%C3%BCnchen_%282002%E2%80%932017%29.svg',
+  'Borussia Dortmund':         'https://upload.wikimedia.org/wikipedia/commons/6/67/Borussia_Dortmund_logo.svg',
+  'BV Borussia 09 Dortmund':   'https://upload.wikimedia.org/wikipedia/commons/6/67/Borussia_Dortmund_logo.svg',
+  'RB Leipzig':                'https://upload.wikimedia.org/wikipedia/commons/0/04/RB_Leipzig_2014_logo.svg',
+  'Bayer 04 Leverkusen':       'https://upload.wikimedia.org/wikipedia/de/f/f7/Bayer_Leverkusen_Logo.svg',
+  'Eintracht Frankfurt':       'https://upload.wikimedia.org/wikipedia/commons/0/04/Eintracht_Frankfurt_Logo.svg',
+  'VfB Stuttgart':             'https://upload.wikimedia.org/wikipedia/commons/e/eb/VfB_Stuttgart_1893_Logo.svg',
+  'TSG Hoffenheim':            'https://upload.wikimedia.org/wikipedia/commons/6/64/TSG_1899_Hoffenheim_logo.svg',
+  'SC Freiburg':               'https://upload.wikimedia.org/wikipedia/de/f/f1/SC-Freiburg_Logo-neu.svg',
+  'Borussia Mönchengladbach':  'https://upload.wikimedia.org/wikipedia/commons/8/81/Borussia_M%C3%B6nchengladbach_logo.svg',
+  'VfL Wolfsburg':             'https://upload.wikimedia.org/wikipedia/commons/f/f3/Logo-VfL-Wolfsburg.svg',
+  'FC Augsburg':               'https://upload.wikimedia.org/wikipedia/de/b/b5/Logo_FC_Augsburg.svg',
+  'SV Werder Bremen':          'https://upload.wikimedia.org/wikipedia/commons/b/be/SV-Werder-Bremen-Logo.svg',
+  'Mainz 05':                  'https://upload.wikimedia.org/wikipedia/commons/9/9e/Logo_Mainz_05.svg',
+  '1. FSV Mainz 05':           'https://upload.wikimedia.org/wikipedia/commons/9/9e/Logo_Mainz_05.svg',
+  'FC St. Pauli':              'https://upload.wikimedia.org/wikipedia/commons/f/fb/FC_St._Pauli_logo_%282018%29.svg',
+  '1. FC Union Berlin':        'https://upload.wikimedia.org/wikipedia/commons/4/44/1._FC_Union_Berlin_Logo.svg',
+  'Union Berlin':              'https://upload.wikimedia.org/wikipedia/commons/4/44/1._FC_Union_Berlin_Logo.svg',
+  '1. FC Heidenheim 1846':     'https://upload.wikimedia.org/wikipedia/commons/9/9d/1._FC_Heidenheim_1846.svg',
+  'Hamburger SV':              'https://upload.wikimedia.org/wikipedia/commons/f/f9/Hamburger_SV_logo.svg',
+  '1. FC Köln':                'https://upload.wikimedia.org/wikipedia/commons/5/53/FC_Cologne_logo.svg',
+}
+
 const TEAM_COLORS: Record<string, string> = {
   'FC Bayern München': '#dc052d',
   'Borussia Dortmund': '#fde100',
+  'BV Borussia 09 Dortmund': '#fde100',
   'Bayer 04 Leverkusen': '#e32221',
   'RB Leipzig': '#dd0741',
   'Eintracht Frankfurt': '#e1000f',
   'VfB Stuttgart': '#e32219',
   'SC Freiburg': '#e30613',
   'Union Berlin': '#eb1923',
+  '1. FC Union Berlin': '#eb1923',
   'Borussia Mönchengladbach': '#000000',
   'VfL Wolfsburg': '#65b32e',
   'TSG Hoffenheim': '#1961ae',
   'FC Augsburg': '#ba3733',
   'SV Werder Bremen': '#1d9053',
   'Mainz 05': '#c1121c',
+  '1. FSV Mainz 05': '#c1121c',
   'VfL Bochum': '#005aaa',
   'FC Heidenheim': '#e2001a',
+  '1. FC Heidenheim 1846': '#e2001a',
   'SV Darmstadt 98': '#004f9f',
   'Holstein Kiel': '#c8102e',
-  'BV Borussia 09 Dortmund': '#fde100',
+  'FC St. Pauli': '#6b3c26',
+  'Hamburger SV': '#0033a0',
+  '1. FC Köln': '#c8102e',
 }
 
 function getTeamColor(name: string): string {
@@ -235,10 +265,54 @@ function getTeamColor(name: string): string {
 }
 
 function getTeamInitials(name: string): string {
-  const clean = name.replace(/^(FC|BV|SV|TSG|VfB|VfL|SC|RB)\s+/i, '')
+  const clean = name.replace(/^(FC|BV|SV|TSG|VfB|VfL|SC|RB|1\.|FSV)\s+/i, '')
   const words = clean.split(' ').filter(Boolean)
   if (words.length === 1) return words[0].substring(0, 3).toUpperCase()
   return (words[0][0] + (words[1]?.[0] ?? '')).toUpperCase()
+}
+
+function TeamIcon({ name, size = 64 }: { name: string; size?: number }) {
+  const logoUrl = TEAM_LOGOS[name]
+  const color   = getTeamColor(name)
+  const radius  = Math.round(size * 0.22)
+  const fontSize = Math.round(size * 0.32)
+  if (logoUrl) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={logoUrl}
+        alt={name}
+        style={{
+          width: size, height: size,
+          borderRadius: radius,
+          objectFit: 'contain',
+          background: '#fff',
+          padding: Math.round(size * 0.08),
+          boxShadow: `0 2px 12px ${color}33`,
+          flexShrink: 0,
+        }}
+        onError={e => {
+          const el = e.target as HTMLImageElement
+          el.style.display = 'none'
+          const fb = el.nextElementSibling as HTMLElement | null
+          if (fb) fb.style.display = 'flex'
+        }}
+      />
+    )
+  }
+  return (
+    <div style={{
+      width: size, height: size,
+      borderRadius: radius,
+      background: color,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontSize, fontWeight: 900, color: '#fff',
+      boxShadow: `0 2px 12px ${color}44`,
+      flexShrink: 0,
+    }}>
+      {getTeamInitials(name)}
+    </div>
+  )
 }
 
 function LivePositionsBar({ trades, isKrypto }: { trades: Trade[]; isKrypto: boolean }) {
@@ -862,7 +936,13 @@ export default function MarketPage() {
         <div className="nav-left">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/logo-weiss.png" alt="Möbius" className="nav-logo" onClick={() => router.push('/')} style={{ cursor: 'pointer' }} />
-          <button className="nav-pill" onClick={() => router.push('/')} style={{ fontSize: 13 }}>← Zurück zur Hauptseite</button>
+          <button className="nav-pill" onClick={() => {
+            if (market?.match_id) { router.push('/?category=Sport&tab=Bundesliga'); return }
+            if (market?.category) { router.push(`/?category=${encodeURIComponent(market.category)}`); return }
+            router.push('/')
+          }} style={{ fontSize: 13 }}>
+            {market?.match_id ? '← Zurück zur Bundesliga' : market?.category ? `← Zurück zu ${market.category}` : '← Zurück'}
+          </button>
         </div>
         <div className="nav-right">
           {user ? (
@@ -916,14 +996,7 @@ export default function MarketPage() {
 
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 32, marginBottom: 24 }}>
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, flex: 1 }}>
-                  {homeMarket?.team_icon_url ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={homeMarket.team_icon_url} alt={homeTeam} style={{ width: 64, height: 64, borderRadius: 16, objectFit: 'contain', background: '#f8f8f8', padding: 6, boxShadow: `0 4px 16px ${getTeamColor(homeTeam)}33` }} onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
-                  ) : (
-                    <div style={{ width: 64, height: 64, borderRadius: 16, background: getTeamColor(homeTeam), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, fontWeight: 900, color: '#fff', boxShadow: `0 4px 16px ${getTeamColor(homeTeam)}44` }}>
-                      {getTeamInitials(homeTeam)}
-                    </div>
-                  )}
+                  <TeamIcon name={homeTeam} size={64} />
                   <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', textAlign: 'center', maxWidth: 120, lineHeight: 1.3 }}>{homeTeam}</div>
                   <div style={{ fontSize: 24, fontWeight: 800, color: getTeamColor(homeTeam) }}>{homeNorm}%</div>
                 </div>
@@ -950,14 +1023,7 @@ export default function MarketPage() {
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, flex: 1 }}>
-                  {awayMarket?.team_icon_url ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={awayMarket.team_icon_url} alt={awayTeam} style={{ width: 64, height: 64, borderRadius: 16, objectFit: 'contain', background: '#f8f8f8', padding: 6, boxShadow: `0 4px 16px ${getTeamColor(awayTeam)}33` }} onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
-                  ) : (
-                    <div style={{ width: 64, height: 64, borderRadius: 16, background: getTeamColor(awayTeam), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, fontWeight: 900, color: '#fff', boxShadow: `0 4px 16px ${getTeamColor(awayTeam)}44` }}>
-                      {getTeamInitials(awayTeam)}
-                    </div>
-                  )}
+                  <TeamIcon name={awayTeam} size={64} />
                   <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', textAlign: 'center', maxWidth: 120, lineHeight: 1.3 }}>{awayTeam}</div>
                   <div style={{ fontSize: 24, fontWeight: 800, color: getTeamColor(awayTeam) }}>{awayNorm}%</div>
                 </div>
@@ -983,9 +1049,9 @@ export default function MarketPage() {
                 </div>
 
                 {[
-                  { outcome: 'home', market: homeMarket, label: homeTeam, prob: homeNorm, color: getTeamColor(homeTeam), initials: getTeamInitials(homeTeam) },
-                  { outcome: 'draw', market: drawMarket, label: 'Unentschieden', prob: drawNorm, color: '#64748b', initials: 'X' },
-                  { outcome: 'away', market: awayMarket, label: awayTeam, prob: awayNorm, color: getTeamColor(awayTeam), initials: getTeamInitials(awayTeam) },
+                  { outcome: 'home', market: homeMarket, label: homeTeam, prob: homeNorm, color: getTeamColor(homeTeam) },
+                  { outcome: 'draw', market: drawMarket, label: 'Unentschieden', prob: drawNorm, color: '#64748b' },
+                  { outcome: 'away', market: awayMarket, label: awayTeam, prob: awayNorm, color: getTeamColor(awayTeam) },
                 ].map(opt => {
                   const isActive   = thisOutcome === opt.outcome
                   const isResolved = opt.market?.resolved
@@ -995,9 +1061,11 @@ export default function MarketPage() {
                       onClick={() => { if (opt.market && opt.market.id !== marketId) router.push(`/markets/${opt.market.id}`) }}
                       style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderRadius: 14, cursor: opt.market?.id !== marketId ? 'pointer' : 'default', border: isActive ? `2px solid ${opt.color}` : '2px solid var(--border)', background: isActive ? `${opt.color}10` : 'var(--card)', transition: 'all 0.15s', position: 'relative', opacity: isResolved && !won ? 0.6 : 1 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                        <div style={{ width: 44, height: 44, borderRadius: 11, background: opt.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 900, color: '#fff', flexShrink: 0 }}>
-                          {opt.initials}
-                        </div>
+                        {opt.outcome === 'draw' ? (
+                          <div style={{ width: 44, height: 44, borderRadius: 11, background: '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 900, color: '#fff', flexShrink: 0 }}>X</div>
+                        ) : (
+                          <TeamIcon name={opt.label} size={44} />
+                        )}
                         <div>
                           <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>{opt.label}</div>
                           <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
