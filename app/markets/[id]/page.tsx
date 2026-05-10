@@ -208,28 +208,47 @@ const CAT_CLASS: Record<string, string> = {
 }
 const COIN_COLORS: Record<string, string> = { BTC: '#f59e0b', ETH: '#6366f1', SOL: '#9945ff', XRP: '#00aae4' }
 
-const TEAM_LOGOS: Record<string, string> = {
-  'FC Bayern München':         'https://upload.wikimedia.org/wikipedia/commons/1/1f/Logo_FC_Bayern_M%C3%BCnchen_%282002%E2%80%932017%29.svg',
-  'Borussia Dortmund':         'https://upload.wikimedia.org/wikipedia/commons/6/67/Borussia_Dortmund_logo.svg',
-  'BV Borussia 09 Dortmund':   'https://upload.wikimedia.org/wikipedia/commons/6/67/Borussia_Dortmund_logo.svg',
-  'RB Leipzig':                'https://upload.wikimedia.org/wikipedia/commons/0/04/RB_Leipzig_2014_logo.svg',
-  'Bayer 04 Leverkusen':       'https://upload.wikimedia.org/wikipedia/de/f/f7/Bayer_Leverkusen_Logo.svg',
-  'Eintracht Frankfurt':       'https://upload.wikimedia.org/wikipedia/commons/0/04/Eintracht_Frankfurt_Logo.svg',
-  'VfB Stuttgart':             'https://upload.wikimedia.org/wikipedia/commons/e/eb/VfB_Stuttgart_1893_Logo.svg',
-  'TSG Hoffenheim':            'https://upload.wikimedia.org/wikipedia/commons/6/64/TSG_1899_Hoffenheim_logo.svg',
-  'SC Freiburg':               'https://upload.wikimedia.org/wikipedia/de/f/f1/SC-Freiburg_Logo-neu.svg',
-  'Borussia Mönchengladbach':  'https://upload.wikimedia.org/wikipedia/commons/8/81/Borussia_M%C3%B6nchengladbach_logo.svg',
-  'VfL Wolfsburg':             'https://upload.wikimedia.org/wikipedia/commons/f/f3/Logo-VfL-Wolfsburg.svg',
-  'FC Augsburg':               'https://upload.wikimedia.org/wikipedia/de/b/b5/Logo_FC_Augsburg.svg',
-  'SV Werder Bremen':          'https://upload.wikimedia.org/wikipedia/commons/b/be/SV-Werder-Bremen-Logo.svg',
-  'Mainz 05':                  'https://upload.wikimedia.org/wikipedia/commons/9/9e/Logo_Mainz_05.svg',
-  '1. FSV Mainz 05':           'https://upload.wikimedia.org/wikipedia/commons/9/9e/Logo_Mainz_05.svg',
-  'FC St. Pauli':              'https://upload.wikimedia.org/wikipedia/commons/f/fb/FC_St._Pauli_logo_%282018%29.svg',
-  '1. FC Union Berlin':        'https://upload.wikimedia.org/wikipedia/commons/4/44/1._FC_Union_Berlin_Logo.svg',
-  'Union Berlin':              'https://upload.wikimedia.org/wikipedia/commons/4/44/1._FC_Union_Berlin_Logo.svg',
-  '1. FC Heidenheim 1846':     'https://upload.wikimedia.org/wikipedia/commons/9/9d/1._FC_Heidenheim_1846.svg',
-  'Hamburger SV':              'https://upload.wikimedia.org/wikipedia/commons/f/f9/Hamburger_SV_logo.svg',
-  '1. FC Köln':                'https://upload.wikimedia.org/wikipedia/commons/5/53/FC_Cologne_logo.svg',
+// Transfermarkt CDN — normalisierter Lookup
+function normalizeTeamName(name: string): string {
+  return name.toLowerCase()
+    .replace(/ü/g, 'u').replace(/ö/g, 'o').replace(/ä/g, 'a').replace(/ß/g, 'ss')
+    .replace(/\./g, '').replace(/\s+/g, ' ').trim()
+}
+
+const TEAM_LOGOS_RAW: Record<string, string> = {
+  'fc bayern munchen':        'https://tmssl.akamaized.net/images/wappen/head/27.png',
+  'borussia dortmund':        'https://tmssl.akamaized.net/images/wappen/head/16.png',
+  'bv borussia 09 dortmund':  'https://tmssl.akamaized.net/images/wappen/head/16.png',
+  'rb leipzig':               'https://tmssl.akamaized.net/images/wappen/head/23826.png',
+  'bayer 04 leverkusen':      'https://tmssl.akamaized.net/images/wappen/head/15.png',
+  'eintracht frankfurt':      'https://tmssl.akamaized.net/images/wappen/head/24.png',
+  'vfb stuttgart':            'https://tmssl.akamaized.net/images/wappen/head/79.png',
+  'tsg hoffenheim':           'https://tmssl.akamaized.net/images/wappen/head/533.png',
+  'tsg 1899 hoffenheim':      'https://tmssl.akamaized.net/images/wappen/head/533.png',
+  'sc freiburg':              'https://tmssl.akamaized.net/images/wappen/head/60.png',
+  'borussia monchengladbach': 'https://tmssl.akamaized.net/images/wappen/head/18.png',
+  'vfl wolfsburg':            'https://tmssl.akamaized.net/images/wappen/head/82.png',
+  'fc augsburg':              'https://tmssl.akamaized.net/images/wappen/head/167.png',
+  'sv werder bremen':         'https://tmssl.akamaized.net/images/wappen/head/86.png',
+  'mainz 05':                 'https://tmssl.akamaized.net/images/wappen/head/39.png',
+  '1 fsv mainz 05':           'https://tmssl.akamaized.net/images/wappen/head/39.png',
+  'fsv mainz 05':             'https://tmssl.akamaized.net/images/wappen/head/39.png',
+  'fc st pauli':              'https://tmssl.akamaized.net/images/wappen/head/35.png',
+  '1 fc union berlin':        'https://tmssl.akamaized.net/images/wappen/head/89.png',
+  'union berlin':             'https://tmssl.akamaized.net/images/wappen/head/89.png',
+  '1 fc heidenheim 1846':     'https://tmssl.akamaized.net/images/wappen/head/2036.png',
+  'fc heidenheim 1846':       'https://tmssl.akamaized.net/images/wappen/head/2036.png',
+  'hamburger sv':             'https://tmssl.akamaized.net/images/wappen/head/41.png',
+  '1 fc koln':                'https://tmssl.akamaized.net/images/wappen/head/3.png',
+  'fc koln':                  'https://tmssl.akamaized.net/images/wappen/head/3.png',
+  'vfl bochum':               'https://tmssl.akamaized.net/images/wappen/head/80.png',
+  'holstein kiel':            'https://tmssl.akamaized.net/images/wappen/head/1896.png',
+  'fortuna dusseldorf':       'https://tmssl.akamaized.net/images/wappen/head/44.png',
+  'sv darmstadt 98':          'https://tmssl.akamaized.net/images/wappen/head/105.png',
+}
+
+function getTeamLogo(name: string): string | undefined {
+  return TEAM_LOGOS_RAW[normalizeTeamName(name)]
 }
 
 const TEAM_COLORS: Record<string, string> = {
@@ -260,9 +279,8 @@ const TEAM_COLORS: Record<string, string> = {
   '1. FC Köln': '#c8102e',
 }
 
+
 function getTeamColor(name: string): string {
-  return TEAM_COLORS[name] ?? '#6366f1'
-}
 
 function getTeamInitials(name: string): string {
   const clean = name.replace(/^(FC|BV|SV|TSG|VfB|VfL|SC|RB|1\.|FSV)\s+/i, '')
@@ -272,16 +290,18 @@ function getTeamInitials(name: string): string {
 }
 
 function TeamIcon({ name, size = 64 }: { name: string; size?: number }) {
-  const logoUrl = TEAM_LOGOS[name]
+  const [imgError, setImgError] = useState(false)
+  const logoUrl = getTeamLogo(name)
   const color   = getTeamColor(name)
   const radius  = Math.round(size * 0.22)
   const fontSize = Math.round(size * 0.32)
-  if (logoUrl) {
+  if (logoUrl && !imgError) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
       <img
         src={logoUrl}
         alt={name}
+        onError={() => setImgError(true)}
         style={{
           width: size, height: size,
           borderRadius: radius,
@@ -290,12 +310,6 @@ function TeamIcon({ name, size = 64 }: { name: string; size?: number }) {
           padding: Math.round(size * 0.08),
           boxShadow: `0 2px 12px ${color}33`,
           flexShrink: 0,
-        }}
-        onError={e => {
-          const el = e.target as HTMLImageElement
-          el.style.display = 'none'
-          const fb = el.nextElementSibling as HTMLElement | null
-          if (fb) fb.style.display = 'flex'
         }}
       />
     )
