@@ -35,6 +35,7 @@ interface Market {
   display_group?: string
   short_label?: string
   group_title?: string
+  team_icon_url?: string
 }
 
 interface Trade {
@@ -597,6 +598,7 @@ export default function MarketPage() {
     return () => clearInterval(id)
   }, [market?.closes_at, market?.coin, market?.id, market?.match_id, loadMarket, loadLiveMarkets, user?.id])
 
+  const [liveScore, setLiveScore] = useState<{ home: number; away: number } | null>(null)
   const [soccerCountdown, setSoccerCountdown] = useState('')
   useEffect(() => {
     if (!market?.match_id || !market?.closes_at) return
@@ -614,6 +616,34 @@ export default function MarketPage() {
     const id = setInterval(tick, 1000)
     return () => clearInterval(id)
   }, [market?.match_id, market?.closes_at])
+
+  // Live-Score polling: holt aktuellen Spielstand von OpenLigaDB alle 60s
+  useEffect(() => {
+    if (!market?.match_id || market?.resolved) return
+    const matchIdNum = market.match_id.replace('bl1-', '')
+    const fetchScore = async () => {
+      try {
+        const season = new Date().getMonth() >= 7 ? new Date().getFullYear() : new Date().getFullYear() - 1
+        const res = await fetch(`https://api.openligadb.de/getmatchdata/bl1/${season}`, { cache: 'no-store' })
+        if (!res.ok) return
+        const matches = await res.json()
+        const match = matches.find((m: { matchID: number }) => String(m.matchID) === matchIdNum)
+        if (!match) return
+        const goals = match.goals ?? []
+        if (goals.length === 0 && !match.matchIsFinished) return
+        const final = match.matchResults?.find((r: { resultTypeID: number }) => r.resultTypeID === 2)
+        if (final) {
+          setLiveScore({ home: final.pointsTeam1, away: final.pointsTeam2 })
+        } else if (goals.length > 0) {
+          const last = goals[goals.length - 1]
+          setLiveScore({ home: last.scoreTeam1, away: last.scoreTeam2 })
+        }
+      } catch {}
+    }
+    fetchScore()
+    const id = setInterval(fetchScore, 60000)
+    return () => clearInterval(id)
+  }, [market?.match_id, market?.resolved])
 
   const tradeHistory = (() => {
     if (!market || trades.length === 0) return []
@@ -832,7 +862,7 @@ export default function MarketPage() {
         <div className="nav-left">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/logo-weiss.png" alt="Möbius" className="nav-logo" onClick={() => router.push('/')} style={{ cursor: 'pointer' }} />
-          <button className="nav-pill" onClick={() => router.push('/')} style={{ fontSize: 13 }}>← Alle Märkte</button>
+          <button className="nav-pill" onClick={() => router.push('/')} style={{ fontSize: 13 }}>← Zurück zur Hauptseite</button>
         </div>
         <div className="nav-right">
           {user ? (
@@ -869,7 +899,7 @@ export default function MarketPage() {
                 alignItems: 'center',
                 gap: 10,
               }}>
-                <span style={{ fontSize: 18 }}>⏹</span>
+                <span style={{ width: 10, height: 10, borderRadius: '50%', background: 'var(--text-muted)', display: 'inline-block', flexShrink: 0 }} />
                 <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-muted)' }}>
                   Dieser Möbius-Markt ist nicht mehr aktiv
                 </span>
@@ -886,23 +916,48 @@ export default function MarketPage() {
 
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 32, marginBottom: 24 }}>
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, flex: 1 }}>
-                  <div style={{ width: 64, height: 64, borderRadius: 16, background: getTeamColor(homeTeam), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, fontWeight: 900, color: '#fff', boxShadow: `0 4px 16px ${getTeamColor(homeTeam)}44` }}>
-                    {getTeamInitials(homeTeam)}
-                  </div>
+                  {homeMarket?.team_icon_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={homeMarket.team_icon_url} alt={homeTeam} style={{ width: 64, height: 64, borderRadius: 16, objectFit: 'contain', background: '#f8f8f8', padding: 6, boxShadow: `0 4px 16px ${getTeamColor(homeTeam)}33` }} onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
+                  ) : (
+                    <div style={{ width: 64, height: 64, borderRadius: 16, background: getTeamColor(homeTeam), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, fontWeight: 900, color: '#fff', boxShadow: `0 4px 16px ${getTeamColor(homeTeam)}44` }}>
+                      {getTeamInitials(homeTeam)}
+                    </div>
+                  )}
                   <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', textAlign: 'center', maxWidth: 120, lineHeight: 1.3 }}>{homeTeam}</div>
                   <div style={{ fontSize: 24, fontWeight: 800, color: getTeamColor(homeTeam) }}>{homeNorm}%</div>
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, letterSpacing: 1 }}>VS</div>
-                  <div style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 600 }}>Unentschieden</div>
-                  <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-muted)' }}>{drawNorm}%</div>
+                  {liveScore ? (
+                    <>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, letterSpacing: 1, marginBottom: 2 }}>LIVE</div>
+                      <div style={{ fontSize: 36, fontWeight: 900, color: 'var(--text)', letterSpacing: '-1px', lineHeight: 1 }}>
+                        {liveScore.home} : {liveScore.away}
+                      </div>
+                      <div style={{ fontSize: 11, color: '#22c55e', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#22c55e', display: 'inline-block' }} />
+                        Zwischenstand
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, letterSpacing: 1 }}>VS</div>
+                      <div style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 600 }}>Unentschieden</div>
+                      <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-muted)' }}>{drawNorm}%</div>
+                    </>
+                  )}
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, flex: 1 }}>
-                  <div style={{ width: 64, height: 64, borderRadius: 16, background: getTeamColor(awayTeam), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, fontWeight: 900, color: '#fff', boxShadow: `0 4px 16px ${getTeamColor(awayTeam)}44` }}>
-                    {getTeamInitials(awayTeam)}
-                  </div>
+                  {awayMarket?.team_icon_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={awayMarket.team_icon_url} alt={awayTeam} style={{ width: 64, height: 64, borderRadius: 16, objectFit: 'contain', background: '#f8f8f8', padding: 6, boxShadow: `0 4px 16px ${getTeamColor(awayTeam)}33` }} onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
+                  ) : (
+                    <div style={{ width: 64, height: 64, borderRadius: 16, background: getTeamColor(awayTeam), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, fontWeight: 900, color: '#fff', boxShadow: `0 4px 16px ${getTeamColor(awayTeam)}44` }}>
+                      {getTeamInitials(awayTeam)}
+                    </div>
+                  )}
                   <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', textAlign: 'center', maxWidth: 120, lineHeight: 1.3 }}>{awayTeam}</div>
                   <div style={{ fontSize: 24, fontWeight: 800, color: getTeamColor(awayTeam) }}>{awayNorm}%</div>
                 </div>
@@ -981,7 +1036,7 @@ export default function MarketPage() {
               <div className="card" style={{ position: 'sticky', top: 'calc(var(--nav-height) + 16px)', padding: 0, overflow: 'hidden' }}>
                 {soccerIsInactive ? (
                   <div style={{ padding: '24px 16px', textAlign: 'center' }}>
-                    <div style={{ fontSize: 28, marginBottom: 8 }}>{userWon ? '🎉' : hasPosition ? '😔' : '⏹'}</div>
+                    <div style={{ fontSize: 28, marginBottom: 8 }}>{userWon ? '🎉' : hasPosition ? '😔' : '🏁'}</div>
                     <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 6 }}>
                       {userWon ? 'Gewonnen!' : hasPosition ? 'Verloren' : 'Markt nicht mehr aktiv'}
                     </div>
@@ -993,8 +1048,8 @@ export default function MarketPage() {
                         +{Math.round(market.resolution === 'yes' ? sharesYes : sharesNo)} ₫
                       </div>
                     )}
-                    <button onClick={() => router.push('/')} style={{ width: '100%', padding: '12px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 10, cursor: 'pointer', fontSize: 14, fontWeight: 700 }}>
-                      Weitere Märkte →
+                    <button onClick={() => router.push('/?category=Sport&tab=Bundesliga')} style={{ width: '100%', padding: '12px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 10, cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>
+                      Weitere Möbius-Märkte zur Bundesliga →
                     </button>
                   </div>
                 ) : !user ? (
