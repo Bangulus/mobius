@@ -187,8 +187,8 @@ function getTeamLogo(name: string): string | undefined {
 
 const TEAM_COLORS: Record<string, string> = {
   'FC Bayern München':          '#dc052d',
-  'Borussia Dortmund':          '#fde100',
-  'BV Borussia 09 Dortmund':    '#fde100',
+  'Borussia Dortmund':          '#1a1a1a',
+  'BV Borussia 09 Dortmund':    '#1a1a1a',
   'Bayer 04 Leverkusen':        '#e32221',
   'RB Leipzig':                 '#dd0741',
   'Eintracht Frankfurt':        '#e1000f',
@@ -1099,11 +1099,8 @@ function PastSoccerSection({ markets, onOpen }: { markets: Market[]; onOpen: (id
         </div>
       </div>
 
-      {Object.entries(byDate).map(([dateKey, dayMatches]) => (
-        <div key={dateKey} style={{ marginBottom: 24 }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 8, letterSpacing: 0.3, textTransform: 'uppercase' }}>
-            {dateKey}
-          </div>
+      {Object.entries(byDate).map(([, dayMatches]) => (
+        <div key={dayMatches[0][0]} style={{ marginBottom: 12 }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {dayMatches.map(([matchId, matchMarkets]) => (
               <PastMatchRow
@@ -1295,13 +1292,66 @@ function MarketsGrid({ markets, onOpen, isSoccer }: { markets: Market[]; onOpen:
   )
 }
 
+interface LiveGoal {
+  matchMinute: number
+  goalGetterName: string
+  scoreTeam1: number
+  scoreTeam2: number
+  isOwnGoal: boolean
+}
+
+interface LiveMatchData {
+  score: { home: number; away: number } | null
+  goals: LiveGoal[]
+  isLive: boolean
+  minute: number | null
+}
+
 function SoccerMatchCard({ markets, onOpen }: { markets: Market[]; onOpen: (id: string) => void }) {
   const homeMarket = markets.find(m => m.outcome === 'home')
   const drawMarket = markets.find(m => m.outcome === 'draw')
   const awayMarket = markets.find(m => m.outcome === 'away')
+  const [liveData, setLiveData] = useState<LiveMatchData | null>(null)
 
   const anyMarket = homeMarket ?? drawMarket ?? awayMarket
   if (!anyMarket) return null
+
+  const matchIdNum = anyMarket.match_id?.replace('bl1-', '')
+  const closesAtMs = parseUTC(anyMarket.closes_at).getTime()
+  const now = Date.now()
+  const matchStartMs = closesAtMs - 115 * 60 * 1000
+  const isOngoing = now >= matchStartMs && now <= closesAtMs + 30 * 60 * 1000
+
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  useEffect(() => {
+    if (!matchIdNum || !isOngoing) return
+    const fetchLive = async () => {
+      try {
+        const season = new Date().getMonth() >= 7 ? new Date().getFullYear() : new Date().getFullYear() - 1
+        const res = await fetch(`https://api.openligadb.de/getmatchdata/bl1/${season}`, { cache: 'no-store' })
+        if (!res.ok) return
+        const all = await res.json()
+        const match = all.find((m: { matchID: number }) => String(m.matchID) === matchIdNum)
+        if (!match) return
+        const goals: LiveGoal[] = (match.goals ?? []).map((g: { matchMinute: number; goalGetterName: string; scoreTeam1: number; scoreTeam2: number; isOwnGoal: boolean }) => ({
+          matchMinute: g.matchMinute,
+          goalGetterName: g.goalGetterName,
+          scoreTeam1: g.scoreTeam1,
+          scoreTeam2: g.scoreTeam2,
+          isOwnGoal: g.isOwnGoal,
+        }))
+        const final = match.matchResults?.find((r: { resultTypeID: number }) => r.resultTypeID === 2)
+        const ht    = match.matchResults?.find((r: { resultTypeID: number }) => r.resultTypeID === 1)
+        const score = final ? { home: final.pointsTeam1, away: final.pointsTeam2 }
+          : ht ? { home: ht.pointsTeam1, away: ht.pointsTeam2 } : null
+        setLiveData({ score, goals, isLive: !match.matchIsFinished && goals.length > 0, minute: null })
+      } catch {}
+    }
+    fetchLive()
+    const id = setInterval(fetchLive, 60000)
+    return () => clearInterval(id)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [matchIdNum, isOngoing])
 
   const displayGroup = anyMarket.display_group ?? ''
   const teams    = displayGroup.split(' vs ')
@@ -1317,12 +1367,14 @@ function SoccerMatchCard({ markets, onOpen }: { markets: Market[]; onOpen: (id: 
   const drawNorm = Math.round((drawProb / total) * 100)
   const awayNorm = 100 - homeNorm - drawNorm
 
-  const matchDate   = anyMarket.match_date ?? ''
-  const parts       = matchDate.split(', ')
-  const timePart    = parts[2] ?? parts[1] ?? ''
+  // match_date ist jetzt direkt die Uhrzeit "HH:MM"
+  const timePart    = anyMarket.match_date ?? ''
   const totalVolume = markets.reduce((s, m) => s + m.q_yes + m.q_no, 0)
   const homeColor   = getTeamColor(homeTeam)
   const awayColor   = getTeamColor(awayTeam)
+
+  const hasLive = liveData && (liveData.score || liveData.goals.length > 0)
+  const lastGoals = liveData?.goals.slice(-3).reverse() ?? []
 
   return (
     <div className="market-card" style={{ padding: '14px 18px', cursor: 'pointer' }}
@@ -1332,9 +1384,16 @@ function SoccerMatchCard({ markets, onOpen }: { markets: Market[]; onOpen: (id: 
           <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)' }}>Bundesliga</span>
           {timePart && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>· {timePart} Uhr</span>}
           {totalVolume > 0 && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>· {Math.round(totalVolume).toLocaleString('de')} ₫</span>}
+          {liveData?.isLive && (
+            <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 700, color: '#22c55e' }}>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#22c55e', display: 'inline-block', animation: 'pulse 2s infinite' }} />
+              LIVE
+            </span>
+          )}
         </div>
         <div className="live-dot" />
       </div>
+
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 }}>
           <TeamLogo teamName={homeTeam} color={homeColor} size={40} />
@@ -1343,10 +1402,23 @@ function SoccerMatchCard({ markets, onOpen }: { markets: Market[]; onOpen: (id: 
             <div style={{ fontSize: 20, fontWeight: 800, color: homeColor, lineHeight: 1.1 }}>{homeNorm}¢</div>
           </div>
         </div>
+
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, flexShrink: 0, padding: '0 8px' }}>
-          <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: 0.5 }}>DRAW</div>
-          <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-muted)' }}>{drawNorm}¢</div>
+          {hasLive && liveData.score ? (
+            <>
+              <div style={{ fontSize: 20, fontWeight: 900, color: 'var(--text)', letterSpacing: '-1px', lineHeight: 1 }}>
+                {liveData.score.home} : {liveData.score.away}
+              </div>
+              <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: 0.5 }}>STAND</div>
+            </>
+          ) : (
+            <>
+              <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: 0.5 }}>DRAW</div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-muted)' }}>{drawNorm}¢</div>
+            </>
+          )}
         </div>
+
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0, justifyContent: 'flex-end' }}>
           <div style={{ minWidth: 0, textAlign: 'right' }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{awayTeam}</div>
@@ -1355,6 +1427,21 @@ function SoccerMatchCard({ markets, onOpen }: { markets: Market[]; onOpen: (id: 
           <TeamLogo teamName={awayTeam} color={awayColor} size={40} />
         </div>
       </div>
+
+      {/* Letzte Tore */}
+      {lastGoals.length > 0 && (
+        <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 3 }}>
+          {lastGoals.map((g, i) => (
+            <div key={i} style={{ fontSize: 11, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ fontSize: 10 }}>⚽</span>
+              <span style={{ fontWeight: 600 }}>{g.matchMinute}&apos;</span>
+              <span>{g.goalGetterName}{g.isOwnGoal ? ' (ET)' : ''}</span>
+              <span style={{ color: 'var(--text-subtle)', marginLeft: 'auto' }}>{g.scoreTeam1}:{g.scoreTeam2}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div style={{ display: 'flex', height: 4, borderRadius: 2, overflow: 'hidden', gap: 2, marginTop: 12 }}>
         <div style={{ width: `${homeNorm}%`, background: homeColor }} />
         <div style={{ width: `${drawNorm}%`, background: '#94a3b8' }} />
