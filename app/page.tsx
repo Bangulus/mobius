@@ -58,8 +58,6 @@ interface Market {
   coin?: string
   match_id?: string
   outcome?: string
-  home_team_icon?: string
-  away_team_icon?: string
   match_date?: string
 }
 
@@ -142,6 +140,31 @@ const COIN_COLORS: Record<string, string> = {
   BTC: '#f59e0b', ETH: '#6366f1', SOL: '#9945ff', XRP: '#00aae4',
 }
 
+// Statische Logo-Map — PNG-Thumbnails von Wikimedia, kein CORS, kein SVG-Problem
+const TEAM_LOGOS: Record<string, string> = {
+  'FC Bayern München':        'https://upload.wikimedia.org/wikipedia/commons/thumb/1/1f/Logo_FC_Bayern_M%C3%BCnchen_%282002%E2%80%932017%29.svg/120px-Logo_FC_Bayern_M%C3%BCnchen_%282002%E2%80%932017%29.svg.png',
+  'Borussia Dortmund':        'https://upload.wikimedia.org/wikipedia/commons/thumb/6/67/Borussia_Dortmund_logo.svg/120px-Borussia_Dortmund_logo.svg.png',
+  'BV Borussia 09 Dortmund':  'https://upload.wikimedia.org/wikipedia/commons/thumb/6/67/Borussia_Dortmund_logo.svg/120px-Borussia_Dortmund_logo.svg.png',
+  'RB Leipzig':               'https://upload.wikimedia.org/wikipedia/commons/thumb/0/04/RB_Leipzig_2014_logo.svg/120px-RB_Leipzig_2014_logo.svg.png',
+  'Bayer 04 Leverkusen':      'https://upload.wikimedia.org/wikipedia/de/thumb/f/f7/Bayer_Leverkusen_Logo.svg/120px-Bayer_Leverkusen_Logo.svg.png',
+  'Eintracht Frankfurt':      'https://upload.wikimedia.org/wikipedia/commons/thumb/0/04/Eintracht_Frankfurt_Logo.svg/120px-Eintracht_Frankfurt_Logo.svg.png',
+  'VfB Stuttgart':            'https://upload.wikimedia.org/wikipedia/commons/thumb/e/eb/VfB_Stuttgart_1893_Logo.svg/120px-VfB_Stuttgart_1893_Logo.svg.png',
+  'TSG Hoffenheim':           'https://upload.wikimedia.org/wikipedia/commons/thumb/6/64/TSG_1899_Hoffenheim_logo.svg/120px-TSG_1899_Hoffenheim_logo.svg.png',
+  'SC Freiburg':              'https://upload.wikimedia.org/wikipedia/de/thumb/f/f1/SC-Freiburg_Logo-neu.svg/120px-SC-Freiburg_Logo-neu.svg.png',
+  'Borussia Mönchengladbach': 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/81/Borussia_M%C3%B6nchengladbach_logo.svg/120px-Borussia_M%C3%B6nchengladbach_logo.svg.png',
+  'VfL Wolfsburg':            'https://upload.wikimedia.org/wikipedia/commons/thumb/f/f3/Logo-VfL-Wolfsburg.svg/120px-Logo-VfL-Wolfsburg.svg.png',
+  'FC Augsburg':              'https://upload.wikimedia.org/wikipedia/de/thumb/b/b5/Logo_FC_Augsburg.svg/120px-Logo_FC_Augsburg.svg.png',
+  'SV Werder Bremen':         'https://upload.wikimedia.org/wikipedia/commons/thumb/b/be/SV-Werder-Bremen-Logo.svg/120px-SV-Werder-Bremen-Logo.svg.png',
+  'Mainz 05':                 'https://upload.wikimedia.org/wikipedia/commons/thumb/9/9e/Logo_Mainz_05.svg/120px-Logo_Mainz_05.svg.png',
+  '1. FSV Mainz 05':          'https://upload.wikimedia.org/wikipedia/commons/thumb/9/9e/Logo_Mainz_05.svg/120px-Logo_Mainz_05.svg.png',
+  'FC St. Pauli':             'https://upload.wikimedia.org/wikipedia/commons/thumb/f/fb/FC_St._Pauli_logo_%282018%29.svg/120px-FC_St._Pauli_logo_%282018%29.svg.png',
+  '1. FC Union Berlin':       'https://upload.wikimedia.org/wikipedia/commons/thumb/4/44/1._FC_Union_Berlin_Logo.svg/120px-1._FC_Union_Berlin_Logo.svg.png',
+  'Union Berlin':             'https://upload.wikimedia.org/wikipedia/commons/thumb/4/44/1._FC_Union_Berlin_Logo.svg/120px-1._FC_Union_Berlin_Logo.svg.png',
+  '1. FC Heidenheim 1846':    'https://upload.wikimedia.org/wikipedia/commons/thumb/9/9d/1._FC_Heidenheim_1846.svg/120px-1._FC_Heidenheim_1846.svg.png',
+  'Hamburger SV':             'https://upload.wikimedia.org/wikipedia/commons/thumb/f/f9/Hamburger_SV_logo.svg/120px-Hamburger_SV_logo.svg.png',
+  '1. FC Köln':               'https://upload.wikimedia.org/wikipedia/commons/thumb/5/53/FC_Cologne_logo.svg/120px-FC_Cologne_logo.svg.png',
+}
+
 const TEAM_COLORS: Record<string, string> = {
   'FC Bayern München':          '#dc052d',
   'Borussia Dortmund':          '#fde100',
@@ -152,6 +175,7 @@ const TEAM_COLORS: Record<string, string> = {
   'VfB Stuttgart':              '#e32219',
   'SC Freiburg':                '#e30613',
   'Union Berlin':               '#eb1923',
+  '1. FC Union Berlin':         '#eb1923',
   'Borussia Mönchengladbach':   '#000000',
   'VfL Wolfsburg':              '#65b32e',
   'TSG Hoffenheim':             '#1961ae',
@@ -164,6 +188,7 @@ const TEAM_COLORS: Record<string, string> = {
   '1. FC Heidenheim 1846':      '#e2001a',
   'SV Darmstadt 98':            '#004f9f',
   'Holstein Kiel':              '#c8102e',
+  'FC St. Pauli':               '#6b3c26',
   'Hamburger SV':               '#0033a0',
   '1. FC Köln':                 '#e6000f',
   'Fortuna Düsseldorf':         '#e30613',
@@ -237,6 +262,7 @@ type AuthMode = 'login' | 'register'
 export default function Home() {
   const router = useRouter()
   const [markets, setMarkets]                 = useState<Market[]>([])
+  const [pastSoccerMarkets, setPastSoccerMarkets] = useState<Market[]>([])
   const [user, setUser]                       = useState<User | null>(null)
   const [leaderboard, setLeaderboard]         = useState<LeaderboardEntry[]>([])
   const [weeklyBoard, setWeeklyBoard]         = useState<WeeklyEntry[]>([])
@@ -292,6 +318,14 @@ export default function Home() {
     setLoading(false)
   }, [])
 
+  const loadPastSoccerMarkets = useCallback(async () => {
+    const data = await dbGet(
+      'markets',
+      'resolved=eq.true&match_id=not.is.null&outcome=eq.home&select=*&order=closes_at.desc&limit=54'
+    )
+    setPastSoccerMarkets(data ?? [])
+  }, [])
+
   const loadLeaderboard = useCallback(async () => {
     const data = await dbGet('users', 'select=id,username,balance,avatar_url&order=balance.desc&limit=10')
     setLeaderboard(
@@ -336,6 +370,13 @@ export default function Home() {
     loadMarkets(true)
     loadLeaderboard()
   }, [loadMarkets, loadLeaderboard])
+
+  // Vergangene Bundesliga-Märkte laden wenn Bundesliga aktiv
+  useEffect(() => {
+    if (category === 'Bundesliga') {
+      loadPastSoccerMarkets()
+    }
+  }, [category, loadPastSoccerMarkets])
 
   useEffect(() => {
     const id = setInterval(() => {
@@ -841,21 +882,12 @@ export default function Home() {
                       key={tab.id}
                       onClick={() => selectCategory(tab.id)}
                       style={{
-                        padding: '7px 16px',
-                        borderRadius: 20,
-                        fontSize: 13,
+                        padding: '7px 16px', borderRadius: 20, fontSize: 13,
                         fontWeight: category === tab.id ? 700 : 500,
-                        border: category === tab.id
-                          ? '1px solid var(--accent, #6366f1)'
-                          : '1px solid var(--border)',
-                        background: category === tab.id
-                          ? 'var(--accent-light, rgba(99,102,241,0.1))'
-                          : 'var(--surface)',
-                        color: category === tab.id
-                          ? 'var(--accent, #6366f1)'
-                          : 'var(--text-muted)',
-                        cursor: 'pointer',
-                        transition: 'all 0.15s',
+                        border: category === tab.id ? '1px solid var(--accent, #6366f1)' : '1px solid var(--border)',
+                        background: category === tab.id ? 'var(--accent-light, rgba(99,102,241,0.1))' : 'var(--surface)',
+                        color: category === tab.id ? 'var(--accent, #6366f1)' : 'var(--text-muted)',
+                        cursor: 'pointer', transition: 'all 0.15s',
                       }}
                     >
                       {tab.icon} {tab.label}
@@ -866,7 +898,7 @@ export default function Home() {
 
               {loading ? (
                 <div style={{ color: 'var(--text-muted)', fontSize: 14, padding: '24px 0' }}>Thinking…</div>
-              ) : filteredMarkets.length === 0 ? (
+              ) : filteredMarkets.length === 0 && category !== 'Bundesliga' ? (
                 <div style={{ color: 'var(--text-muted)', fontSize: 14, padding: '24px 0' }}>
                   {isFinanzCategory
                     ? 'Derzeit sind keine Märkte aktiv. Sie starten automatisch zu Beginn der offiziellen Handelszeiten der deutschen (09:00 – 17:30 Uhr) und amerikanischen Börsen (15:30 – 22:00 Uhr).'
@@ -874,6 +906,11 @@ export default function Home() {
                 </div>
               ) : (
                 <MarketsGrid markets={filteredMarkets} onOpen={(id) => router.push(`/markets/${id}`)} isSoccer={isSportCategory} />
+              )}
+
+              {/* Vergangene Bundesliga-Märkte */}
+              {category === 'Bundesliga' && pastSoccerMarkets.length > 0 && (
+                <PastSoccerSection markets={pastSoccerMarkets} onOpen={(id) => router.push(`/markets/${id}`)} />
               )}
             </>
           )}
@@ -953,20 +990,152 @@ function NavItem({ item, category, expandedNav, onSelect, onToggle, depth }: {
   )
 }
 
-function TeamLogo({ iconUrl, teamName, color, size = 36 }: { iconUrl?: string; teamName: string; color: string; size?: number }) {
+// Statische Logo-Komponente — nutzt TEAM_LOGOS Map, kein CORS
+function TeamLogo({ teamName, color, size = 36 }: { teamName: string; color: string; size?: number }) {
   const [imgError, setImgError] = useState(false)
+  const logoUrl = TEAM_LOGOS[teamName]
 
-  if (iconUrl && !imgError) {
+  if (logoUrl && !imgError) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
-      <img src={iconUrl} alt={teamName} onError={() => setImgError(true)}
-        style={{ width: size, height: size, borderRadius: 6, objectFit: 'contain', background: '#fff', padding: 2 }} />
+      <img
+        src={logoUrl}
+        alt={teamName}
+        onError={() => setImgError(true)}
+        style={{ width: size, height: size, borderRadius: 6, objectFit: 'contain', background: '#fff', padding: 3, flexShrink: 0 }}
+      />
     )
   }
 
   return (
     <div style={{ width: size, height: size, borderRadius: 6, flexShrink: 0, background: color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: size * 0.36, fontWeight: 900, color: '#fff' }}>
       {getTeamInitials(teamName)}
+    </div>
+  )
+}
+
+// Vergangene Bundesliga-Märkte — gruppiert nach Spieltag, mit Ergebnis
+function PastSoccerSection({ markets, onOpen }: { markets: Market[]; onOpen: (id: string) => void }) {
+  // Gruppiere nach match_id → Spielpaarungen
+  const matchGroups: Record<string, Market> = {}
+  markets.forEach(m => {
+    if (m.match_id && !matchGroups[m.match_id]) matchGroups[m.match_id] = m
+  })
+
+  // Sortiere nach closes_at absteigend (neueste zuerst)
+  const sortedMatches = Object.values(matchGroups).sort(
+    (a, b) => parseUTC(b.closes_at).getTime() - parseUTC(a.closes_at).getTime()
+  )
+
+  if (sortedMatches.length === 0) return null
+
+  // Gruppiere nach Datum
+  const byDate: Record<string, Market[]> = {}
+  sortedMatches.forEach(m => {
+    const d = parseUTC(m.closes_at)
+    const dateKey = d.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' })
+    if (!byDate[dateKey]) byDate[dateKey] = []
+    byDate[dateKey].push(m)
+  })
+
+  return (
+    <div style={{ marginTop: 40 }}>
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20,
+        paddingBottom: 12, borderBottom: '1px solid var(--border)',
+      }}>
+        <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--text)' }}>Abgeschlossene Spiele</div>
+        <div style={{ fontSize: 12, color: 'var(--text-muted)', padding: '2px 8px', borderRadius: 20, background: 'var(--surface)', border: '1px solid var(--border)' }}>
+          {sortedMatches.length} Spiele
+        </div>
+      </div>
+
+      {Object.entries(byDate).map(([dateKey, dayMatches]) => (
+        <div key={dateKey} style={{ marginBottom: 24 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 8, letterSpacing: 0.3, textTransform: 'uppercase' }}>
+            {dateKey}
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {dayMatches.map(m => (
+              <PastMatchRow key={m.match_id} homeMarket={m} allMarkets={markets} onOpen={onOpen} />
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function PastMatchRow({ homeMarket, allMarkets, onOpen }: { homeMarket: Market; allMarkets: Market[]; onOpen: (id: string) => void }) {
+  const matchId   = homeMarket.match_id!
+  const siblings  = allMarkets.filter(m => m.match_id === matchId)
+  const home      = siblings.find(m => m.outcome === 'home') ?? homeMarket
+  const draw      = siblings.find(m => m.outcome === 'draw')
+  const away      = siblings.find(m => m.outcome === 'away')
+
+  const displayGroup = home.display_group ?? ''
+  const teams     = displayGroup.split(' vs ')
+  const homeTeam  = teams[0] ?? ''
+  const awayTeam  = teams[1] ?? ''
+
+  const homeColor = getTeamColor(homeTeam)
+  const awayColor = getTeamColor(awayTeam)
+
+  const homeProb  = home ? calcProb(home.q_yes, home.q_no, home.b) : 33
+  const drawProb  = draw ? calcProb(draw.q_yes, draw.q_no, draw.b) : 34
+  const awayProb  = away ? calcProb(away.q_yes, away.q_no, away.b) : 33
+  const total     = homeProb + drawProb + awayProb
+  const homeNorm  = Math.round((homeProb / total) * 100)
+  const drawNorm  = Math.round((drawProb / total) * 100)
+  const awayNorm  = 100 - homeNorm - drawNorm
+
+  // Ergebnis bestimmen
+  const homeWon   = home?.resolution === 'yes'
+  const awayWon   = away?.resolution === 'yes'
+  const isDraw    = draw?.resolution === 'yes' || home?.resolution === 'draw'
+
+  const resultLabel = homeWon ? homeTeam : awayWon ? awayTeam : isDraw ? 'Unentschieden' : '—'
+  const resultColor = homeWon ? homeColor : awayWon ? awayColor : '#64748b'
+
+  return (
+    <div
+      onClick={() => onOpen(home.id)}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px',
+        borderRadius: 10, border: '1px solid var(--border)', background: 'var(--card)',
+        cursor: 'pointer', transition: 'background 0.1s',
+      }}
+      onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface)')}
+      onMouseLeave={e => (e.currentTarget.style.background = 'var(--card)')}
+    >
+      {/* Heimteam */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
+        <TeamLogo teamName={homeTeam} color={homeColor} size={28} />
+        <span style={{ fontSize: 13, fontWeight: homeWon ? 700 : 500, color: homeWon ? 'var(--text)' : 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {homeTeam}
+        </span>
+        <span style={{ fontSize: 12, color: homeColor, fontWeight: 600, flexShrink: 0 }}>{homeNorm}%</span>
+      </div>
+
+      {/* Ergebnis-Badge */}
+      <div style={{
+        flexShrink: 0, padding: '3px 10px', borderRadius: 6,
+        background: `${resultColor}15`,
+        border: `1px solid ${resultColor}33`,
+        fontSize: 11, fontWeight: 700, color: resultColor,
+        whiteSpace: 'nowrap',
+      }}>
+        {resultLabel}
+      </div>
+
+      {/* Auswärtsteam */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0, justifyContent: 'flex-end' }}>
+        <span style={{ fontSize: 12, color: awayColor, fontWeight: 600, flexShrink: 0 }}>{awayNorm}%</span>
+        <span style={{ fontSize: 13, fontWeight: awayWon ? 700 : 500, color: awayWon ? 'var(--text)' : 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {awayTeam}
+        </span>
+        <TeamLogo teamName={awayTeam} color={awayColor} size={28} />
+      </div>
     </div>
   )
 }
@@ -1090,7 +1259,7 @@ function SoccerMatchCard({ markets, onOpen }: { markets: Market[]; onOpen: (id: 
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 }}>
-          <TeamLogo iconUrl={anyMarket.home_team_icon} teamName={homeTeam} color={homeColor} size={40} />
+          <TeamLogo teamName={homeTeam} color={homeColor} size={40} />
           <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{homeTeam}</div>
             <div style={{ fontSize: 20, fontWeight: 800, color: homeColor, lineHeight: 1.1 }}>{homeNorm}¢</div>
@@ -1105,7 +1274,7 @@ function SoccerMatchCard({ markets, onOpen }: { markets: Market[]; onOpen: (id: 
             <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{awayTeam}</div>
             <div style={{ fontSize: 20, fontWeight: 800, color: awayColor, lineHeight: 1.1 }}>{awayNorm}¢</div>
           </div>
-          <TeamLogo iconUrl={anyMarket.away_team_icon} teamName={awayTeam} color={awayColor} size={40} />
+          <TeamLogo teamName={awayTeam} color={awayColor} size={40} />
         </div>
       </div>
       <div style={{ display: 'flex', height: 4, borderRadius: 2, overflow: 'hidden', gap: 2, marginTop: 12 }}>
@@ -1222,10 +1391,9 @@ function PortfolioView({ userId, router }: { userId: string; router: ReturnType<
                   <span style={{
                     fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 4,
                     background: isWin ? 'rgba(22,163,74,0.1)' : 'rgba(239,68,68,0.1)',
-                    color: isWin ? '#16a34a' : '#ef4444',
-                    letterSpacing: 0.5,
+                    color: isWin ? '#16a34a' : '#ef4444', letterSpacing: 0.5,
                   }}>
-                    {isWin ? 'UP' : 'DOWN'}
+                    {isWin ? 'Gewonnen' : 'Verloren'}
                   </span>
                 )}
               </div>
