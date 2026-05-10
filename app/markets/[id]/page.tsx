@@ -253,8 +253,8 @@ function getTeamLogo(name: string): string | undefined {
 
 const TEAM_COLORS: Record<string, string> = {
   'FC Bayern München': '#dc052d',
-  'Borussia Dortmund': '#fde100',
-  'BV Borussia 09 Dortmund': '#fde100',
+  'Borussia Dortmund': '#1a1a1a',
+  'BV Borussia 09 Dortmund': '#1a1a1a',
   'Bayer 04 Leverkusen': '#e32221',
   'RB Leipzig': '#dd0741',
   'Eintracht Frankfurt': '#e1000f',
@@ -995,7 +995,7 @@ export default function MarketPage() {
                 alignItems: 'center',
                 gap: 10,
               }}>
-                <span style={{ width: 10, height: 10, borderRadius: '50%', background: 'var(--text-muted)', display: 'inline-block', flexShrink: 0 }} />
+                <span style={{ width: 10, height: 10, borderRadius: '50%', background: 'var(--text-muted)', display: 'none', flexShrink: 0 }} />
                 <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-muted)' }}>
                   Dieser Möbius-Markt ist nicht mehr aktiv
                 </span>
@@ -1120,7 +1120,7 @@ export default function MarketPage() {
               <div className="card" style={{ position: 'sticky', top: 'calc(var(--nav-height) + 16px)', padding: 0, overflow: 'hidden' }}>
                 {soccerIsInactive ? (
                   <div style={{ padding: '24px 16px', textAlign: 'center' }}>
-                    <div style={{ fontSize: 28, marginBottom: 8 }}>{userWon ? '🎉' : hasPosition ? '😔' : '🏁'}</div>
+                    <div style={{ fontSize: 28, marginBottom: 8 }}>{userWon ? '🎉' : hasPosition ? '😔' : '✓'}</div>
                     <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 6 }}>
                       {userWon ? 'Gewonnen!' : hasPosition ? 'Verloren' : 'Markt nicht mehr aktiv'}
                     </div>
