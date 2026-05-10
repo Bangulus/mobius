@@ -140,29 +140,48 @@ const COIN_COLORS: Record<string, string> = {
   BTC: '#f59e0b', ETH: '#6366f1', SOL: '#9945ff', XRP: '#00aae4',
 }
 
-// Statische Logo-Map — PNG-Thumbnails von Wikimedia, kein CORS, kein SVG-Problem
-const TEAM_LOGOS: Record<string, string> = {
-  'FC Bayern München':        'https://upload.wikimedia.org/wikipedia/commons/thumb/1/1f/Logo_FC_Bayern_M%C3%BCnchen_%282002%E2%80%932017%29.svg/120px-Logo_FC_Bayern_M%C3%BCnchen_%282002%E2%80%932017%29.svg.png',
-  'Borussia Dortmund':        'https://upload.wikimedia.org/wikipedia/commons/thumb/6/67/Borussia_Dortmund_logo.svg/120px-Borussia_Dortmund_logo.svg.png',
-  'BV Borussia 09 Dortmund':  'https://upload.wikimedia.org/wikipedia/commons/thumb/6/67/Borussia_Dortmund_logo.svg/120px-Borussia_Dortmund_logo.svg.png',
-  'RB Leipzig':               'https://upload.wikimedia.org/wikipedia/commons/thumb/0/04/RB_Leipzig_2014_logo.svg/120px-RB_Leipzig_2014_logo.svg.png',
-  'Bayer 04 Leverkusen':      'https://upload.wikimedia.org/wikipedia/de/thumb/f/f7/Bayer_Leverkusen_Logo.svg/120px-Bayer_Leverkusen_Logo.svg.png',
-  'Eintracht Frankfurt':      'https://upload.wikimedia.org/wikipedia/commons/thumb/0/04/Eintracht_Frankfurt_Logo.svg/120px-Eintracht_Frankfurt_Logo.svg.png',
-  'VfB Stuttgart':            'https://upload.wikimedia.org/wikipedia/commons/thumb/e/eb/VfB_Stuttgart_1893_Logo.svg/120px-VfB_Stuttgart_1893_Logo.svg.png',
-  'TSG Hoffenheim':           'https://upload.wikimedia.org/wikipedia/commons/thumb/6/64/TSG_1899_Hoffenheim_logo.svg/120px-TSG_1899_Hoffenheim_logo.svg.png',
-  'SC Freiburg':              'https://upload.wikimedia.org/wikipedia/de/thumb/f/f1/SC-Freiburg_Logo-neu.svg/120px-SC-Freiburg_Logo-neu.svg.png',
-  'Borussia Mönchengladbach': 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/81/Borussia_M%C3%B6nchengladbach_logo.svg/120px-Borussia_M%C3%B6nchengladbach_logo.svg.png',
-  'VfL Wolfsburg':            'https://upload.wikimedia.org/wikipedia/commons/thumb/f/f3/Logo-VfL-Wolfsburg.svg/120px-Logo-VfL-Wolfsburg.svg.png',
-  'FC Augsburg':              'https://upload.wikimedia.org/wikipedia/de/thumb/b/b5/Logo_FC_Augsburg.svg/120px-Logo_FC_Augsburg.svg.png',
-  'SV Werder Bremen':         'https://upload.wikimedia.org/wikipedia/commons/thumb/b/be/SV-Werder-Bremen-Logo.svg/120px-SV-Werder-Bremen-Logo.svg.png',
-  'Mainz 05':                 'https://upload.wikimedia.org/wikipedia/commons/thumb/9/9e/Logo_Mainz_05.svg/120px-Logo_Mainz_05.svg.png',
-  '1. FSV Mainz 05':          'https://upload.wikimedia.org/wikipedia/commons/thumb/9/9e/Logo_Mainz_05.svg/120px-Logo_Mainz_05.svg.png',
-  'FC St. Pauli':             'https://upload.wikimedia.org/wikipedia/commons/thumb/f/fb/FC_St._Pauli_logo_%282018%29.svg/120px-FC_St._Pauli_logo_%282018%29.svg.png',
-  '1. FC Union Berlin':       'https://upload.wikimedia.org/wikipedia/commons/thumb/4/44/1._FC_Union_Berlin_Logo.svg/120px-1._FC_Union_Berlin_Logo.svg.png',
-  'Union Berlin':             'https://upload.wikimedia.org/wikipedia/commons/thumb/4/44/1._FC_Union_Berlin_Logo.svg/120px-1._FC_Union_Berlin_Logo.svg.png',
-  '1. FC Heidenheim 1846':    'https://upload.wikimedia.org/wikipedia/commons/thumb/9/9d/1._FC_Heidenheim_1846.svg/120px-1._FC_Heidenheim_1846.svg.png',
-  'Hamburger SV':             'https://upload.wikimedia.org/wikipedia/commons/thumb/f/f9/Hamburger_SV_logo.svg/120px-Hamburger_SV_logo.svg.png',
-  '1. FC Köln':               'https://upload.wikimedia.org/wikipedia/commons/thumb/5/53/FC_Cologne_logo.svg/120px-FC_Cologne_logo.svg.png',
+// Normalisierungsfunktion — macht Umlaut-Matching robust
+function normalizeTeamName(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/ü/g, 'u').replace(/ö/g, 'o').replace(/ä/g, 'a').replace(/ß/g, 'ss')
+    .replace(/\./g, '').replace(/\s+/g, ' ').trim()
+}
+
+// Statische Logo-Map — PNG-Thumbnails von Wikimedia
+const TEAM_LOGOS_RAW: Record<string, string> = {
+  'fc bayern munchen':          'https://upload.wikimedia.org/wikipedia/commons/thumb/1/1f/Logo_FC_Bayern_M%C3%BCnchen_%282002%E2%80%932017%29.svg/120px-Logo_FC_Bayern_M%C3%BCnchen_%282002%E2%80%932017%29.svg.png',
+  'borussia dortmund':          'https://upload.wikimedia.org/wikipedia/commons/thumb/6/67/Borussia_Dortmund_logo.svg/120px-Borussia_Dortmund_logo.svg.png',
+  'bv borussia 09 dortmund':    'https://upload.wikimedia.org/wikipedia/commons/thumb/6/67/Borussia_Dortmund_logo.svg/120px-Borussia_Dortmund_logo.svg.png',
+  'rb leipzig':                 'https://upload.wikimedia.org/wikipedia/commons/thumb/0/04/RB_Leipzig_2014_logo.svg/120px-RB_Leipzig_2014_logo.svg.png',
+  'bayer 04 leverkusen':        'https://upload.wikimedia.org/wikipedia/de/thumb/f/f7/Bayer_Leverkusen_Logo.svg/120px-Bayer_Leverkusen_Logo.svg.png',
+  'eintracht frankfurt':        'https://upload.wikimedia.org/wikipedia/commons/thumb/0/04/Eintracht_Frankfurt_Logo.svg/120px-Eintracht_Frankfurt_Logo.svg.png',
+  'vfb stuttgart':              'https://upload.wikimedia.org/wikipedia/commons/thumb/e/eb/VfB_Stuttgart_1893_Logo.svg/120px-VfB_Stuttgart_1893_Logo.svg.png',
+  'tsg hoffenheim':             'https://upload.wikimedia.org/wikipedia/commons/thumb/6/64/TSG_1899_Hoffenheim_logo.svg/120px-TSG_1899_Hoffenheim_logo.svg.png',
+  'tsg 1899 hoffenheim':        'https://upload.wikimedia.org/wikipedia/commons/thumb/6/64/TSG_1899_Hoffenheim_logo.svg/120px-TSG_1899_Hoffenheim_logo.svg.png',
+  'sc freiburg':                'https://upload.wikimedia.org/wikipedia/de/thumb/f/f1/SC-Freiburg_Logo-neu.svg/120px-SC-Freiburg_Logo-neu.svg.png',
+  'borussia monchengladbach':   'https://upload.wikimedia.org/wikipedia/commons/thumb/8/81/Borussia_M%C3%B6nchengladbach_logo.svg/120px-Borussia_M%C3%B6nchengladbach_logo.svg.png',
+  'vfl wolfsburg':              'https://upload.wikimedia.org/wikipedia/commons/thumb/f/f3/Logo-VfL-Wolfsburg.svg/120px-Logo-VfL-Wolfsburg.svg.png',
+  'fc augsburg':                'https://upload.wikimedia.org/wikipedia/de/thumb/b/b5/Logo_FC_Augsburg.svg/120px-Logo_FC_Augsburg.svg.png',
+  'sv werder bremen':           'https://upload.wikimedia.org/wikipedia/commons/thumb/b/be/SV-Werder-Bremen-Logo.svg/120px-SV-Werder-Bremen-Logo.svg.png',
+  'mainz 05':                   'https://upload.wikimedia.org/wikipedia/commons/thumb/9/9e/Logo_Mainz_05.svg/120px-Logo_Mainz_05.svg.png',
+  '1 fsv mainz 05':             'https://upload.wikimedia.org/wikipedia/commons/thumb/9/9e/Logo_Mainz_05.svg/120px-Logo_Mainz_05.svg.png',
+  'fsv mainz 05':               'https://upload.wikimedia.org/wikipedia/commons/thumb/9/9e/Logo_Mainz_05.svg/120px-Logo_Mainz_05.svg.png',
+  'fc st pauli':                'https://upload.wikimedia.org/wikipedia/commons/thumb/f/fb/FC_St._Pauli_logo_%282018%29.svg/120px-FC_St._Pauli_logo_%282018%29.svg.png',
+  '1 fc union berlin':          'https://upload.wikimedia.org/wikipedia/commons/thumb/4/44/1._FC_Union_Berlin_Logo.svg/120px-1._FC_Union_Berlin_Logo.svg.png',
+  'union berlin':               'https://upload.wikimedia.org/wikipedia/commons/thumb/4/44/1._FC_Union_Berlin_Logo.svg/120px-1._FC_Union_Berlin_Logo.svg.png',
+  '1 fc heidenheim 1846':       'https://upload.wikimedia.org/wikipedia/commons/thumb/9/9d/1._FC_Heidenheim_1846.svg/120px-1._FC_Heidenheim_1846.svg.png',
+  'fc heidenheim 1846':         'https://upload.wikimedia.org/wikipedia/commons/thumb/9/9d/1._FC_Heidenheim_1846.svg/120px-1._FC_Heidenheim_1846.svg.png',
+  'hamburger sv':               'https://upload.wikimedia.org/wikipedia/commons/thumb/f/f9/Hamburger_SV_logo.svg/120px-Hamburger_SV_logo.svg.png',
+  '1 fc koln':                  'https://upload.wikimedia.org/wikipedia/commons/thumb/5/53/FC_Cologne_logo.svg/120px-FC_Cologne_logo.svg.png',
+  'fc koln':                    'https://upload.wikimedia.org/wikipedia/commons/thumb/5/53/FC_Cologne_logo.svg/120px-FC_Cologne_logo.svg.png',
+  'fortuna dusseldorf':         'https://upload.wikimedia.org/wikipedia/commons/thumb/9/9a/Fortuna_D%C3%BCsseldorf.svg/120px-Fortuna_D%C3%BCsseldorf.svg.png',
+  'vfl bochum':                 'https://upload.wikimedia.org/wikipedia/commons/thumb/7/72/VfL_Bochum_logo.svg/120px-VfL_Bochum_logo.svg.png',
+  'holstein kiel':              'https://upload.wikimedia.org/wikipedia/commons/thumb/7/7e/Holstein_Kiel_Logo.svg/120px-Holstein_Kiel_Logo.svg.png',
+}
+
+function getTeamLogo(name: string): string | undefined {
+  return TEAM_LOGOS_RAW[normalizeTeamName(name)]
 }
 
 const TEAM_COLORS: Record<string, string> = {
@@ -321,7 +340,7 @@ export default function Home() {
   const loadPastSoccerMarkets = useCallback(async () => {
     const data = await dbGet(
       'markets',
-      'resolved=eq.true&match_id=not.is.null&outcome=eq.home&select=*&order=closes_at.desc&limit=54'
+      'resolved=eq.true&match_id=not.is.null&select=*&order=closes_at.desc&limit=162'
     )
     setPastSoccerMarkets(data ?? [])
   }, [])
@@ -990,10 +1009,10 @@ function NavItem({ item, category, expandedNav, onSelect, onToggle, depth }: {
   )
 }
 
-// Statische Logo-Komponente — nutzt TEAM_LOGOS Map, kein CORS
+// Statische Logo-Komponente — normalisierter Lookup, robust gegen Umlaute
 function TeamLogo({ teamName, color, size = 36 }: { teamName: string; color: string; size?: number }) {
   const [imgError, setImgError] = useState(false)
-  const logoUrl = TEAM_LOGOS[teamName]
+  const logoUrl = getTeamLogo(teamName)
 
   if (logoUrl && !imgError) {
     return (
@@ -1014,36 +1033,65 @@ function TeamLogo({ teamName, color, size = 36 }: { teamName: string; color: str
   )
 }
 
-// Vergangene Bundesliga-Märkte — gruppiert nach Spieltag, mit Ergebnis
+// Vergangene Bundesliga-Märkte mit korrektem Datum, Ergebnis und Endstand
 function PastSoccerSection({ markets, onOpen }: { markets: Market[]; onOpen: (id: string) => void }) {
-  // Gruppiere nach match_id → Spielpaarungen
-  const matchGroups: Record<string, Market> = {}
+  const [scores, setScores] = useState<Record<string, { home: number; away: number }>>({})
+
+  // Lade Endstände von OpenLigaDB
+  useEffect(() => {
+    const fetchScores = async () => {
+      try {
+        const season = new Date().getMonth() >= 7 ? new Date().getFullYear() : new Date().getFullYear() - 1
+        const res = await fetch(`https://api.openligadb.de/getmatchdata/bl1/${season}`, { cache: 'no-store' })
+        if (!res.ok) return
+        const allMatches = await res.json()
+        const scoreMap: Record<string, { home: number; away: number }> = {}
+        for (const match of allMatches) {
+          if (!match.matchIsFinished) continue
+          const final = match.matchResults?.find((r: { resultTypeID: number }) => r.resultTypeID === 2)
+          if (final) {
+            const key = `bl1-${match.matchID}`
+            scoreMap[key] = { home: final.pointsTeam1, away: final.pointsTeam2 }
+          }
+        }
+        setScores(scoreMap)
+      } catch {}
+    }
+    fetchScores()
+  }, [])
+
+  // Sammle alle einzigartigen Spiele (nur home-Märkte als Anker)
+  const matchGroups: Record<string, Market[]> = {}
   markets.forEach(m => {
-    if (m.match_id && !matchGroups[m.match_id]) matchGroups[m.match_id] = m
+    if (!m.match_id) return
+    if (!matchGroups[m.match_id]) matchGroups[m.match_id] = []
+    matchGroups[m.match_id].push(m)
   })
 
-  // Sortiere nach closes_at absteigend (neueste zuerst)
-  const sortedMatches = Object.values(matchGroups).sort(
-    (a, b) => parseUTC(b.closes_at).getTime() - parseUTC(a.closes_at).getTime()
+  // Für jedes match_id brauchen wir alle 3 Märkte (home/draw/away)
+  // pastSoccerMarkets lädt nur outcome=home — wir gruppieren trotzdem korrekt
+  const sortedMatches = Object.entries(matchGroups).sort(
+    ([, a], [, b]) => parseUTC(b[0].closes_at).getTime() - parseUTC(a[0].closes_at).getTime()
   )
 
   if (sortedMatches.length === 0) return null
 
-  // Gruppiere nach Datum
-  const byDate: Record<string, Market[]> = {}
-  sortedMatches.forEach(m => {
-    const d = parseUTC(m.closes_at)
-    const dateKey = d.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' })
+  // Gruppiere nach korrektem Datum (aus closes_at)
+  const byDate: Record<string, [string, Market[]][]> = {}
+  sortedMatches.forEach(([matchId, matchMarkets]) => {
+    const d = parseUTC(matchMarkets[0].closes_at)
+    // Korrekte Wochentagsberechnung
+    const dateKey = d.toLocaleDateString('de-DE', {
+      weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric',
+      timeZone: 'Europe/Berlin',
+    })
     if (!byDate[dateKey]) byDate[dateKey] = []
-    byDate[dateKey].push(m)
+    byDate[dateKey].push([matchId, matchMarkets])
   })
 
   return (
     <div style={{ marginTop: 40 }}>
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20,
-        paddingBottom: 12, borderBottom: '1px solid var(--border)',
-      }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20, paddingBottom: 12, borderBottom: '1px solid var(--border)' }}>
         <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--text)' }}>Abgeschlossene Spiele</div>
         <div style={{ fontSize: 12, color: 'var(--text-muted)', padding: '2px 8px', borderRadius: 20, background: 'var(--surface)', border: '1px solid var(--border)' }}>
           {sortedMatches.length} Spiele
@@ -1056,8 +1104,13 @@ function PastSoccerSection({ markets, onOpen }: { markets: Market[]; onOpen: (id
             {dateKey}
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {dayMatches.map(m => (
-              <PastMatchRow key={m.match_id} homeMarket={m} allMarkets={markets} onOpen={onOpen} />
+            {dayMatches.map(([matchId, matchMarkets]) => (
+              <PastMatchRow
+                key={matchId}
+                markets={matchMarkets}
+                score={scores[matchId]}
+                onOpen={onOpen}
+              />
             ))}
           </div>
         </div>
@@ -1066,72 +1119,96 @@ function PastSoccerSection({ markets, onOpen }: { markets: Market[]; onOpen: (id
   )
 }
 
-function PastMatchRow({ homeMarket, allMarkets, onOpen }: { homeMarket: Market; allMarkets: Market[]; onOpen: (id: string) => void }) {
-  const matchId   = homeMarket.match_id!
-  const siblings  = allMarkets.filter(m => m.match_id === matchId)
-  const home      = siblings.find(m => m.outcome === 'home') ?? homeMarket
-  const draw      = siblings.find(m => m.outcome === 'draw')
-  const away      = siblings.find(m => m.outcome === 'away')
+function PastMatchRow({ markets, score, onOpen }: {
+  markets: Market[]
+  score?: { home: number; away: number }
+  onOpen: (id: string) => void
+}) {
+  const home = markets.find(m => m.outcome === 'home') ?? markets[0]
+  const draw = markets.find(m => m.outcome === 'draw')
+  const away = markets.find(m => m.outcome === 'away')
 
   const displayGroup = home.display_group ?? ''
-  const teams     = displayGroup.split(' vs ')
-  const homeTeam  = teams[0] ?? ''
-  const awayTeam  = teams[1] ?? ''
+  const teams    = displayGroup.split(' vs ')
+  const homeTeam = teams[0]?.trim() ?? ''
+  const awayTeam = teams[1]?.trim() ?? ''
 
   const homeColor = getTeamColor(homeTeam)
   const awayColor = getTeamColor(awayTeam)
 
-  const homeProb  = home ? calcProb(home.q_yes, home.q_no, home.b) : 33
-  const drawProb  = draw ? calcProb(draw.q_yes, draw.q_no, draw.b) : 34
-  const awayProb  = away ? calcProb(away.q_yes, away.q_no, away.b) : 33
-  const total     = homeProb + drawProb + awayProb
-  const homeNorm  = Math.round((homeProb / total) * 100)
-  const drawNorm  = Math.round((drawProb / total) * 100)
-  const awayNorm  = 100 - homeNorm - drawNorm
+  const homeProb = home ? calcProb(home.q_yes, home.q_no, home.b) : 33
+  const drawProb = draw ? calcProb(draw.q_yes, draw.q_no, draw.b) : 34
+  const awayProb = away ? calcProb(away.q_yes, away.q_no, away.b) : 33
+  const total    = homeProb + drawProb + awayProb
+  const homeNorm = Math.round((homeProb / total) * 100)
+  const awayNorm = Math.round((awayProb / total) * 100)
 
-  // Ergebnis bestimmen
-  const homeWon   = home?.resolution === 'yes'
-  const awayWon   = away?.resolution === 'yes'
-  const isDraw    = draw?.resolution === 'yes' || home?.resolution === 'draw'
+  // Ergebnis korrekt bestimmen
+  const homeWon  = home?.resolution === 'yes'
+  const awayWon  = away?.resolution === 'yes'
+  const isDraw   = draw?.resolution === 'yes'
 
-  const resultLabel = homeWon ? homeTeam : awayWon ? awayTeam : isDraw ? 'Unentschieden' : '—'
-  const resultColor = homeWon ? homeColor : awayWon ? awayColor : '#64748b'
+  // Gewinner-Team und Farbe
+  const winnerName  = homeWon ? homeTeam : awayWon ? awayTeam : isDraw ? 'Unentschieden' : '—'
+  const winnerColor = homeWon ? homeColor : awayWon ? awayColor : '#64748b'
 
   return (
     <div
       onClick={() => onOpen(home.id)}
       style={{
-        display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px',
-        borderRadius: 10, border: '1px solid var(--border)', background: 'var(--card)',
-        cursor: 'pointer', transition: 'background 0.1s',
+        display: 'grid',
+        gridTemplateColumns: '1fr auto 1fr',
+        alignItems: 'center',
+        gap: 12,
+        padding: '10px 16px',
+        borderRadius: 10,
+        border: '1px solid var(--border)',
+        background: 'var(--card)',
+        cursor: 'pointer',
+        transition: 'background 0.1s',
       }}
       onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface)')}
       onMouseLeave={e => (e.currentTarget.style.background = 'var(--card)')}
     >
-      {/* Heimteam */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
+      {/* Heimteam links */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <TeamLogo teamName={homeTeam} color={homeColor} size={28} />
-        <span style={{ fontSize: 13, fontWeight: homeWon ? 700 : 500, color: homeWon ? 'var(--text)' : 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <span style={{
+          fontSize: 13, fontWeight: homeWon ? 700 : 500,
+          color: homeWon ? 'var(--text)' : 'var(--text-muted)',
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}>
           {homeTeam}
         </span>
         <span style={{ fontSize: 12, color: homeColor, fontWeight: 600, flexShrink: 0 }}>{homeNorm}%</span>
       </div>
 
-      {/* Ergebnis-Badge */}
-      <div style={{
-        flexShrink: 0, padding: '3px 10px', borderRadius: 6,
-        background: `${resultColor}15`,
-        border: `1px solid ${resultColor}33`,
-        fontSize: 11, fontWeight: 700, color: resultColor,
-        whiteSpace: 'nowrap',
-      }}>
-        {resultLabel}
+      {/* Mitte: Ergebnis-Badge + optional Endstand */}
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, flexShrink: 0 }}>
+        {score ? (
+          <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text)', letterSpacing: '-0.5px', whiteSpace: 'nowrap' }}>
+            {score.home} : {score.away}
+          </div>
+        ) : null}
+        <div style={{
+          padding: '2px 10px', borderRadius: 6,
+          background: `${winnerColor}15`,
+          border: `1px solid ${winnerColor}33`,
+          fontSize: 11, fontWeight: 700, color: winnerColor,
+          whiteSpace: 'nowrap',
+        }}>
+          {winnerName}
+        </div>
       </div>
 
-      {/* Auswärtsteam */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0, justifyContent: 'flex-end' }}>
+      {/* Auswärtsteam rechts */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'flex-end' }}>
         <span style={{ fontSize: 12, color: awayColor, fontWeight: 600, flexShrink: 0 }}>{awayNorm}%</span>
-        <span style={{ fontSize: 13, fontWeight: awayWon ? 700 : 500, color: awayWon ? 'var(--text)' : 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <span style={{
+          fontSize: 13, fontWeight: awayWon ? 700 : 500,
+          color: awayWon ? 'var(--text)' : 'var(--text-muted)',
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}>
           {awayTeam}
         </span>
         <TeamLogo teamName={awayTeam} color={awayColor} size={28} />
