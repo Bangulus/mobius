@@ -240,10 +240,9 @@ function getTeamInitials(name: string): string {
   return (words[0][0] + (words[1]?.[0] ?? '')).toUpperCase()
 }
 
-// Feature 4: Live-Positions-Anzeige
 function LivePositionsBar({ trades, isKrypto }: { trades: Trade[]; isKrypto: boolean }) {
   const buyTrades = trades.filter(t => t.type === 'buy_yes' || t.type === 'buy_no')
-  if (buyTrades.length < 3) return null // Erst ab 3 Trades anzeigen
+  if (buyTrades.length < 3) return null
 
   const yesCount = buyTrades.filter(t => t.type === 'buy_yes').length
   const noCount  = buyTrades.filter(t => t.type === 'buy_no').length
@@ -278,13 +277,11 @@ function LivePositionsBar({ trades, isKrypto }: { trades: Trade[]; isKrypto: boo
         <span style={{ fontSize: 11, color: 'var(--text-subtle)' }}>{total} Trades</span>
       </div>
 
-      {/* Balken */}
       <div style={{ display: 'flex', height: 6, borderRadius: 3, overflow: 'hidden', gap: 2, marginBottom: 10 }}>
         <div style={{ width: `${yesPct}%`, background: 'var(--yes)', borderRadius: '3px 0 0 3px', transition: 'width 0.4s ease' }} />
         <div style={{ width: `${noPct}%`, background: 'var(--no)', borderRadius: '0 3px 3px 0', transition: 'width 0.4s ease' }} />
       </div>
 
-      {/* Labels */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--yes)' }}>
           {isKrypto ? 'UP ↑' : 'Ja'} · {yesPct}%
@@ -606,7 +603,7 @@ export default function MarketPage() {
     const closesAt = parseUTC(market.closes_at)
     const tick = () => {
       const diff = closesAt.getTime() - Date.now()
-      if (diff <= 0) { setSoccerCountdown('Beendet'); return }
+      if (diff <= 0) { setSoccerCountdown('ended'); return }
       const h = Math.floor(diff / 3600000)
       const m = Math.floor((diff % 3600000) / 60000)
       const s = Math.floor((diff % 60000) / 1000)
@@ -769,6 +766,9 @@ export default function MarketPage() {
 
   const thisOutcome = market.outcome
 
+  // Bestimmt ob Markt inaktiv ist (abgelaufen oder aufgelöst)
+  const soccerIsInactive = market.resolved || soccerCountdown === 'ended'
+
   const soccerResolutionLabel = () => {
     if (!market.resolved) return ''
     if (market.resolution === 'yes') {
@@ -857,10 +857,32 @@ export default function MarketPage() {
               <span>{market.group_title ?? 'Bundesliga'}</span>
             </div>
 
-            <div className="card" style={{ marginBottom: 20 }}>
-              <div style={{ textAlign: 'center', fontSize: 12, color: 'var(--text-muted)', marginBottom: 20 }}>
-                {market.resolved ? 'Abgeschlossen' : `Schließt in ${soccerCountdown}`}
+            {/* Inaktiv-Banner — prominent, oben */}
+            {soccerIsInactive && (
+              <div style={{
+                marginBottom: 16,
+                padding: '14px 20px',
+                borderRadius: 12,
+                background: 'rgba(100,116,139,0.08)',
+                border: '1px solid rgba(100,116,139,0.25)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+              }}>
+                <span style={{ fontSize: 18 }}>⏹</span>
+                <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-muted)' }}>
+                  Dieser Möbius-Markt ist nicht mehr aktiv
+                </span>
               </div>
+            )}
+
+            <div className="card" style={{ marginBottom: 20 }}>
+              {/* Laufender Markt: Countdown anzeigen */}
+              {!soccerIsInactive && (
+                <div style={{ textAlign: 'center', fontSize: 13, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 20 }}>
+                  Schließt in {soccerCountdown}
+                </div>
+              )}
 
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 32, marginBottom: 24 }}>
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, flex: 1 }}>
@@ -937,7 +959,6 @@ export default function MarketPage() {
                   )
                 })}
 
-                {/* Feature 4: Live-Positionen bei Soccer */}
                 {!market.resolved && <LivePositionsBar trades={trades} isKrypto={false} />}
 
                 {trades.filter(t => t.shares > 0).length > 0 && (
@@ -958,13 +979,15 @@ export default function MarketPage() {
 
               {/* Trade-Panel Soccer */}
               <div className="card" style={{ position: 'sticky', top: 'calc(var(--nav-height) + 16px)', padding: 0, overflow: 'hidden' }}>
-                {market.resolved ? (
+                {soccerIsInactive ? (
                   <div style={{ padding: '24px 16px', textAlign: 'center' }}>
-                    <div style={{ fontSize: 28, marginBottom: 8 }}>{userWon ? '🎉' : hasPosition ? '😔' : '✓'}</div>
+                    <div style={{ fontSize: 28, marginBottom: 8 }}>{userWon ? '🎉' : hasPosition ? '😔' : '⏹'}</div>
                     <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 6 }}>
-                      {userWon ? 'Gewonnen!' : hasPosition ? 'Verloren' : 'Markt beendet'}
+                      {userWon ? 'Gewonnen!' : hasPosition ? 'Verloren' : 'Markt nicht mehr aktiv'}
                     </div>
-                    <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}>{soccerResolutionLabel()}</div>
+                    {market.resolved && (
+                      <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}>{soccerResolutionLabel()}</div>
+                    )}
                     {userWon && (
                       <div style={{ fontSize: 32, fontWeight: 800, color: '#16a34a', letterSpacing: '-0.5px', marginBottom: 16 }}>
                         +{Math.round(market.resolution === 'yes' ? sharesYes : sharesNo)} ₫
@@ -1155,7 +1178,6 @@ export default function MarketPage() {
               </div>
             </div>
 
-            {/* Feature 4: Live-Positionen unter Chart bei Krypto */}
             {!market.resolved && (
               <div style={{ marginTop: 12 }}>
                 <LivePositionsBar trades={trades} isKrypto={true} />
@@ -1195,7 +1217,6 @@ export default function MarketPage() {
               <div className="prob-bar" style={{ height: 8, marginBottom: 12 }}>
                 <div className={`prob-bar-fill ${isLow ? 'low' : ''}`} style={{ width: `${prob}%` }} />
               </div>
-              {/* Feature 4: Live-Positionen bei normalen Märkten */}
               {!market.resolved && <LivePositionsBar trades={trades} isKrypto={false} />}
             </div>
           </>
