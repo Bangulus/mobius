@@ -287,7 +287,11 @@ export default function Home() {
   const [leaderboard, setLeaderboard]         = useState<LeaderboardEntry[]>([])
   const [weeklyBoard, setWeeklyBoard]         = useState<WeeklyEntry[]>([])
   const [showLeaderboard, setShowLeaderboard] = useState(false)
-  const [category, setCategory]               = useState('Politik-Deutschland')
+  const [category, setCategory]               = useState(() => {
+    if (typeof window === 'undefined') return 'Politik-Deutschland'
+    const params = new URLSearchParams(window.location.search)
+    return params.get('category') ?? 'Politik-Deutschland'
+  })
   const [view, setView]                       = useState<'markets' | 'portfolio' | 'admin' | 'profil'>('markets')
   const [loading, setLoading]                 = useState(true)
   const [darkMode, setDarkMode]               = useState(() => {
