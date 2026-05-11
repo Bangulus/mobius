@@ -1228,11 +1228,33 @@ function MarketsGrid({ markets, onOpen, isSoccer }: { markets: Market[]; onOpen:
     }
   })
 
+  const FINANCE_SECTION_ORDER = ['Indizes', 'Aktien', 'Rohstoffe & Forex']
+
+  const financeSections: Record<string, Market[]> = {
+    'Indizes': [],
+    'Aktien': [],
+    'Rohstoffe & Forex': [],
+  }
+
+  const FINANCE_CATEGORY_MAP: Record<string, string> = {
+    '^GDAXI': 'Indizes', '^GSPC': 'Indizes', '^NDX': 'Indizes', '^STOXX50E': 'Indizes',
+    'NVDA': 'Aktien', 'AAPL': 'Aktien', 'MSFT': 'Aktien', 'GOOGL': 'Aktien',
+    'AMZN': 'Aktien', 'META': 'Aktien', 'AVGO': 'Aktien', 'TSLA': 'Aktien', 'SAP': 'Aktien',
+    'GC=F': 'Rohstoffe & Forex', 'SI=F': 'Rohstoffe & Forex', 'CL=F': 'Rohstoffe & Forex',
+    'EURUSD=X': 'Rohstoffe & Forex',
+  }
+
+  const isFinance = otherMarkets.length > 0 && otherMarkets.every(m => m.category === 'finance' || m.category === 'Finanzen')
+
   const groups: Record<string, Market[]> = {}
   const ungrouped: Market[] = []
 
   otherMarkets.forEach((m) => {
-    if (m.group_title) {
+    if (isFinance && m.coin) {
+      const section = FINANCE_CATEGORY_MAP[m.coin] ?? 'Sonstige'
+      financeSections[section] = financeSections[section] ?? []
+      financeSections[section].push(m)
+    } else if (m.group_title) {
       if (!groups[m.group_title]) groups[m.group_title] = []
       groups[m.group_title].push(m)
     } else if (m.display_group) {
@@ -1242,6 +1264,72 @@ function MarketsGrid({ markets, onOpen, isSoccer }: { markets: Market[]; onOpen:
       ungrouped.push(m)
     }
   })
+
+  return (
+    <div>
+      {soccerEntries.length > 0 && (
+        <div style={{ marginBottom: 24 }}>
+          {Object.entries(soccerByDate).map(([dateKey, matches]) => (
+            <div key={dateKey} style={{ marginBottom: 24 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 10, paddingBottom: 6, borderBottom: '1px solid var(--border)' }}>
+                {dateKey}
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {matches.map(([matchId, matchMarkets]) => (
+                  <SoccerMatchCard key={matchId} markets={matchMarkets} onOpen={onOpen} />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {isFinance ? (
+        <>
+          {FINANCE_SECTION_ORDER.map(section => {
+            const sectionMarkets = financeSections[section]
+            if (!sectionMarkets || sectionMarkets.length === 0) return null
+            return (
+              <div key={section} style={{ marginBottom: 32 }}>
+                <div style={{
+                  fontSize: 13, fontWeight: 700, color: 'var(--text-muted)',
+                  marginBottom: 12, paddingBottom: 8,
+                  borderBottom: '1px solid var(--border)',
+                  textTransform: 'uppercase', letterSpacing: '0.06em',
+                }}>
+                  {section}
+                </div>
+                <div className="markets-grid">
+                  {sectionMarkets.map(m => <MarketCard key={m.id} market={m} onClick={() => onOpen(m.id)} />)}
+                </div>
+              </div>
+            )
+          })}
+        </>
+      ) : (
+        <>
+          {ungrouped.length > 0 && (
+            <div className="markets-grid">
+              {ungrouped.map((m) => <MarketCard key={m.id} market={m} onClick={() => onOpen(m.id)} />)}
+            </div>
+          )}
+          {Object.entries(groups).map(([key, mts]) => {
+            const isDisplay = key.startsWith('__dg__')
+            const label = isDisplay ? key.replace('__dg__', '') : key
+            return (
+              <div key={key}>
+                <div className={isDisplay ? 'display-group-header' : 'group-header'}>{label}</div>
+                <div className="markets-grid">
+                  {mts.map((m) => <MarketCard key={m.id} market={m} onClick={() => onOpen(m.id)} />)}
+                </div>
+              </div>
+            )
+          })}
+        </>
+      )}
+    </div>
+  )
+})
 
   const soccerEntries = Object.entries(soccerGroups)
 
