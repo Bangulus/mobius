@@ -1214,7 +1214,7 @@ export default function MarketPage() {
 
             <div style={{ position: 'relative', width: '100%', height: 240 }}>
               <canvas ref={cryptoCanvasRef} width={860} height={240} style={{ width: '100%', height: '100%', display: 'block' }} />
-              {priceHistory.length < 2 && !market.resolved && (
+              {priceHistory.length < 1 && !market.resolved && (
                 <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
                   Chart wird aufgebaut…
                 </div>
