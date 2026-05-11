@@ -125,7 +125,6 @@ async function fetchCoinbasePrice(coin: string): Promise<number | null> {
   } catch { return null }
 }
 
-// Serverseitiger Proxy für Finance-Preise (kein CORS-Problem)
 async function fetchFinancePrice(symbol: string): Promise<number | null> {
   try {
     const res = await fetch(`/api/finance-price?symbol=${encodeURIComponent(symbol)}`, { cache: 'no-store' })
@@ -208,7 +207,7 @@ function drawCryptoChart(
   for (let i = 0; i <= 3; i++) {
     const ms = marketStartMs + (duration * i / 3)
     const d  = new Date(ms)
-    ctx.fillText(`${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`, xScale(ms), H - padB + 16)
+    ctx.fillText(`${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`, xScale(ms), H - padB + 16)
   }
 }
 
@@ -261,36 +260,21 @@ function getTeamLogo(name: string): string | undefined {
 }
 
 const TEAM_COLORS: Record<string, string> = {
-  'FC Bayern München': '#dc052d',
-  'Borussia Dortmund': '#1a1a1a',
-  'BV Borussia 09 Dortmund': '#1a1a1a',
-  'Bayer 04 Leverkusen': '#e32221',
-  'RB Leipzig': '#dd0741',
-  'Eintracht Frankfurt': '#e1000f',
-  'VfB Stuttgart': '#e32219',
-  'SC Freiburg': '#e30613',
-  'Union Berlin': '#eb1923',
-  '1. FC Union Berlin': '#eb1923',
-  'Borussia Mönchengladbach': '#000000',
-  'VfL Wolfsburg': '#65b32e',
-  'TSG Hoffenheim': '#1961ae',
-  'FC Augsburg': '#ba3733',
-  'SV Werder Bremen': '#1d9053',
-  'Mainz 05': '#c1121c',
-  '1. FSV Mainz 05': '#c1121c',
-  'VfL Bochum': '#005aaa',
-  'FC Heidenheim': '#e2001a',
-  '1. FC Heidenheim 1846': '#e2001a',
-  'SV Darmstadt 98': '#004f9f',
-  'Holstein Kiel': '#c8102e',
-  'FC St. Pauli': '#6b3c26',
-  'Hamburger SV': '#0033a0',
-  '1. FC Köln': '#c8102e',
+  'FC Bayern München': '#dc052d', 'Borussia Dortmund': '#1a1a1a',
+  'BV Borussia 09 Dortmund': '#1a1a1a', 'Bayer 04 Leverkusen': '#e32221',
+  'RB Leipzig': '#dd0741', 'Eintracht Frankfurt': '#e1000f',
+  'VfB Stuttgart': '#e32219', 'SC Freiburg': '#e30613',
+  'Union Berlin': '#eb1923', '1. FC Union Berlin': '#eb1923',
+  'Borussia Mönchengladbach': '#000000', 'VfL Wolfsburg': '#65b32e',
+  'TSG Hoffenheim': '#1961ae', 'FC Augsburg': '#ba3733',
+  'SV Werder Bremen': '#1d9053', 'Mainz 05': '#c1121c',
+  '1. FSV Mainz 05': '#c1121c', 'VfL Bochum': '#005aaa',
+  'FC Heidenheim': '#e2001a', '1. FC Heidenheim 1846': '#e2001a',
+  'SV Darmstadt 98': '#004f9f', 'Holstein Kiel': '#c8102e',
+  'FC St. Pauli': '#6b3c26', 'Hamburger SV': '#0033a0', '1. FC Köln': '#c8102e',
 }
 
-function getTeamColor(name: string): string {
-  return TEAM_COLORS[name] ?? '#6366f1'
-}
+function getTeamColor(name: string): string { return TEAM_COLORS[name] ?? '#6366f1' }
 
 function getTeamInitials(name: string): string {
   const clean = name.replace(/^(FC|BV|SV|TSG|VfB|VfL|SC|RB|1\.|FSV)\s+/i, '')
@@ -301,10 +285,10 @@ function getTeamInitials(name: string): string {
 
 function TeamIcon({ name, size = 64 }: { name: string; size?: number }) {
   const [imgError, setImgError] = useState(false)
-  const logoUrl   = getTeamLogo(name)
-  const color     = getTeamColor(name)
-  const radius    = Math.round(size * 0.22)
-  const fontSize  = Math.round(size * 0.32)
+  const logoUrl  = getTeamLogo(name)
+  const color    = getTeamColor(name)
+  const radius   = Math.round(size * 0.22)
+  const fontSize = Math.round(size * 0.32)
   if (logoUrl && !imgError) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
@@ -322,12 +306,12 @@ function TeamIcon({ name, size = 64 }: { name: string; size?: number }) {
 function LivePositionsBar({ trades, isKrypto }: { trades: Trade[]; isKrypto: boolean }) {
   const buyTrades = trades.filter(t => t.type === 'buy_yes' || t.type === 'buy_no')
   if (buyTrades.length < 3) return null
-  const yesCount = buyTrades.filter(t => t.type === 'buy_yes').length
-  const noCount  = buyTrades.filter(t => t.type === 'buy_no').length
-  const total    = yesCount + noCount
-  const yesPct   = Math.round((yesCount / total) * 100)
-  const noPct    = 100 - yesPct
-  const majority = yesPct >= noPct ? 'yes' : 'no'
+  const yesCount    = buyTrades.filter(t => t.type === 'buy_yes').length
+  const noCount     = buyTrades.filter(t => t.type === 'buy_no').length
+  const total       = yesCount + noCount
+  const yesPct      = Math.round((yesCount / total) * 100)
+  const noPct       = 100 - yesPct
+  const majority    = yesPct >= noPct ? 'yes' : 'no'
   const majorityPct = majority === 'yes' ? yesPct : noPct
   const majorityLabel = isKrypto ? (majority === 'yes' ? 'UP ↑' : 'DOWN ↓') : (majority === 'yes' ? 'Ja' : 'Nein')
   const minorityLabel = isKrypto ? (majority === 'yes' ? 'DOWN ↓' : 'UP ↑') : (majority === 'yes' ? 'Nein' : 'Ja')
@@ -355,29 +339,24 @@ function LivePositionsBar({ trades, isKrypto }: { trades: Trade[]; isKrypto: boo
   )
 }
 
-// Polymarket-style Countdown
 function CountdownDisplay({ targetMs, redThresholdMs = 30000 }: { targetMs: number; redThresholdMs?: number }) {
   const [parts, setParts] = useState({ h: 0, m: 0, s: 0, ended: false })
-
   useEffect(() => {
     const tick = () => {
       const diff = targetMs - Date.now()
       if (diff <= 0) { setParts({ h: 0, m: 0, s: 0, ended: true }); return }
-      const h = Math.floor(diff / 3600000)
-      const m = Math.floor((diff % 3600000) / 60000)
-      const s = Math.floor((diff % 60000) / 1000)
-      setParts({ h, m, s, ended: false })
+      setParts({ h: Math.floor(diff / 3600000), m: Math.floor((diff % 3600000) / 60000), s: Math.floor((diff % 60000) / 1000), ended: false })
     }
     tick()
     const id = setInterval(tick, 1000)
     return () => clearInterval(id)
   }, [targetMs])
 
-  const diff = targetMs - Date.now()
+  const diff  = targetMs - Date.now()
   const isRed = diff <= redThresholdMs && !parts.ended
 
   if (parts.ended) return (
-    <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+    <div style={{ display: 'flex', gap: 16 }}>
       <div style={{ textAlign: 'center' }}>
         <div style={{ fontSize: 32, fontWeight: 900, color: '#dc2626', fontVariantNumeric: 'tabular-nums' }}>00</div>
         <div style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: 1, marginTop: 2 }}>SEK</div>
@@ -390,25 +369,19 @@ function CountdownDisplay({ targetMs, redThresholdMs = 30000 }: { targetMs: numb
       {parts.h > 0 && (
         <>
           <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: 32, fontWeight: 900, color: isRed ? '#dc2626' : 'var(--text)', fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>
-              {String(parts.h).padStart(2, '0')}
-            </div>
+            <div style={{ fontSize: 32, fontWeight: 900, color: isRed ? '#dc2626' : 'var(--text)', fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>{String(parts.h).padStart(2, '0')}</div>
             <div style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: 1, marginTop: 4 }}>STD</div>
           </div>
           <div style={{ fontSize: 28, fontWeight: 900, color: 'var(--text-muted)', lineHeight: '36px' }}>:</div>
         </>
       )}
       <div style={{ textAlign: 'center' }}>
-        <div style={{ fontSize: 32, fontWeight: 900, color: isRed ? '#dc2626' : 'var(--text)', fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>
-          {String(parts.m).padStart(2, '0')}
-        </div>
+        <div style={{ fontSize: 32, fontWeight: 900, color: isRed ? '#dc2626' : 'var(--text)', fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>{String(parts.m).padStart(2, '0')}</div>
         <div style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: 1, marginTop: 4 }}>MIN</div>
       </div>
       <div style={{ fontSize: 28, fontWeight: 900, color: 'var(--text-muted)', lineHeight: '36px' }}>:</div>
       <div style={{ textAlign: 'center' }}>
-        <div style={{ fontSize: 32, fontWeight: 900, color: isRed ? '#dc2626' : 'var(--text)', fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>
-          {String(parts.s).padStart(2, '0')}
-        </div>
+        <div style={{ fontSize: 32, fontWeight: 900, color: isRed ? '#dc2626' : 'var(--text)', fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>{String(parts.s).padStart(2, '0')}</div>
         <div style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: 1, marginTop: 4 }}>SEK</div>
       </div>
     </div>
@@ -522,7 +495,7 @@ export default function MarketPage() {
     const hasPos    = sharesYes > 0 || sharesNo > 0
     const won       = hasPos && ((market.resolution === 'yes' && sharesYes > 0) || (market.resolution === 'no' && sharesNo > 0))
     const amount    = won ? Math.round(market.resolution === 'yes' ? sharesYes : sharesNo) : 0
-    const next      = liveMarkets.find(m => m.coin === market.coin && m.id !== marketId)
+    const next      = liveMarkets.find(m => m.coin === market.coin && m.id !== marketId && m.group_title === '3-Minuten-Markt')
     setResultToast({ won, amount, resolution: market.resolution ?? '', coin: market.coin, nextMarketId: next?.id })
     if (user?.id) {
       dbGet('users', `id=eq.${user.id}&select=balance`).then(d => {
@@ -533,9 +506,9 @@ export default function MarketPage() {
 
   useEffect(() => {
     if (!resultToast || resultToast.nextMarketId) return
-    const next = liveMarkets.find(m => m.coin === market?.coin && m.id !== marketId)
+    const next = liveMarkets.find(m => m.coin === market?.coin && m.id !== marketId && (isFinance ? m.group_title === '3-Minuten-Markt' : true))
     if (next) setResultToast(prev => prev ? { ...prev, nextMarketId: next.id } : prev)
-  }, [liveMarkets, resultToast, market?.coin, marketId])
+  }, [liveMarkets, resultToast, market?.coin, marketId, isFinance])
 
   useEffect(() => {
     loadMarket(); loadTrades(); loadLiveMarkets()
@@ -573,8 +546,7 @@ export default function MarketPage() {
 
   useEffect(() => {
     if (!market?.resolved) return
-    const coin  = market.coin
-    const found = liveMarkets.find(m => m.coin === coin && m.id !== marketId)
+    const found = liveMarkets.find(m => m.coin === market.coin && m.id !== marketId)
     if (found && liveMarketPollRef.current) { clearInterval(liveMarketPollRef.current); liveMarketPollRef.current = null }
   }, [liveMarkets, market, marketId])
 
@@ -590,22 +562,17 @@ export default function MarketPage() {
     loadPosition(user.id)
   }, [market?.resolved, user?.id, loadPosition])
 
-  // Preis-Fetcher: Krypto via Coinbase, Finance via serverseitigen Proxy
   useEffect(() => {
     if (!market?.is_auto || !market?.coin || market?.resolved) return
     if (market?.match_id) return
 
-    const coin        = market.coin
-    const marketEndMs = parseUTC(market.closes_at).getTime()
+    const coin           = market.coin
+    const marketEndMs    = parseUTC(market.closes_at).getTime()
     const isFinanceMarket = market.category === 'finance' || market.category === 'Finanzen'
 
     const fetchPrice = async (): Promise<number | null> => {
       if (Date.now() > marketEndMs) return null
-      if (isFinanceMarket) {
-        return await fetchFinancePrice(coin)
-      } else {
-        return await fetchCoinbasePrice(coin)
-      }
+      return isFinanceMarket ? fetchFinancePrice(coin) : fetchCoinbasePrice(coin)
     }
 
     const fetchReal = async () => {
@@ -640,16 +607,21 @@ export default function MarketPage() {
   useEffect(() => {
     if (!market?.is_auto || !cryptoCanvasRef.current || !market?.start_price || !market?.closes_at) return
     if (market?.match_id) return
-    const marketEndMs   = parseUTC(market.closes_at).getTime()
-    const marketStartMs = marketEndMs - 3 * 60 * 1000
+    const marketEndMs     = parseUTC(market.closes_at).getTime()
+    const isFinanceMarket = market.category === 'finance' || market.category === 'Finanzen'
+    const durationMs      = isFinanceMarket
+      ? (market.group_title === '3-Minuten-Markt'      ? 3 * 60 * 1000
+        : market.group_title === 'Aktueller Handelstag' ? 8 * 60 * 60 * 1000
+        : 5 * 24 * 60 * 60 * 1000)
+      : 3 * 60 * 1000
+    const marketStartMs = marketEndMs - durationMs
     drawCryptoChart(cryptoCanvasRef.current, priceHistory, market.start_price, marketStartMs, marketEndMs)
-  }, [priceHistory, market?.is_auto, market?.start_price, market?.closes_at, market?.resolved, market?.match_id])
+  }, [priceHistory, market?.is_auto, market?.start_price, market?.closes_at, market?.resolved, market?.match_id, market?.category, market?.group_title])
 
-  // Resolve/Create Trigger für Krypto (nicht Finance)
   useEffect(() => {
     if (!market?.closes_at || !market?.coin || !market?.id) return
     if (market?.match_id) return
-    if (isFinance) return // Finance löst via Cron auf, nicht clientseitig
+    if (isFinance) return
 
     resolveTriggeredRef.current = false
     createTriggeredRef.current  = false
@@ -738,8 +710,8 @@ export default function MarketPage() {
     const build = async () => {
       const { Chart, registerables } = await import('chart.js')
       Chart.register(...registerables)
-      const now   = new Date()
-      const since = activeTab === '7T' ? new Date(now.getTime() - 7 * 24 * 3600 * 1000) : activeTab === '1M' ? new Date(now.getTime() - 30 * 24 * 3600 * 1000) : new Date(0)
+      const now        = new Date()
+      const since      = activeTab === '7T' ? new Date(now.getTime() - 7 * 24 * 3600 * 1000) : activeTab === '1M' ? new Date(now.getTime() - 30 * 24 * 3600 * 1000) : new Date(0)
       const pts        = tradeHistory.filter(p => new Date(p.t) >= since)
       const dataPoints = pts.length > 0 ? pts : tradeHistory.slice(-10)
       const isDark     = document.documentElement.getAttribute('data-theme') === 'dark'
@@ -819,40 +791,45 @@ export default function MarketPage() {
     </div>
   )
 
-  const isSoccer  = !!market.match_id
-  const isKrypto  = !!market.is_auto && !isSoccer && !isFinance
-  const prob      = calcProb(market.q_yes, market.q_no, market.b)
-  const isLow     = prob < 50
-  const catClass  = CAT_CLASS[market.category ?? ''] ?? ''
-  const payout    = Math.round(lmsrSharesForSpend(market.q_yes, market.q_no, market.b, direction, spend))
-  const sharesYes = position?.shares_yes ?? 0
-  const sharesNo  = position?.shares_no  ?? 0
-  const hasPosition    = sharesYes > 0 || sharesNo > 0
-  const sellSide       = sharesYes >= sharesNo ? 'yes' : 'no'
-  const sellShares     = sellSide === 'yes' ? sharesYes : sharesNo
-  const returnOnSell   = hasPosition ? lmsrSellReturn(market.q_yes, market.q_no, market.b, sellSide, sellShares) : 0
-  const closesAt       = parseUTC(market.closes_at)
-  const closesAtMs     = closesAt.getTime()
-  const delta          = livePrice && market.start_price ? livePrice - market.start_price : null
-  const endDelta       = market.end_price && market.start_price ? market.end_price - market.start_price : null
-  const isUp           = delta !== null ? delta >= 0 : (endDelta !== null ? endDelta >= 0 : true)
-  const nextLiveMarket   = liveMarkets.find(m => m.coin === market.coin && m.id !== marketId)
+  const isSoccer    = !!market.match_id
+  const isKrypto    = !!market.is_auto && !isSoccer && !isFinance
+  const prob        = calcProb(market.q_yes, market.q_no, market.b)
+  const isLow       = prob < 50
+  const catClass    = CAT_CLASS[market.category ?? ''] ?? ''
+  const payout      = Math.round(lmsrSharesForSpend(market.q_yes, market.q_no, market.b, direction, spend))
+  const sharesYes   = position?.shares_yes ?? 0
+  const sharesNo    = position?.shares_no  ?? 0
+  const hasPosition = sharesYes > 0 || sharesNo > 0
+  const sellSide    = sharesYes >= sharesNo ? 'yes' : 'no'
+  const sellShares  = sellSide === 'yes' ? sharesYes : sharesNo
+  const returnOnSell = hasPosition ? lmsrSellReturn(market.q_yes, market.q_no, market.b, sellSide, sellShares) : 0
+  const closesAt    = parseUTC(market.closes_at)
+  const closesAtMs  = closesAt.getTime()
+  const delta       = livePrice && market.start_price ? livePrice - market.start_price : null
+  const endDelta    = market.end_price && market.start_price ? market.end_price - market.start_price : null
+  const isUp        = delta !== null ? delta >= 0 : (endDelta !== null ? endDelta >= 0 : true)
+
+  // Fix: nextLiveMarket für Finance immer auf 3-Minuten-Markt zeigen
+  const nextLiveMarket = isFinance
+    ? liveMarkets.find(m => m.coin === market.coin && m.id !== marketId && m.group_title === '3-Minuten-Markt')
+    : liveMarkets.find(m => m.coin === market.coin && m.id !== marketId)
   const otherLiveMarkets = liveMarkets.filter(m => m.coin !== market.coin).slice(0, 4)
+
   const userWon = market.resolved && hasPosition &&
     ((market.resolution === 'yes' && sharesYes > 0) || (market.resolution === 'no' && sharesNo > 0))
   const showEndedBanner = market.resolved || closesAtMs < Date.now()
 
   const soccerTeams = market.display_group?.split(' vs ') ?? []
-  const homeTeam = soccerTeams[0] ?? ''
-  const awayTeam = soccerTeams[1] ?? ''
+  const homeTeam    = soccerTeams[0] ?? ''
+  const awayTeam    = soccerTeams[1] ?? ''
 
   const homeMarket = siblingMarkets.find(m => m.outcome === 'home')
   const drawMarket = siblingMarkets.find(m => m.outcome === 'draw')
   const awayMarket = siblingMarkets.find(m => m.outcome === 'away')
 
-  const homeProb = homeMarket ? calcProb(homeMarket.q_yes, homeMarket.q_no, homeMarket.b) : 33
-  const drawProb = drawMarket ? calcProb(drawMarket.q_yes, drawMarket.q_no, drawMarket.b) : 34
-  const awayProb = awayMarket ? calcProb(awayMarket.q_yes, awayMarket.q_no, awayMarket.b) : 33
+  const homeProb  = homeMarket ? calcProb(homeMarket.q_yes, homeMarket.q_no, homeMarket.b) : 33
+  const drawProb  = drawMarket ? calcProb(drawMarket.q_yes, drawMarket.q_no, drawMarket.b) : 34
+  const awayProb  = awayMarket ? calcProb(awayMarket.q_yes, awayMarket.q_no, awayMarket.b) : 33
   const totalProb = homeProb + drawProb + awayProb
   const homeNorm  = Math.round((homeProb / totalProb) * 100)
   const drawNorm  = Math.round((drawProb / totalProb) * 100)
@@ -872,19 +849,12 @@ export default function MarketPage() {
     return 'Nicht eingetreten'
   }
 
-  // Schließzeit in Berliner Zeit
-  const closesAtLabel = closesAt.toLocaleTimeString('de-DE', {
-    timeZone: 'Europe/Berlin',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-
-  // Markt-Titel für Finance/Krypto
+  // Markt-Titel
   const autoMarketTitle = isFinance
     ? `${market.short_label ?? market.coin} · ${market.group_title ?? ''}`
     : `${market.coin} Up or Down – 3 Minuten`
 
-  // Zurück-Button Label
+  // Zurück-Button
   const backLabel = isSoccer
     ? '← Zurück zur Bundesliga'
     : isFinance
@@ -894,9 +864,9 @@ export default function MarketPage() {
     : '← Zurück'
 
   const backTarget = isSoccer
-    ? '/?category=Sport&tab=Bundesliga'
+    ? '/?category=Bundesliga'
     : isFinance
-    ? '/'
+    ? `/?category=Finanzen-${market.group_title === '3-Minuten-Markt' ? '3min' : market.group_title === 'Aktueller Handelstag' ? 'Tag' : 'Woche'}`
     : market.category
     ? `/?category=${encodeURIComponent(market.category)}`
     : '/'
@@ -962,14 +932,14 @@ export default function MarketPage() {
 
       <div style={{ maxWidth: 980, margin: '0 auto', padding: '24px 16px' }}>
 
-        {/* ── SOCCER UI ── */}
+        {/* ── SOCCER ── */}
         {isSoccer && (
           <>
             <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 6 }}>
               <span>Sport</span><span>·</span><span>{market.group_title ?? 'Bundesliga'}</span>
             </div>
             {soccerIsInactive && (
-              <div style={{ marginBottom: 16, padding: '14px 20px', borderRadius: 12, background: 'rgba(100,116,139,0.08)', border: '1px solid rgba(100,116,139,0.25)', display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ marginBottom: 16, padding: '14px 20px', borderRadius: 12, background: 'rgba(100,116,139,0.08)', border: '1px solid rgba(100,116,139,0.25)' }}>
                 <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-muted)' }}>Dieser Möbius-Markt ist nicht mehr aktiv</span>
               </div>
             )}
@@ -1034,7 +1004,7 @@ export default function MarketPage() {
                   const won        = isResolved && opt.market?.resolution === 'yes'
                   return (
                     <div key={opt.outcome} onClick={() => { if (opt.market && opt.market.id !== marketId) router.push(`/markets/${opt.market.id}`) }}
-                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderRadius: 14, cursor: opt.market?.id !== marketId ? 'pointer' : 'default', border: isActive ? `2px solid ${opt.color}` : '2px solid var(--border)', background: isActive ? `${opt.color}10` : 'var(--card)', transition: 'all 0.15s', position: 'relative', opacity: isResolved && !won ? 0.6 : 1 }}>
+                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderRadius: 14, cursor: opt.market?.id !== marketId ? 'pointer' : 'default', border: isActive ? `2px solid ${opt.color}` : '2px solid var(--border)', background: isActive ? `${opt.color}10` : 'var(--card)', transition: 'all 0.15s', opacity: isResolved && !won ? 0.6 : 1 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
                         {opt.outcome === 'draw' ? (
                           <div style={{ width: 44, height: 44, borderRadius: 11, background: '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 900, color: '#fff', flexShrink: 0 }}>X</div>
@@ -1168,7 +1138,7 @@ export default function MarketPage() {
           </>
         )}
 
-        {/* ── KRYPTO / FINANCE UI ── */}
+        {/* ── KRYPTO / FINANCE ── */}
         {(isKrypto || isFinance) && showEndedBanner && (
           <div style={{ marginBottom: 20, padding: '16px 20px', borderRadius: 14, background: market.resolved ? (market.resolution === 'yes' ? 'rgba(22,163,74,0.12)' : 'rgba(220,38,38,0.12)') : 'rgba(245,158,11,0.12)', border: `1px solid ${market.resolved ? (market.resolution === 'yes' ? 'rgba(22,163,74,0.3)' : 'rgba(220,38,38,0.3)') : 'rgba(245,158,11,0.3)'}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -1179,7 +1149,7 @@ export default function MarketPage() {
                 </div>
                 {market.resolved && market.start_price && market.end_price && (
                   <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 2 }}>
-                    {market.coin}: ${market.start_price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} → ${market.end_price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    {market.short_label ?? market.coin}: ${market.start_price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} → ${market.end_price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </div>
                 )}
               </div>
@@ -1203,7 +1173,7 @@ export default function MarketPage() {
                 <div>
                   <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>{autoMarketTitle}</div>
                   <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                    {market.resolved ? 'Markt beendet' : `Schließt um ${closesAtLabel} Uhr`}
+                    {market.resolved ? 'Markt beendet' : market.group_title ?? ''}
                   </div>
                 </div>
               </div>
@@ -1311,7 +1281,7 @@ export default function MarketPage() {
                     Ergebnis: {market.resolution === 'yes' ? 'Up ↑' : 'Down ↓'}
                   </div>
                   <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 20 }}>
-                    {market.coin}: ${market.start_price?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} → ${market.end_price?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    {market.short_label ?? market.coin}: ${market.start_price?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} → ${market.end_price?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </div>
                   {nextLiveMarket && (
                     <button onClick={() => router.push(`/markets/${nextLiveMarket.id}`)} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '12px 24px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: 20, cursor: 'pointer', fontSize: 14, fontWeight: 700 }}>
@@ -1333,7 +1303,7 @@ export default function MarketPage() {
                           <div key={m.id} onClick={() => router.push(`/markets/${m.id}`)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', background: 'var(--surface)', borderRadius: 10, cursor: 'pointer' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                               <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#22c55e' }} />
-                              <span style={{ fontWeight: 700, fontSize: 13, color: COIN_COLORS[m.coin ?? ''] ?? '#888' }}>{m.coin}</span>
+                              <span style={{ fontWeight: 700, fontSize: 13, color: COIN_COLORS[m.coin ?? ''] ?? '#888' }}>{m.short_label ?? m.coin}</span>
                               <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{m.group_title ?? 'Up or Down'}</span>
                             </div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
