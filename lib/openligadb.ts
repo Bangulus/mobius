@@ -11,37 +11,87 @@ export interface OpenLigaMatch {
     pointsTeam2: number
   }>
 }
- 
+
 function getCurrentSeason(): number {
   const now = new Date()
   const month = now.getMonth()
   const year = now.getFullYear()
   return month >= 7 ? year : year - 1
 }
- 
+
+async function getCurrentMatchday(): Promise<number | null> {
+  try {
+    const season = getCurrentSeason()
+    const res = await fetch(
+      `https://api.openligadb.de/getcurrentgroup/bl1`,
+      { cache: 'no-store' }
+    )
+    if (!res.ok) return null
+    const data = await res.json()
+    return data?.groupOrderID ?? null
+  } catch {
+    return null
+  }
+}
+
 export async function getCurrentMatches(): Promise<OpenLigaMatch[]> {
   const season = getCurrentSeason()
-  const url = `https://api.openligadb.de/getmatchdata/bl1/${season}`
-  const res = await fetch(url, {
-    cache: 'no-store', // Fix: war revalidate:60 → gecachte veraltete Ergebnisse
-  })
-  if (!res.ok) {
-    console.error('OpenLigaDB Fehler:', res.status)
-    return []
+
+  // Erst aktuellen Spieltag holen
+  const matchday = await getCurrentMatchday()
+
+  if (matchday !== null) {
+    // Nur aktuellen Spieltag laden
+    const res = await fetch(
+      `https://api.openligadb.de/getmatchdata/bl1/${season}/${matchday}`,
+      { cache: 'no-store' }
+    )
+    if (res.ok) {
+      const matches: OpenLigaMatch[] = await res.json()
+      if (matches.length > 0) return matches
+    }
+
+    // Fallback: auch vorherigen Spieltag prüfen (Spiele vom Wochenende)
+    if (matchday > 1) {
+      const resPrev = await fetch(
+        `https://api.openligadb.de/getmatchdata/bl1/${season}/${matchday - 1}`,
+        { cache: 'no-store' }
+      )
+      if (resPrev.ok) {
+        const prevMatches: OpenLigaMatch[] = await resPrev.json()
+        const currentRes = await fetch(
+          `https://api.openligadb.de/getmatchdata/bl1/${season}/${matchday}`,
+          { cache: 'no-store' }
+        )
+        const currentMatches: OpenLigaMatch[] = currentRes.ok ? await currentRes.json() : []
+        return [...prevMatches, ...currentMatches]
+      }
+    }
   }
-  const matches: OpenLigaMatch[] = await res.json()
-  return matches
+
+  // Letzter Fallback: gesamte Saison
+  const res = await fetch(
+    `https://api.openligadb.de/getmatchdata/bl1/${season}`,
+    { cache: 'no-store' }
+  )
+  if (!res.ok) return []
+  return res.json()
 }
- 
+
 export async function getMatchById(matchId: number): Promise<OpenLigaMatch | null> {
-  const season = getCurrentSeason()
-  const url = `https://api.openligadb.de/getmatchdata/bl1/${season}`
-  const res = await fetch(url, { cache: 'no-store' })
-  if (!res.ok) return null
-  const matches: OpenLigaMatch[] = await res.json()
-  return matches.find(m => m.matchID === matchId) ?? null
+  try {
+    const res = await fetch(
+      `https://api.openligadb.de/getmatchdata/${matchId}`,
+      { cache: 'no-store' }
+    )
+    if (!res.ok) return null
+    const match: OpenLigaMatch = await res.json()
+    return match ?? null
+  } catch {
+    return null
+  }
 }
- 
+
 export function getMatchOutcome(match: OpenLigaMatch): 'home' | 'draw' | 'away' | null {
   if (!match.matchIsFinished) return null
   const final = match.matchResults.find(r => r.resultTypeID === 2)
@@ -50,7 +100,7 @@ export function getMatchOutcome(match: OpenLigaMatch): 'home' | 'draw' | 'away' 
   if (final.pointsTeam1 < final.pointsTeam2) return 'away'
   return 'draw'
 }
- 
+
 export function getUpcomingMatches(matches: OpenLigaMatch[]): OpenLigaMatch[] {
   const now = new Date()
   const in3days = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000)
@@ -60,16 +110,13 @@ export function getUpcomingMatches(matches: OpenLigaMatch[]): OpenLigaMatch[] {
     return matchTime > now && matchTime <= in3days
   })
 }
- 
+
 export function getFinishedUnresolvedMatches(
   matches: OpenLigaMatch[],
   existingMatchIds: string[]
 ): OpenLigaMatch[] {
   return matches.filter(m => {
     const matchId = `bl1-${m.matchID}`
-    return (
-      m.matchIsFinished &&
-      existingMatchIds.includes(matchId)
-    )
+    return m.matchIsFinished && existingMatchIds.includes(matchId)
   })
 }
