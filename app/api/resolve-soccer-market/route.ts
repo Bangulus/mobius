@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getMatchById, getMatchOutcome } from '@/lib/openligadb'
+import { getCurrentMatches, getMatchOutcome, OpenLigaMatch } from '@/lib/openligadb'
 
 export const runtime = 'edge'
 
@@ -17,10 +17,7 @@ function adminHeaders() {
 async function getOpenSoccerMarkets() {
   const res = await fetch(
     `${supabaseUrl}/rest/v1/markets?category=eq.sport&resolved=eq.false&is_auto=eq.true&select=*`,
-    {
-      headers: adminHeaders(),
-      cache: 'no-store',
-    }
+    { headers: adminHeaders(), cache: 'no-store' }
   )
   if (!res.ok) return []
   return res.json()
@@ -98,18 +95,45 @@ export async function GET() {
       return NextResponse.json({ ok: true, resolved: 0, message: 'Keine offenen Märkte' })
     }
 
+    // Alle relevanten Match-IDs sammeln
+    const matchIds = Array.from(new Set(
+      openMarkets.map((m: { match_id: string }) => m.match_id).filter(Boolean)
+    )) as string[]
+
+    // Alle Matches auf einmal laden — prev + current + next Spieltag
+    const allMatches = await getCurrentMatches()
+
+    // Map aufbauen: "bl1-12345" → match
+    const matchMap = new Map<string, OpenLigaMatch>()
+    for (const match of allMatches) {
+      matchMap.set(`bl1-${match.matchID}`, match)
+    }
+
+    // Wenn ein match_id nicht in der Map ist → gesamte Saison als Fallback laden
+    const missingIds = matchIds.filter(id => !matchMap.has(id))
+    if (missingIds.length > 0) {
+      const season = new Date().getMonth() >= 7 ? new Date().getFullYear() : new Date().getFullYear() - 1
+      try {
+        const res = await fetch(
+          `https://api.openligadb.de/getmatchdata/bl1/${season}`,
+          { cache: 'no-store' }
+        )
+        if (res.ok) {
+          const seasonMatches: OpenLigaMatch[] = await res.json()
+          for (const match of seasonMatches) {
+            matchMap.set(`bl1-${match.matchID}`, match)
+          }
+        }
+      } catch {}
+    }
+
     let resolved = 0
     const errors: string[] = []
 
     for (const market of openMarkets) {
       if (!market.match_id) continue
 
-      // match_id ist "bl1-12345" → matchID = 12345
-      const numericId = parseInt(String(market.match_id).replace('bl1-', ''), 10)
-      if (isNaN(numericId)) continue
-
-      // Direkt per ID laden — kein Spieltag-Raten mehr
-      const match = await getMatchById(numericId)
+      const match = matchMap.get(market.match_id)
       if (!match) {
         errors.push(`match-not-found:${market.match_id}`)
         continue
