@@ -1,34 +1,24 @@
 import { NextResponse } from 'next/server'
-import { getCurrentMatches, getMatchOutcome, OpenLigaMatch } from '@/lib/openligadb'
+import { getMatchById, getMatchOutcome } from '@/lib/openligadb'
 
 export const runtime = 'edge'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 
+function adminHeaders() {
+  return {
+    apikey: supabaseKey,
+    Authorization: `Bearer ${supabaseKey}`,
+    'Content-Type': 'application/json',
+  }
+}
+
 async function getOpenSoccerMarkets() {
   const res = await fetch(
     `${supabaseUrl}/rest/v1/markets?category=eq.sport&resolved=eq.false&is_auto=eq.true&select=*`,
     {
-      headers: {
-        apikey: supabaseKey,
-        Authorization: `Bearer ${supabaseKey}`,
-      },
-      cache: 'no-store',
-    }
-  )
-  if (!res.ok) return []
-  return res.json()
-}
-
-async function getTradesForMarket(marketId: string) {
-  const res = await fetch(
-    `${supabaseUrl}/rest/v1/trades?market_id=eq.${marketId}&select=*`,
-    {
-      headers: {
-        apikey: supabaseKey,
-        Authorization: `Bearer ${supabaseKey}`,
-      },
+      headers: adminHeaders(),
       cache: 'no-store',
     }
   )
@@ -39,13 +29,7 @@ async function getTradesForMarket(marketId: string) {
 async function getUserBalance(userId: string): Promise<number> {
   const res = await fetch(
     `${supabaseUrl}/rest/v1/users?id=eq.${userId}&select=balance`,
-    {
-      headers: {
-        apikey: supabaseKey,
-        Authorization: `Bearer ${supabaseKey}`,
-      },
-      cache: 'no-store',
-    }
+    { headers: adminHeaders(), cache: 'no-store' }
   )
   const data = await res.json()
   return data[0]?.balance ?? 0
@@ -54,12 +38,7 @@ async function getUserBalance(userId: string): Promise<number> {
 async function updateUserBalance(userId: string, newBalance: number) {
   await fetch(`${supabaseUrl}/rest/v1/users?id=eq.${userId}`, {
     method: 'PATCH',
-    headers: {
-      apikey: supabaseKey,
-      Authorization: `Bearer ${supabaseKey}`,
-      'Content-Type': 'application/json',
-      Prefer: 'return=minimal',
-    },
+    headers: { ...adminHeaders(), Prefer: 'return=minimal' },
     body: JSON.stringify({ balance: newBalance }),
   })
 }
@@ -67,25 +46,23 @@ async function updateUserBalance(userId: string, newBalance: number) {
 async function resolveMarket(marketId: string, resolution: 'yes' | 'no' | 'draw') {
   await fetch(`${supabaseUrl}/rest/v1/markets?id=eq.${marketId}`, {
     method: 'PATCH',
-    headers: {
-      apikey: supabaseKey,
-      Authorization: `Bearer ${supabaseKey}`,
-      'Content-Type': 'application/json',
-      Prefer: 'return=minimal',
-    },
-    body: JSON.stringify({
-      resolved: true,
-      resolution,
-      status: 'closed',
-    }),
+    headers: { ...adminHeaders(), Prefer: 'return=minimal' },
+    body: JSON.stringify({ resolved: true, resolution, status: 'closed' }),
   })
+}
+
+async function getTradesForMarket(marketId: string) {
+  const res = await fetch(
+    `${supabaseUrl}/rest/v1/trades?market_id=eq.${marketId}&select=*`,
+    { headers: adminHeaders(), cache: 'no-store' }
+  )
+  if (!res.ok) return []
+  return res.json()
 }
 
 async function payoutWinners(marketId: string, resolution: 'yes' | 'no' | 'draw') {
   const trades = await getTradesForMarket(marketId)
   if (!trades.length) return
-
-  const winningType = resolution === 'yes' ? 'buy_yes' : resolution === 'no' ? 'buy_no' : null
 
   if (resolution === 'draw') {
     const userRefunds: Record<string, number> = {}
@@ -101,15 +78,13 @@ async function payoutWinners(marketId: string, resolution: 'yes' | 'no' | 'draw'
     return
   }
 
-  if (!winningType) return
-
+  const winningType = resolution === 'yes' ? 'buy_yes' : 'buy_no'
   const userWinnings: Record<string, number> = {}
   for (const trade of trades) {
     if (trade.type === winningType) {
       userWinnings[trade.user_id] = (userWinnings[trade.user_id] ?? 0) + trade.shares
     }
   }
-
   for (const [userId, winnings] of Object.entries(userWinnings)) {
     const current = await getUserBalance(userId)
     await updateUserBalance(userId, current + winnings)
@@ -120,52 +95,45 @@ export async function GET() {
   try {
     const openMarkets = await getOpenSoccerMarkets()
     if (!openMarkets.length) {
-      return NextResponse.json({ ok: true, resolved: 0 })
-    }
-
-    const matchIds: string[] = Array.from(new Set(
-      openMarkets
-        .map((m: any) => m.match_id)
-        .filter(Boolean)
-    ))
-
-    const allMatches = await getCurrentMatches()
-    const matchMap = new Map<string, OpenLigaMatch>()
-    for (const match of allMatches) {
-      matchMap.set(`bl1-${match.matchID}`, match)
+      return NextResponse.json({ ok: true, resolved: 0, message: 'Keine offenen Märkte' })
     }
 
     let resolved = 0
+    const errors: string[] = []
 
-    for (const matchId of matchIds) {
-      const match = matchMap.get(matchId)
-      if (!match) continue
+    for (const market of openMarkets) {
+      if (!market.match_id) continue
+
+      // match_id ist "bl1-12345" → matchID = 12345
+      const numericId = parseInt(String(market.match_id).replace('bl1-', ''), 10)
+      if (isNaN(numericId)) continue
+
+      // Direkt per ID laden — kein Spieltag-Raten mehr
+      const match = await getMatchById(numericId)
+      if (!match) {
+        errors.push(`match-not-found:${market.match_id}`)
+        continue
+      }
 
       const outcome = getMatchOutcome(match)
-      if (!outcome) continue
+      if (!outcome) continue // Spiel noch nicht fertig
 
-      const marketsForMatch = openMarkets.filter((m: any) => m.match_id === matchId)
-
-      for (const market of marketsForMatch) {
-        let resolution: 'yes' | 'no' | 'draw'
-
-        if (market.outcome === outcome) {
-          resolution = 'yes'
-        } else if (outcome === 'draw' && market.outcome !== 'draw') {
-          resolution = 'draw'
-        } else {
-          resolution = 'no'
-        }
-
-        await payoutWinners(market.id, resolution)
-        await resolveMarket(market.id, resolution)
-        resolved++
+      let resolution: 'yes' | 'no' | 'draw'
+      if (outcome === 'draw') {
+        resolution = market.outcome === 'draw' ? 'yes' : 'draw'
+      } else if (market.outcome === outcome) {
+        resolution = 'yes'
+      } else {
+        resolution = 'no'
       }
+
+      await payoutWinners(market.id, resolution)
+      await resolveMarket(market.id, resolution)
+      resolved++
     }
 
-    return NextResponse.json({ ok: true, resolved })
+    return NextResponse.json({ ok: true, resolved, errors })
   } catch (err) {
-    console.error('resolve-soccer-market Fehler:', err)
     return NextResponse.json({ ok: false, error: String(err) }, { status: 500 })
   }
 }
