@@ -23,7 +23,6 @@ async function marketExists(matchId: string): Promise<boolean> {
 async function createThreeMarkets(match: OpenLigaMatch) {
   const matchId = `bl1-${match.matchID}`
 
-  // matchDateTimeUTC ist zuverlässig UTC — kein Timezone-Problem
   const matchUTC = match.matchDateTimeUTC
     ? new Date(match.matchDateTimeUTC.endsWith('Z') ? match.matchDateTimeUTC : match.matchDateTimeUTC + 'Z')
     : new Date(match.matchDateTime + 'Z')
@@ -31,15 +30,23 @@ async function createThreeMarkets(match: OpenLigaMatch) {
   const closesAt = new Date(matchUTC.getTime() + 115 * 60 * 1000).toISOString()
   const displayGroup = `${match.team1.teamName} vs ${match.team2.teamName}`
 
-  // Uhrzeit korrekt in Berliner Zeit — nur HH:MM, klar und einfach
+  // Uhrzeit
   const timeLabel = matchUTC.toLocaleTimeString('de-DE', {
     timeZone: 'Europe/Berlin',
     hour: '2-digit',
     minute: '2-digit',
   })
 
-  // match_date nur als Uhrzeit speichern — das ist alles was wir anzeigen
-  const matchDate = timeLabel
+  // Vollständiges Datum: "Sa., 16.05." 
+  const dateLabel = matchUTC.toLocaleDateString('de-DE', {
+    timeZone: 'Europe/Berlin',
+    weekday: 'short',
+    day: '2-digit',
+    month: '2-digit',
+  })
+
+  // match_date = "Sa., 16.05., 15:30"
+  const matchDate = `${dateLabel}, ${timeLabel}`
 
   const outcomes = [
     {
@@ -111,7 +118,6 @@ export async function GET() {
 
     return NextResponse.json({ ok: true, created })
   } catch (err) {
-    console.error('create-soccer-market Fehler:', err)
     return NextResponse.json({ ok: false, error: String(err) }, { status: 500 })
   }
 }
