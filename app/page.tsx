@@ -1393,10 +1393,9 @@ function MarketsGrid({ markets, onOpen, isSoccer }: { markets: Market[]; onOpen:
                 </div>
               </div>
             </div>
-          )
-        }
+         }
 
-       return (
+        return (
           <div key={key}>
             <div className={isDisplay ? 'display-group-header' : 'group-header'}>{label}</div>
             <div className="markets-grid">
