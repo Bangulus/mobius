@@ -51,6 +51,16 @@ export async function GET(request: Request) {
 
   // --- SOCCER ---
   try {
+    const soccerCreate = await fetch(`${base}/api/create-soccer-market`, {
+      method: 'GET',
+      cache: 'no-store',
+    })
+    results.soccerCreate = await soccerCreate.json()
+  } catch (e) {
+    results.soccerCreateError = String(e)
+  }
+
+  try {
     const soccerResolve = await fetch(`${base}/api/resolve-soccer-market`, {
       method: 'GET',
       cache: 'no-store',
