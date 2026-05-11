@@ -1214,7 +1214,6 @@ function PastMatchRow({ markets, score, onOpen }: {
     </div>
   )
 }
-
 function MarketsGrid({ markets, onOpen, isSoccer }: { markets: Market[]; onOpen: (id: string) => void; isSoccer: boolean }) {
   const soccerGroups: Record<string, Market[]> = {}
   const otherMarkets: Market[] = []
@@ -1228,14 +1227,22 @@ function MarketsGrid({ markets, onOpen, isSoccer }: { markets: Market[]; onOpen:
     }
   })
 
-  const FINANCE_SECTION_ORDER = ['Indizes', 'Aktien', 'Rohstoffe & Forex']
+  const soccerEntries = Object.entries(soccerGroups)
 
+  const soccerByDate: Record<string, [string, Market[]][]> = {}
+  soccerEntries.forEach(([matchId, matchMarkets]) => {
+    const anyMarket = matchMarkets[0]
+    const dateKey = anyMarket.match_date?.split(',').slice(0, 2).join(',').trim() ?? 'Sonstige'
+    if (!soccerByDate[dateKey]) soccerByDate[dateKey] = []
+    soccerByDate[dateKey].push([matchId, matchMarkets])
+  })
+
+  const FINANCE_SECTION_ORDER = ['Indizes', 'Aktien', 'Rohstoffe & Forex']
   const financeSections: Record<string, Market[]> = {
     'Indizes': [],
     'Aktien': [],
     'Rohstoffe & Forex': [],
   }
-
   const FINANCE_CATEGORY_MAP: Record<string, string> = {
     '^GDAXI': 'Indizes', '^GSPC': 'Indizes', '^NDX': 'Indizes', '^STOXX50E': 'Indizes',
     'NVDA': 'Aktien', 'AAPL': 'Aktien', 'MSFT': 'Aktien', 'GOOGL': 'Aktien',
@@ -1252,7 +1259,7 @@ function MarketsGrid({ markets, onOpen, isSoccer }: { markets: Market[]; onOpen:
   otherMarkets.forEach((m) => {
     if (isFinance && m.coin) {
       const section = FINANCE_CATEGORY_MAP[m.coin] ?? 'Sonstige'
-      financeSections[section] = financeSections[section] ?? []
+      if (!financeSections[section]) financeSections[section] = []
       financeSections[section].push(m)
     } else if (m.group_title) {
       if (!groups[m.group_title]) groups[m.group_title] = []
@@ -1329,70 +1336,6 @@ function MarketsGrid({ markets, onOpen, isSoccer }: { markets: Market[]; onOpen:
       )}
     </div>
   )
-})
-
-  const soccerEntries = Object.entries(soccerGroups)
-
-  const soccerByDate: Record<string, [string, Market[]][]> = {}
-  soccerEntries.forEach(([matchId, matchMarkets]) => {
-    const anyMarket = matchMarkets[0]
-    const dateKey = anyMarket.match_date?.split(',').slice(0, 2).join(',').trim() ?? 'Sonstige'
-    if (!soccerByDate[dateKey]) soccerByDate[dateKey] = []
-    soccerByDate[dateKey].push([matchId, matchMarkets])
-  })
-
-  return (
-    <div>
-      {soccerEntries.length > 0 && (
-        <div style={{ marginBottom: 24 }}>
-          {Object.entries(soccerByDate).map(([dateKey, matches]) => (
-            <div key={dateKey} style={{ marginBottom: 24 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 10, paddingBottom: 6, borderBottom: '1px solid var(--border)' }}>
-                {dateKey}
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {matches.map(([matchId, matchMarkets]) => (
-                  <SoccerMatchCard key={matchId} markets={matchMarkets} onOpen={onOpen} />
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-      {ungrouped.length > 0 && (
-        <div className="markets-grid">
-          {ungrouped.map((m) => <MarketCard key={m.id} market={m} onClick={() => onOpen(m.id)} />)}
-        </div>
-      )}
-      {Object.entries(groups).map(([key, mts]) => {
-        const isDisplay = key.startsWith('__dg__')
-        const label = isDisplay ? key.replace('__dg__', '') : key
-        return (
-          <div key={key}>
-            <div className={isDisplay ? 'display-group-header' : 'group-header'}>{label}</div>
-            <div className="markets-grid">
-              {mts.map((m) => <MarketCard key={m.id} market={m} onClick={() => onOpen(m.id)} />)}
-            </div>
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
-interface LiveGoal {
-  matchMinute: number
-  goalGetterName: string
-  scoreTeam1: number
-  scoreTeam2: number
-  isOwnGoal: boolean
-}
-
-interface LiveMatchData {
-  score: { home: number; away: number } | null
-  goals: LiveGoal[]
-  isLive: boolean
-  minute: number | null
 }
 
 function SoccerMatchCard({ markets, onOpen }: { markets: Market[]; onOpen: (id: string) => void }) {
