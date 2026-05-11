@@ -287,7 +287,6 @@ export default function Home() {
   const [leaderboard, setLeaderboard]         = useState<LeaderboardEntry[]>([])
   const [weeklyBoard, setWeeklyBoard]         = useState<WeeklyEntry[]>([])
   const [showLeaderboard, setShowLeaderboard] = useState(false)
-  const [category, setCategory]               = useState(() => {
    const [category, setCategory]               = useState('Politik-Deutschland')
   const [view, setView]                       = useState<'markets' | 'portfolio' | 'admin' | 'profil'>('markets')
   const [loading, setLoading]                 = useState(true)
