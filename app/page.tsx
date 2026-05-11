@@ -1337,7 +1337,20 @@ function MarketsGrid({ markets, onOpen, isSoccer }: { markets: Market[]; onOpen:
     </div>
   )
 }
+interface LiveGoal {
+  matchMinute: number
+  goalGetterName: string
+  scoreTeam1: number
+  scoreTeam2: number
+  isOwnGoal: boolean
+}
 
+interface LiveMatchData {
+  score: { home: number; away: number } | null
+  goals: LiveGoal[]
+  isLive: boolean
+  minute: number | null
+}
 function SoccerMatchCard({ markets, onOpen }: { markets: Market[]; onOpen: (id: string) => void }) {
   const homeMarket = markets.find(m => m.outcome === 'home')
   const drawMarket = markets.find(m => m.outcome === 'draw')
