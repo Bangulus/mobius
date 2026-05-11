@@ -33,37 +33,34 @@ async function getCurrentMatchday(): Promise<number | null> {
   }
 }
 
+async function fetchMatchday(season: number, matchday: number): Promise<OpenLigaMatch[]> {
+  try {
+    const res = await fetch(
+      `https://api.openligadb.de/getmatchdata/bl1/${season}/${matchday}`,
+      { cache: 'no-store' }
+    )
+    if (!res.ok) return []
+    return res.json()
+  } catch {
+    return []
+  }
+}
+
 export async function getCurrentMatches(): Promise<OpenLigaMatch[]> {
   const season = getCurrentSeason()
   const matchday = await getCurrentMatchday()
 
   if (matchday !== null) {
-    const res = await fetch(
-      `https://api.openligadb.de/getmatchdata/bl1/${season}/${matchday}`,
-      { cache: 'no-store' }
-    )
-    if (res.ok) {
-      const matches: OpenLigaMatch[] = await res.json()
-      if (matches.length > 0) return matches
-    }
-
-    if (matchday > 1) {
-      const resPrev = await fetch(
-        `https://api.openligadb.de/getmatchdata/bl1/${season}/${matchday - 1}`,
-        { cache: 'no-store' }
-      )
-      if (resPrev.ok) {
-        const prevMatches: OpenLigaMatch[] = await resPrev.json()
-        const currentRes = await fetch(
-          `https://api.openligadb.de/getmatchdata/bl1/${season}/${matchday}`,
-          { cache: 'no-store' }
-        )
-        const currentMatches: OpenLigaMatch[] = currentRes.ok ? await currentRes.json() : []
-        return [...prevMatches, ...currentMatches]
-      }
-    }
+    const [prev, current, next] = await Promise.all([
+      matchday > 1 ? fetchMatchday(season, matchday - 1) : Promise.resolve([]),
+      fetchMatchday(season, matchday),
+      fetchMatchday(season, matchday + 1),
+    ])
+    const combined = [...prev, ...current, ...next]
+    if (combined.length > 0) return combined
   }
 
+  // Fallback: gesamte Saison
   const res = await fetch(
     `https://api.openligadb.de/getmatchdata/bl1/${season}`,
     { cache: 'no-store' }
