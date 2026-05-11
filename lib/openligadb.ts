@@ -21,7 +21,6 @@ function getCurrentSeason(): number {
 
 async function getCurrentMatchday(): Promise<number | null> {
   try {
-    const season = getCurrentSeason()
     const res = await fetch(
       `https://api.openligadb.de/getcurrentgroup/bl1`,
       { cache: 'no-store' }
@@ -36,12 +35,9 @@ async function getCurrentMatchday(): Promise<number | null> {
 
 export async function getCurrentMatches(): Promise<OpenLigaMatch[]> {
   const season = getCurrentSeason()
-
-  // Erst aktuellen Spieltag holen
   const matchday = await getCurrentMatchday()
 
   if (matchday !== null) {
-    // Nur aktuellen Spieltag laden
     const res = await fetch(
       `https://api.openligadb.de/getmatchdata/bl1/${season}/${matchday}`,
       { cache: 'no-store' }
@@ -51,7 +47,6 @@ export async function getCurrentMatches(): Promise<OpenLigaMatch[]> {
       if (matches.length > 0) return matches
     }
 
-    // Fallback: auch vorherigen Spieltag prüfen (Spiele vom Wochenende)
     if (matchday > 1) {
       const resPrev = await fetch(
         `https://api.openligadb.de/getmatchdata/bl1/${season}/${matchday - 1}`,
@@ -69,7 +64,6 @@ export async function getCurrentMatches(): Promise<OpenLigaMatch[]> {
     }
   }
 
-  // Letzter Fallback: gesamte Saison
   const res = await fetch(
     `https://api.openligadb.de/getmatchdata/bl1/${season}`,
     { cache: 'no-store' }
@@ -103,11 +97,11 @@ export function getMatchOutcome(match: OpenLigaMatch): 'home' | 'draw' | 'away' 
 
 export function getUpcomingMatches(matches: OpenLigaMatch[]): OpenLigaMatch[] {
   const now = new Date()
-  const in3days = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000)
+  const in7days = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
   return matches.filter(m => {
     if (m.matchIsFinished) return false
     const matchTime = new Date(m.matchDateTime)
-    return matchTime > now && matchTime <= in3days
+    return matchTime > now && matchTime <= in7days
   })
 }
 
