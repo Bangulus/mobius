@@ -182,7 +182,7 @@ function drawCryptoChart(
   ctx.fillText(`$${targetPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, W - padR + 8, targetY + 10)
 
   const filteredHistory = history.filter(p => p.t <= marketEndMs)
-  if (filteredHistory.length > 1) {
+  if (filteredHistory.length > 0) {
     ctx.beginPath()
     filteredHistory.forEach((p, i) => { i === 0 ? ctx.moveTo(xScale(p.t), yScale(p.price)) : ctx.lineTo(xScale(p.t), yScale(p.price)) })
     const lastX = xScale(filteredHistory[filteredHistory.length - 1].t)
