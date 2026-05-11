@@ -238,7 +238,6 @@ const FINANCE_SUB_TABS = [
 ]
 
 const FINANCE_GROUP_MAP: Record<string, string> = {
-  'Finanzen-3min':  '3-Minuten-Markt',
   'Finanzen-Tag':   'Aktueller Handelstag',
   'Finanzen-Woche': 'Aktuelle Handelswoche',
 }
