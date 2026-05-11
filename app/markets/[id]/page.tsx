@@ -609,13 +609,14 @@ export default function MarketPage() {
     if (market?.match_id) return
     const marketEndMs     = parseUTC(market.closes_at).getTime()
     const isFinanceMarket = market.category === 'finance' || market.category === 'Finanzen'
-    const durationMs      = isFinanceMarket
-      ? (market.group_title === '3-Minuten-Markt'      ? 3 * 60 * 1000
-        : market.group_title === 'Aktueller Handelstag' ? 8 * 60 * 60 * 1000
-        : 5 * 24 * 60 * 60 * 1000)
-      : 3 * 60 * 1000
-    const marketStartMs = marketEndMs - durationMs
-    drawCryptoChart(cryptoCanvasRef.current, priceHistory, market.start_price, marketStartMs, marketEndMs)
+    const nowMs = Date.now()
+
+    // Rollierendes 30-Minuten-Fenster wie Polymarket
+    const windowMs = isFinanceMarket ? 30 * 60 * 1000 : 3 * 60 * 1000
+    const chartEnd = Math.min(nowMs + 60 * 1000, marketEndMs)
+    const chartStart = Math.max(chartEnd - windowMs, marketEndMs - (isFinanceMarket ? 8 * 60 * 60 * 1000 : 3 * 60 * 1000))
+
+    drawCryptoChart(cryptoCanvasRef.current, priceHistory, market.start_price, chartStart, chartEnd)
   }, [priceHistory, market?.is_auto, market?.start_price, market?.closes_at, market?.resolved, market?.match_id, market?.category, market?.group_title])
 
   useEffect(() => {
