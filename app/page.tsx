@@ -1248,7 +1248,7 @@ function MarketsGrid({ markets, onOpen, isSoccer }: { markets: Market[]; onOpen:
   const soccerByDate: Record<string, [string, Market[]][]> = {}
   soccerEntries.forEach(([matchId, matchMarkets]) => {
     const anyMarket = matchMarkets[0]
-    const dateKey = anyMarket.match_date?.split(',')[0] ?? 'Sonstige'
+    const dateKey = anyMarket.match_date?.split(',').slice(0, 2).join(',').trim() ?? 'Sonstige'
     if (!soccerByDate[dateKey]) soccerByDate[dateKey] = []
     soccerByDate[dateKey].push([matchId, matchMarkets])
   })
