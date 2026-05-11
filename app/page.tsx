@@ -233,7 +233,6 @@ const SPORT_GROUP_FILTERS: Record<string, string> = {
 }
 
 const FINANCE_SUB_TABS = [
-  { id: 'Finanzen-3min',  label: '3-Minuten-Markt',       icon: '⚡' },
   { id: 'Finanzen-Tag',   label: 'Aktueller Handelstag',  icon: '📅' },
   { id: 'Finanzen-Woche', label: 'Aktuelle Handelswoche', icon: '📆' },
 ]
