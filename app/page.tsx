@@ -1323,293 +1323,87 @@ function MarketsGrid({ markets, onOpen, isSoccer }: { markets: Market[]; onOpen:
             </div>
           )}
           {Object.entries(groups).map(([key, mts]) => {
-            const isDisplay = key.startsWith('__dg__')
-            const label = isDisplay ? key.replace('__dg__', '') : key
-            return (
-              <div key={key}>
-                <div className={isDisplay ? 'display-group-header' : 'group-header'}>{label}</div>
-                <div className="markets-grid">
-                  {mts.map((m) => <MarketCard key={m.id} market={m} onClick={() => onOpen(m.id)} />)}
-                </div>
-              </div>
-            )
-          })}
-        </>
-      )}
-    </div>
-  )
-}
-interface LiveGoal {
-  matchMinute: number
-  goalGetterName: string
-  scoreTeam1: number
-  scoreTeam2: number
-  isOwnGoal: boolean
-}
+        const isDisplay = key.startsWith('__dg__')
+        const label = isDisplay ? key.replace('__dg__', '') : key
+        const isMultiOutcome = !isDisplay && mts.length > 2
 
-interface LiveMatchData {
-  score: { home: number; away: number } | null
-  goals: LiveGoal[]
-  isLive: boolean
-  minute: number | null
-}
-function SoccerMatchCard({ markets, onOpen }: { markets: Market[]; onOpen: (id: string) => void }) {
-  const homeMarket = markets.find(m => m.outcome === 'home')
-  const drawMarket = markets.find(m => m.outcome === 'draw')
-  const awayMarket = markets.find(m => m.outcome === 'away')
-  const [liveData, setLiveData] = useState<LiveMatchData | null>(null)
-
-  const anyMarket = homeMarket ?? drawMarket ?? awayMarket
-  if (!anyMarket) return null
-
-  const matchIdNum = anyMarket.match_id?.replace('bl1-', '')
-  const closesAtMs = parseUTC(anyMarket.closes_at).getTime()
-  const now = Date.now()
-  const matchStartMs = closesAtMs - 115 * 60 * 1000
-  const isOngoing = now >= matchStartMs && now <= closesAtMs + 30 * 60 * 1000
-
-  // eslint-disable-next-line react-hooks/rules-of-hooks
-  useEffect(() => {
-    if (!matchIdNum || !isOngoing) return
-    const fetchLive = async () => {
-      try {
-        const season = new Date().getMonth() >= 7 ? new Date().getFullYear() : new Date().getFullYear() - 1
-        const res = await fetch(`https://api.openligadb.de/getmatchdata/bl1/${season}`, { cache: 'no-store' })
-        if (!res.ok) return
-        const all = await res.json()
-        const match = all.find((m: { matchID: number }) => String(m.matchID) === matchIdNum)
-        if (!match) return
-        const goals: LiveGoal[] = (match.goals ?? []).map((g: { matchMinute: number; goalGetterName: string; scoreTeam1: number; scoreTeam2: number; isOwnGoal: boolean }) => ({
-          matchMinute: g.matchMinute,
-          goalGetterName: g.goalGetterName,
-          scoreTeam1: g.scoreTeam1,
-          scoreTeam2: g.scoreTeam2,
-          isOwnGoal: g.isOwnGoal,
-        }))
-        const final = match.matchResults?.find((r: { resultTypeID: number }) => r.resultTypeID === 2)
-        const ht    = match.matchResults?.find((r: { resultTypeID: number }) => r.resultTypeID === 1)
-        const score = final ? { home: final.pointsTeam1, away: final.pointsTeam2 }
-          : ht ? { home: ht.pointsTeam1, away: ht.pointsTeam2 } : null
-        setLiveData({ score, goals, isLive: !match.matchIsFinished && goals.length > 0, minute: null })
-      } catch {}
-    }
-    fetchLive()
-    const id = setInterval(fetchLive, 60000)
-    return () => clearInterval(id)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [matchIdNum, isOngoing])
-
-  const displayGroup = anyMarket.display_group ?? ''
-  const teams    = displayGroup.split(' vs ')
-  const homeTeam = teams[0] ?? ''
-  const awayTeam = teams[1] ?? ''
-
-  const homeProb = homeMarket ? calcProb(homeMarket.q_yes, homeMarket.q_no, homeMarket.b) : 33
-  const drawProb = drawMarket ? calcProb(drawMarket.q_yes, drawMarket.q_no, drawMarket.b) : 34
-  const awayProb = awayMarket ? calcProb(awayMarket.q_yes, awayMarket.q_no, awayMarket.b) : 33
-
-  const total    = homeProb + drawProb + awayProb
-  const homeNorm = Math.round((homeProb / total) * 100)
-  const drawNorm = Math.round((drawProb / total) * 100)
-  const awayNorm = 100 - homeNorm - drawNorm
-
-  // match_date ist jetzt direkt die Uhrzeit "HH:MM"
-  const timePart    = anyMarket.match_date ?? ''
-  const totalVolume = markets.reduce((s, m) => s + m.q_yes + m.q_no, 0)
-  const homeColor   = getTeamColor(homeTeam)
-  const awayColor   = getTeamColor(awayTeam)
-
-  const hasLive = liveData && (liveData.score || liveData.goals.length > 0)
-  const lastGoals = liveData?.goals.slice(-3).reverse() ?? []
-
-  return (
-    <div className="market-card" style={{ padding: '14px 18px', cursor: 'pointer' }}
-      onClick={() => onOpen((homeMarket ?? anyMarket).id)}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)' }}>Bundesliga</span>
-          {timePart && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>· {timePart} Uhr</span>}
-          {totalVolume > 0 && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>· {Math.round(totalVolume).toLocaleString('de')} ₫</span>}
-          {liveData?.isLive && (
-            <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 700, color: '#22c55e' }}>
-              <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#22c55e', display: 'inline-block', animation: 'pulse 2s infinite' }} />
-              LIVE
-            </span>
-          )}
-        </div>
-        <div className="live-dot" />
-      </div>
-
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 }}>
-          <TeamLogo teamName={homeTeam} color={homeColor} size={40} />
-          <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{homeTeam}</div>
-            <div style={{ fontSize: 20, fontWeight: 800, color: homeColor, lineHeight: 1.1 }}>{homeNorm}¢</div>
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, flexShrink: 0, padding: '0 8px' }}>
-          {hasLive && liveData.score ? (
-            <>
-              <div style={{ fontSize: 20, fontWeight: 900, color: 'var(--text)', letterSpacing: '-1px', lineHeight: 1 }}>
-                {liveData.score.home} : {liveData.score.away}
-              </div>
-              <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: 0.5 }}>STAND</div>
-            </>
-          ) : (
-            <>
-              <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: 0.5 }}>DRAW</div>
-              <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-muted)' }}>{drawNorm}¢</div>
-            </>
-          )}
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0, justifyContent: 'flex-end' }}>
-          <div style={{ minWidth: 0, textAlign: 'right' }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{awayTeam}</div>
-            <div style={{ fontSize: 20, fontWeight: 800, color: awayColor, lineHeight: 1.1 }}>{awayNorm}¢</div>
-          </div>
-          <TeamLogo teamName={awayTeam} color={awayColor} size={40} />
-        </div>
-      </div>
-
-      {/* Letzte Tore */}
-      {lastGoals.length > 0 && (
-        <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 3 }}>
-          {lastGoals.map((g, i) => (
-            <div key={i} style={{ fontSize: 11, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ fontSize: 10 }}>⚽</span>
-              <span style={{ fontWeight: 600 }}>{g.matchMinute}&apos;</span>
-              <span>{g.goalGetterName}{g.isOwnGoal ? ' (ET)' : ''}</span>
-              <span style={{ color: 'var(--text-subtle)', marginLeft: 'auto' }}>{g.scoreTeam1}:{g.scoreTeam2}</span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <div style={{ display: 'flex', height: 4, borderRadius: 2, overflow: 'hidden', gap: 2, marginTop: 12 }}>
-        <div style={{ width: `${homeNorm}%`, background: homeColor }} />
-        <div style={{ width: `${drawNorm}%`, background: '#94a3b8' }} />
-        <div style={{ width: `${awayNorm}%`, background: awayColor }} />
-      </div>
-      <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
-        {[
-          { label: homeTeam.split(' ').slice(-1)[0], id: homeMarket?.id, color: homeColor },
-          { label: 'Draw', id: drawMarket?.id, color: '#64748b' },
-          { label: awayTeam.split(' ').slice(-1)[0], id: awayMarket?.id, color: awayColor },
-        ].map((btn) => btn.id ? (
-          <button key={btn.id}
-            onClick={(e) => { e.stopPropagation(); onOpen(btn.id!) }}
-            style={{
-              flex: 1, fontSize: 12, fontWeight: 700, padding: '7px 0', borderRadius: 8,
-              border: `1px solid ${btn.color}44`, background: `${btn.color}18`,
-              color: btn.color, cursor: 'pointer',
-              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-            }}>
-            {btn.label}
-          </button>
-        ) : null)}
-      </div>
-    </div>
-  )
-}
-
-function MarketCard({ market, onClick }: { market: Market; onClick: () => void }) {
-  const prob     = calcProb(market.q_yes, market.q_no, market.b)
-  const isLow    = prob < 50
-  const catClass = CAT_CLASS[market.category ?? ''] ?? ''
-
-  return (
-    <div className="market-card" onClick={onClick}>
-      <div className="market-card-meta">
-        {market.category && <span className={`cat-badge ${catClass}`}>{market.category === 'finance' ? 'FINANZEN' : market.category}</span>}
-        {market.is_auto && <div className="live-dot" title="Live" />}
-      </div>
-      <div className="market-card-question">{market.short_label ?? market.question}</div>
-      <div className="prob-bar">
-        <div className={`prob-bar-fill ${isLow ? 'low' : ''}`} style={{ width: `${prob}%` }} />
-      </div>
-      <div className="market-card-footer">
-        <div className={`market-prob ${isLow ? 'low' : ''}`}>{prob}%</div>
-        <div className="market-volume">{Math.round(market.q_yes + market.q_no)} ₫ Vol.</div>
-      </div>
-      <div className="bet-btns">
-        <button className="btn-yes" onClick={(e) => { e.stopPropagation(); onClick() }}>Ja {prob}%</button>
-        <button className="btn-no" onClick={(e) => { e.stopPropagation(); onClick() }}>Nein {100 - prob}%</button>
-      </div>
-    </div>
-  )
-}
-
-function PortfolioView({ userId, router }: { userId: string; router: ReturnType<typeof useRouter> }) {
-  interface Position {
-    market_id: string
-    direction: string
-    amount: number
-    question: string
-    q_yes: number
-    q_no: number
-    b: number
-    resolved: boolean
-    resolution?: string
-  }
-
-  const [positions, setPositions] = useState<Position[]>([])
-  const [loading, setLoading]     = useState(true)
-
-  useEffect(() => {
-    dbGet('positions', `user_id=eq.${userId}&select=*`).then(async (posData) => {
-      if (!posData || posData.length === 0) { setLoading(false); return }
-      const ids = posData.map((p: { market_id: string }) => p.market_id).join(',')
-      const mktData = await dbGet('markets', `id=in.(${ids})&select=id,question,q_yes,q_no,b,resolved,resolution`)
-      const mktMap: Record<string, Market> = {}
-      mktData?.forEach((m: Market) => { mktMap[m.id] = m })
-      setPositions(posData.map((p: { market_id: string; direction: string; amount: number }) => ({
-        ...p, ...mktMap[p.market_id],
-      })))
-      setLoading(false)
-    })
-  }, [userId])
-
-  if (loading) return <div style={{ color: 'var(--text-muted)', padding: '24px 0' }}>Thinking…</div>
-  if (positions.length === 0) return (
-    <div className="card" style={{ textAlign: 'center', padding: 32 }}>
-      <div style={{ fontSize: 14, color: 'var(--text-muted)', marginBottom: 8 }}>Noch keine Positionen.</div>
-      <div style={{ fontSize: 13, color: 'var(--text-subtle)' }}>Platziere deine erste Wette auf einen Markt.</div>
-    </div>
-  )
-
-  return (
-    <div>
-      <div className="section-head"><div className="section-title">Mein Portfolio</div></div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {positions.map((p, i) => {
-          const prob  = calcProb(p.q_yes, p.q_no, p.b)
-          const isYes = p.direction === 'yes'
-          const isWin = p.resolution === p.direction
+        if (isMultiOutcome) {
+          const sorted = [...mts].sort((a, b) => calcProb(b.q_yes, b.q_no, b.b) - calcProb(a.q_yes, a.q_no, a.b))
+          const totalVol = mts.reduce((s, m) => s + m.q_yes + m.q_no, 0)
           return (
-            <div key={i} className="card" style={{ cursor: 'pointer' }}
-              onClick={() => router.push(`/markets/${p.market_id}`)}>
-              <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 8, color: 'var(--text)' }}>{p.question}</div>
-              <div style={{ display: 'flex', gap: 16, fontSize: 13, flexWrap: 'wrap' }}>
-                <span style={{ color: 'var(--text-muted)' }}>
-                  Position: <strong style={{ color: isYes ? 'var(--yes)' : 'var(--no)' }}>{isYes ? 'JA' : 'NEIN'}</strong>
-                </span>
-                <span style={{ color: 'var(--text-muted)' }}>Einsatz: <strong>{p.amount} ₫</strong></span>
-                <span style={{ color: 'var(--text-muted)' }}>Aktuell: <strong>{prob}%</strong></span>
-                {p.resolved && (
-                  <span style={{
-                    fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 4,
-                    background: isWin ? 'rgba(22,163,74,0.1)' : 'rgba(239,68,68,0.1)',
-                    color: isWin ? '#16a34a' : '#ef4444', letterSpacing: 0.5,
-                  }}>
-                    {isWin ? 'Gewonnen' : 'Verloren'}
-                  </span>
-                )}
+            <div key={key} style={{ marginBottom: 32 }}>
+              <div style={{ background: 'var(--surface-dark, #1a1f2e)', borderRadius: '12px 12px 0 0', padding: '14px 20px' }}>
+                <div style={{ fontSize: 15, fontWeight: 700, color: '#fff' }}>{label}</div>
+              </div>
+              <div style={{ border: '1px solid var(--border)', borderTop: 'none', borderRadius: '0 0 12px 12px', overflow: 'hidden' }}>
+                {sorted.map((m, i) => {
+                  const prob = calcProb(m.q_yes, m.q_no, m.b)
+                  const isTop = i === 0
+                  return (
+                    <div key={m.id}
+                      onClick={() => onOpen(m.id)}
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: '28px 1fr 80px 180px',
+                        alignItems: 'center',
+                        gap: 12,
+                        padding: '12px 16px',
+                        cursor: 'pointer',
+                        background: 'var(--card)',
+                        borderBottom: i < sorted.length - 1 ? '1px solid var(--border)' : 'none',
+                        transition: 'background 0.1s',
+                      }}
+                      onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface)')}
+                      onMouseLeave={e => (e.currentTarget.style.background = 'var(--card)')}
+                    >
+                      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-muted)', textAlign: 'center' }}>
+                        {i + 1}
+                      </div>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: 14, fontWeight: isTop ? 700 : 500, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {m.short_label ?? m.question}
+                        </div>
+                        <div style={{ marginTop: 6, height: 4, borderRadius: 2, background: 'var(--border)', overflow: 'hidden' }}>
+                          <div style={{ width: `${prob}%`, height: '100%', background: isTop ? '#6366f1' : 'var(--text-muted)', borderRadius: 2, transition: 'width 0.3s' }} />
+                        </div>
+                      </div>
+                      <div style={{ fontSize: 18, fontWeight: 800, color: isTop ? '#6366f1' : 'var(--text)', textAlign: 'right' }}>
+                        {prob}%
+                      </div>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <button
+                          onClick={e => { e.stopPropagation(); onOpen(m.id) }}
+                          style={{ flex: 1, padding: '7px 0', fontSize: 12, fontWeight: 700, borderRadius: 8, border: 'none', background: 'rgba(22,163,74,0.12)', color: '#16a34a', cursor: 'pointer' }}
+                        >
+                          Ja {prob}%
+                        </button>
+                        <button
+                          onClick={e => { e.stopPropagation(); onOpen(m.id) }}
+                          style={{ flex: 1, padding: '7px 0', fontSize: 12, fontWeight: 700, borderRadius: 8, border: 'none', background: 'rgba(220,38,38,0.10)', color: '#dc2626', cursor: 'pointer' }}
+                        >
+                          Nein {100 - prob}%
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
+                <div style={{ padding: '8px 16px', fontSize: 11, color: 'var(--text-muted)', borderTop: '1px solid var(--border)', display: 'flex', gap: 16 }}>
+                  <span>{mts.length} Optionen</span>
+                  <span>{Math.round(totalVol).toLocaleString('de')} ₫ Volumen</span>
+                </div>
               </div>
             </div>
           )
+        }
+
+        return (
+          <div key={key}>
+            <div className={isDisplay ? 'display-group-header' : 'group-header'}>{label}</div>
+            <div className="markets-grid">
+              {mts.map((m) => <MarketCard key={m.id} market={m} onClick={() => onOpen(m.id)} />)}
+            </div>
+          </div>
+        )
         })}
       </div>
     </div>
