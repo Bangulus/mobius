@@ -7,7 +7,7 @@ export async function GET(request: Request) {
 
   const results: Record<string, unknown> = {}
 
-  // --- CRYPTO: bestehende Logik unverändert ---
+  // --- CRYPTO ---
   try {
     const cryptoCreate = await fetch(`${base}/api/create-crypto-market`, {
       method: 'POST',
@@ -28,7 +28,7 @@ export async function GET(request: Request) {
     results.cryptoResolveError = String(e)
   }
 
-  // --- FINANCE: neu ---
+  // --- FINANCE ---
   try {
     const financeCreate = await fetch(`${base}/api/create-finance-market`, {
       method: 'POST',
@@ -47,6 +47,17 @@ export async function GET(request: Request) {
     results.financeResolve = await financeResolve.json()
   } catch (e) {
     results.financeResolveError = String(e)
+  }
+
+  // --- SOCCER ---
+  try {
+    const soccerResolve = await fetch(`${base}/api/resolve-soccer-market`, {
+      method: 'GET',
+      cache: 'no-store',
+    })
+    results.soccerResolve = await soccerResolve.json()
+  } catch (e) {
+    results.soccerResolveError = String(e)
   }
 
   return NextResponse.json({ ok: true, results })
