@@ -1,7 +1,9 @@
-const FINNHUB_API_KEY = process.env.FINNHUB_API_KEY!
+// lib/finnhub.ts
+// Preisquelle: Yahoo Finance (kein API Key, kein Vercel-Block)
 
 export type FinanceAsset = {
   symbol: string
+  yahooSymbol: string
   label: string
   category: 'index' | 'stock' | 'commodity' | 'forex'
   tradingHours: {
@@ -15,102 +17,119 @@ export type FinanceAsset = {
 export const FINANCE_ASSETS: FinanceAsset[] = [
   {
     symbol: '^GDAXI',
+    yahooSymbol: '%5EGDAXI',
     label: 'DAX',
     category: 'index',
     tradingHours: { timezone: 'Europe/Berlin', open: '09:00', close: '17:30', days: [1,2,3,4,5] }
   },
   {
     symbol: '^GSPC',
+    yahooSymbol: '%5EGSPC',
     label: 'S&P 500',
     category: 'index',
     tradingHours: { timezone: 'Europe/Berlin', open: '15:30', close: '22:00', days: [1,2,3,4,5] }
   },
   {
     symbol: '^NDX',
+    yahooSymbol: '%5ENDX',
     label: 'NASDAQ 100',
     category: 'index',
     tradingHours: { timezone: 'Europe/Berlin', open: '15:30', close: '22:00', days: [1,2,3,4,5] }
   },
   {
     symbol: '^STOXX50E',
+    yahooSymbol: '%5ESTOXX50E',
     label: 'Euro Stoxx 50',
     category: 'index',
     tradingHours: { timezone: 'Europe/Berlin', open: '09:00', close: '17:30', days: [1,2,3,4,5] }
   },
   {
     symbol: 'NVDA',
+    yahooSymbol: 'NVDA',
     label: 'NVIDIA',
     category: 'stock',
     tradingHours: { timezone: 'Europe/Berlin', open: '15:30', close: '22:00', days: [1,2,3,4,5] }
   },
   {
     symbol: 'AAPL',
+    yahooSymbol: 'AAPL',
     label: 'Apple',
     category: 'stock',
     tradingHours: { timezone: 'Europe/Berlin', open: '15:30', close: '22:00', days: [1,2,3,4,5] }
   },
   {
     symbol: 'MSFT',
+    yahooSymbol: 'MSFT',
     label: 'Microsoft',
     category: 'stock',
     tradingHours: { timezone: 'Europe/Berlin', open: '15:30', close: '22:00', days: [1,2,3,4,5] }
   },
   {
     symbol: 'GOOGL',
+    yahooSymbol: 'GOOGL',
     label: 'Alphabet',
     category: 'stock',
     tradingHours: { timezone: 'Europe/Berlin', open: '15:30', close: '22:00', days: [1,2,3,4,5] }
   },
   {
     symbol: 'AMZN',
+    yahooSymbol: 'AMZN',
     label: 'Amazon',
     category: 'stock',
     tradingHours: { timezone: 'Europe/Berlin', open: '15:30', close: '22:00', days: [1,2,3,4,5] }
   },
   {
     symbol: 'META',
+    yahooSymbol: 'META',
     label: 'Meta',
     category: 'stock',
     tradingHours: { timezone: 'Europe/Berlin', open: '15:30', close: '22:00', days: [1,2,3,4,5] }
   },
   {
     symbol: 'AVGO',
+    yahooSymbol: 'AVGO',
     label: 'Broadcom',
     category: 'stock',
     tradingHours: { timezone: 'Europe/Berlin', open: '15:30', close: '22:00', days: [1,2,3,4,5] }
   },
   {
     symbol: 'TSLA',
+    yahooSymbol: 'TSLA',
     label: 'Tesla',
     category: 'stock',
     tradingHours: { timezone: 'Europe/Berlin', open: '15:30', close: '22:00', days: [1,2,3,4,5] }
   },
   {
     symbol: 'SAP',
+    yahooSymbol: 'SAP',
     label: 'SAP',
     category: 'stock',
     tradingHours: { timezone: 'Europe/Berlin', open: '09:00', close: '17:30', days: [1,2,3,4,5] }
   },
   {
-    symbol: 'OANDA:XAU_USD',
+    symbol: 'GC=F',
+    yahooSymbol: 'GC%3DF',
     label: 'Gold',
     category: 'commodity',
     tradingHours: { timezone: 'Europe/Berlin', open: '01:00', close: '23:59', days: [1,2,3,4,5] }
   },
   {
-    symbol: 'OANDA:XAG_USD',
+    symbol: 'SI=F',
+    yahooSymbol: 'SI%3DF',
     label: 'Silber',
     category: 'commodity',
     tradingHours: { timezone: 'Europe/Berlin', open: '01:00', close: '23:59', days: [1,2,3,4,5] }
   },
   {
-    symbol: 'OANDA:WTI_USD',
+    symbol: 'CL=F',
+    yahooSymbol: 'CL%3DF',
     label: 'Öl (WTI)',
     category: 'commodity',
     tradingHours: { timezone: 'Europe/Berlin', open: '01:00', close: '23:59', days: [1,2,3,4,5] }
   },
   {
-    symbol: 'OANDA:EUR_USD',
+    symbol: 'EURUSD=X',
+    yahooSymbol: 'EURUSD%3DX',
     label: 'EUR/USD',
     category: 'forex',
     tradingHours: { timezone: 'Europe/Berlin', open: '01:00', close: '23:59', days: [1,2,3,4,5] }
@@ -119,15 +138,23 @@ export const FINANCE_ASSETS: FinanceAsset[] = [
 
 export async function finnhubQuote(symbol: string): Promise<number | null> {
   try {
-    const encoded = encodeURIComponent(symbol)
+    const asset = FINANCE_ASSETS.find(a => a.symbol === symbol)
+    const yahooSym = asset ? asset.yahooSymbol : encodeURIComponent(symbol)
+
     const res = await fetch(
-      `https://finnhub.io/api/v1/quote?symbol=${encoded}&token=${FINNHUB_API_KEY}`,
-      { cache: 'no-store' }
+      `https://query1.finance.yahoo.com/v8/finance/chart/${yahooSym}?interval=1m&range=1d`,
+      {
+        cache: 'no-store',
+        headers: {
+          'User-Agent': 'Mozilla/5.0',
+        },
+      }
     )
     if (!res.ok) return null
     const data = await res.json()
-    if (!data.c || data.c === 0) return null
-    return data.c as number
+    const price = data?.chart?.result?.[0]?.meta?.regularMarketPrice
+    if (!price || price === 0) return null
+    return price as number
   } catch {
     return null
   }
