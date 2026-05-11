@@ -288,10 +288,7 @@ export default function Home() {
   const [weeklyBoard, setWeeklyBoard]         = useState<WeeklyEntry[]>([])
   const [showLeaderboard, setShowLeaderboard] = useState(false)
   const [category, setCategory]               = useState(() => {
-    if (typeof window === 'undefined') return 'Politik-Deutschland'
-    const params = new URLSearchParams(window.location.search)
-    return params.get('category') ?? 'Politik-Deutschland'
-  })
+   const [category, setCategory]               = useState('Politik-Deutschland')
   const [view, setView]                       = useState<'markets' | 'portfolio' | 'admin' | 'profil'>('markets')
   const [loading, setLoading]                 = useState(true)
   const [darkMode, setDarkMode]               = useState(() => {
@@ -313,7 +310,11 @@ export default function Home() {
   const marketsRef                            = useRef<Market[]>([])
   const triggeredCoinsRef                     = useRef<Record<string, number>>({})
 
-  const ADMIN_ID = 'b75edaf4-141d-41f1-9555-887a8ddbac58'
+  useEffect(() => {
+    const cat = new URLSearchParams(window.location.search).get('category')
+    if (cat) setCategory(cat)
+  }, [])
+    const ADMIN_ID = 'b75edaf4-141d-41f1-9555-887a8ddbac58'
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light')
