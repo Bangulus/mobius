@@ -40,7 +40,7 @@ async function createThreeMarkets(match: OpenLigaMatch) {
   // Vollständiges Datum: "Sa., 16.05." 
   const dateLabel = matchUTC.toLocaleDateString('de-DE', {
     timeZone: 'Europe/Berlin',
-    weekday: 'short',
+    weekday: 'long',
     day: '2-digit',
     month: '2-digit',
   })
