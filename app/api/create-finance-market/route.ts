@@ -54,34 +54,6 @@ export async function POST() {
     for (const asset of FINANCE_ASSETS) {
       const marketOpen = isMarketOpen(asset)
 
-      // --- 3-Minuten-Markt ---
-      if (marketOpen && !activeKeys.has(`${asset.symbol}|3-Minuten-Markt`)) {
-        const price = await finnhubQuote(asset.symbol)
-        if (price) {
-          const closesAt = new Date(Date.now() + 3 * 60 * 1000).toISOString()
-          const ok = await createMarket({
-            question: `${asset.label} Up or Down?`,
-            description: `Steht ${asset.label} in 3 Minuten höher oder tiefer als jetzt (${price.toFixed(2)})?`,
-            status: 'open',
-            b: B,
-            q_yes: 0,
-            q_no: 0,
-            closes_at: closesAt,
-            category: 'finance',
-            group_title: '3-Minuten-Markt',
-            short_label: asset.label,
-            resolved: false,
-            resolution: null,
-            display_group: 'Finanzen',
-            start_price: price,
-            end_price: null,
-            is_auto: true,
-            coin: asset.symbol,
-          })
-          if (ok) created.push(`3min:${asset.label}`)
-          else errors.push(`3min:${asset.label}`)
-        }
-      }
 
       // --- Tagesmarkt ---
       if (isWeekday && !activeKeys.has(`${asset.symbol}|Aktueller Handelstag`)) {
