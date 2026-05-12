@@ -7,7 +7,6 @@ const CRON_SECRET   = process.env.CRON_SECRET!
 function isAuthorized(req: NextRequest): boolean {
   const authHeader  = req.headers.get('authorization')
   const querySecret = new URL(req.url).searchParams.get('secret')
-  // Erlaubt: Cron-Secret ODER interner Aufruf vom eigenen Server
   const host   = req.headers.get('host') ?? ''
   const origin = req.headers.get('origin') ?? ''
   const isInternal = origin.includes('mobius-lemon.vercel.app') || origin.includes('localhost') || host.includes('vercel.app')
@@ -46,6 +45,18 @@ async function dbPatch(table: string, filter: string, body: object) {
   return res
 }
 
+async function dbPost(table: string, body: object) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
+    method: 'POST',
+    headers: {
+      apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`,
+      'Content-Type': 'application/json', Prefer: 'return=minimal',
+    },
+    body: JSON.stringify(body),
+  })
+  return res
+}
+
 export async function POST(req: NextRequest) {
   if (!isAuthorized(req)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -65,7 +76,7 @@ export async function POST(req: NextRequest) {
 
   const markets = await dbGet('markets', `id=eq.${marketId}&select=*`)
   const market  = markets?.[0]
-  if (!market)         return NextResponse.json({ error: 'Markt nicht gefunden' }, { status: 404 })
+  if (!market)         return NextResponse.json({ message: 'Markt nicht gefunden' })
   if (market.resolved) return NextResponse.json({ message: 'Bereits aufgelöst' })
 
   const endPrice = await getCoinPrice(market.coin ?? 'BTC')
@@ -91,8 +102,21 @@ export async function POST(req: NextRequest) {
     const patchRes = await dbPatch('users', `id=eq.${pos.user_id}`, {
       balance: Math.round(currentBalance + payout),
     })
-    if (patchRes.ok) { payoutCount++ }
-    else { errors.push(`user ${pos.user_id}: ${patchRes.status}`) }
+    if (patchRes.ok) {
+      payoutCount++
+      // Payout-Trade für Wochenranking
+      await dbPost('trades', {
+        market_id: marketId,
+        user_id: pos.user_id,
+        type: 'payout',
+        shares: payout,
+        cost: payout,
+        price_before: 0,
+        price_after: 0,
+      })
+    } else {
+      errors.push(`user ${pos.user_id}: ${patchRes.status}`)
+    }
   }
 
   await fetch(`${SUPABASE_URL}/rest/v1/positions?market_id=eq.${marketId}`, {
