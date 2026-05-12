@@ -426,7 +426,6 @@ export default function MarketPage() {
   const liveMarketPollRef               = useRef<ReturnType<typeof setInterval> | null>(null)
   const positionRef                     = useRef<Position | null>(null)
   const resolveTriggeredRef             = useRef(false)
-  const createTriggeredRef              = useRef(false)
 
   const [resultToast, setResultToast] = useState<ResultToast | null>(null)
   const toastShownRef                 = useRef(false)
@@ -495,7 +494,7 @@ export default function MarketPage() {
     const hasPos    = sharesYes > 0 || sharesNo > 0
     const won       = hasPos && ((market.resolution === 'yes' && sharesYes > 0) || (market.resolution === 'no' && sharesNo > 0))
     const amount    = won ? Math.round(market.resolution === 'yes' ? sharesYes : sharesNo) : 0
-    const next      = liveMarkets.find(m => m.coin === market.coin && m.id !== marketId && m.group_title === '3-Minuten-Markt')
+    const next      = liveMarkets.find(m => m.coin === market.coin && m.id !== marketId)
     setResultToast({ won, amount, resolution: market.resolution ?? '', coin: market.coin, nextMarketId: next?.id })
     if (user?.id) {
       dbGet('users', `id=eq.${user.id}&select=balance`).then(d => {
@@ -506,9 +505,9 @@ export default function MarketPage() {
 
   useEffect(() => {
     if (!resultToast || resultToast.nextMarketId) return
-    const next = liveMarkets.find(m => m.coin === market?.coin && m.id !== marketId && (isFinance ? m.group_title === '3-Minuten-Markt' : true))
+    const next = liveMarkets.find(m => m.coin === market?.coin && m.id !== marketId)
     if (next) setResultToast(prev => prev ? { ...prev, nextMarketId: next.id } : prev)
-  }, [liveMarkets, resultToast, market?.coin, marketId, isFinance])
+  }, [liveMarkets, resultToast, market?.coin, marketId])
 
   useEffect(() => {
     loadMarket(); loadTrades(); loadLiveMarkets()
@@ -610,55 +609,38 @@ export default function MarketPage() {
     const marketEndMs     = parseUTC(market.closes_at).getTime()
     const isFinanceMarket = market.category === 'finance' || market.category === 'Finanzen'
     const nowMs = Date.now()
-
-    // Rollierendes 30-Minuten-Fenster wie Polymarket
     const windowMs = isFinanceMarket ? 30 * 60 * 1000 : 3 * 60 * 1000
     const chartEnd = Math.min(nowMs + 60 * 1000, marketEndMs)
     const chartStart = Math.max(chartEnd - windowMs, marketEndMs - (isFinanceMarket ? 8 * 60 * 60 * 1000 : 3 * 60 * 1000))
-
     drawCryptoChart(cryptoCanvasRef.current, priceHistory, market.start_price, chartStart, chartEnd)
   }, [priceHistory, market?.is_auto, market?.start_price, market?.closes_at, market?.resolved, market?.match_id, market?.category, market?.group_title])
 
+  // Nur resolve triggern — create übernimmt der Cron
   useEffect(() => {
     if (!market?.closes_at || !market?.coin || !market?.id) return
     if (market?.match_id) return
     if (isFinance) return
 
     resolveTriggeredRef.current = false
-    createTriggeredRef.current  = false
     const closesAt = parseUTC(market.closes_at)
-    const coin     = market.coin
     const mktId    = market.id
 
     const tick = async () => {
       const diff = closesAt.getTime() - Date.now()
-      if (diff <= 0) {
-        if (!resolveTriggeredRef.current) {
-          resolveTriggeredRef.current = true
-          try {
-            await fetch('/api/resolve-crypto-market', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ market_id: mktId }),
-            })
-          } catch {}
-          loadMarket()
-          if (user?.id) {
-            dbGet('users', `id=eq.${user?.id}&select=balance`).then(d => {
-              if (d?.[0]) setUser(prev => prev ? { ...prev, balance: d[0].balance } : prev)
-            })
-          }
-        }
-        if (!createTriggeredRef.current) {
-          createTriggeredRef.current = true
-          try {
-            await fetch('/api/create-crypto-market', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ coin }),
-            })
-          } catch {}
-          loadLiveMarkets()
+      if (diff <= 0 && !resolveTriggeredRef.current) {
+        resolveTriggeredRef.current = true
+        try {
+          await fetch('/api/resolve-crypto-market', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ market_id: mktId }),
+          })
+        } catch {}
+        loadMarket()
+        if (user?.id) {
+          dbGet('users', `id=eq.${user?.id}&select=balance`).then(d => {
+            if (d?.[0]) setUser(prev => prev ? { ...prev, balance: d[0].balance } : prev)
+          })
         }
       }
     }
@@ -666,7 +648,7 @@ export default function MarketPage() {
     tick()
     const id = setInterval(tick, 1000)
     return () => clearInterval(id)
-  }, [market?.closes_at, market?.coin, market?.id, market?.match_id, isFinance, loadMarket, loadLiveMarkets, user?.id])
+  }, [market?.closes_at, market?.coin, market?.id, market?.match_id, isFinance, loadMarket, user?.id])
 
   const [liveScore, setLiveScore] = useState<{ home: number; away: number } | null>(null)
 
@@ -749,14 +731,28 @@ export default function MarketPage() {
       setBetLoading(false); setTimeout(() => setBetSuccess(''), 4000); return
     }
     const token = getToken()
-    if (!token) { setBetError('Nicht eingeloggt.'); setBetLoading(false); return }
+    if (!token) {
+      setBetError('Sitzung abgelaufen — bitte erneut anmelden.')
+      setBetLoading(false)
+      return
+    }
     const res = await fetch('/api/place-bet', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
       body: JSON.stringify({ marketId, action: 'buy', direction, spend }),
     })
     const data = await res.json()
-    if (!res.ok) { setBetError(data.error ?? 'Fehler beim Platzieren.'); setBetLoading(false); return }
+    if (!res.ok) {
+      // Session abgelaufen → localStorage leeren und Hinweis zeigen
+      if (res.status === 401 || data.error?.toLowerCase().includes('session') || data.error?.toLowerCase().includes('token')) {
+        localStorage.removeItem('mobius_session')
+        setBetError('Sitzung abgelaufen — bitte neu anmelden.')
+      } else {
+        setBetError(data.error ?? 'Fehler beim Platzieren.')
+      }
+      setBetLoading(false)
+      return
+    }
     setUser(prev => prev ? { ...prev, balance: data.newBalance } : prev)
     setBetSuccess('Wette platziert ✓')
     setBetLoading(false)
@@ -769,14 +765,27 @@ export default function MarketPage() {
     if (!user || !market || !position) return
     setBetLoading(true); setBetError('')
     const token = getToken()
-    if (!token) { setBetError('Nicht eingeloggt.'); setBetLoading(false); return }
+    if (!token) {
+      setBetError('Sitzung abgelaufen — bitte erneut anmelden.')
+      setBetLoading(false)
+      return
+    }
     const res = await fetch('/api/place-bet', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
       body: JSON.stringify({ marketId, action: 'sell', direction, spend }),
     })
     const data = await res.json()
-    if (!res.ok) { setBetError(data.error ?? 'Fehler beim Verkaufen.'); setBetLoading(false); return }
+    if (!res.ok) {
+      if (res.status === 401 || data.error?.toLowerCase().includes('session') || data.error?.toLowerCase().includes('token')) {
+        localStorage.removeItem('mobius_session')
+        setBetError('Sitzung abgelaufen — bitte neu anmelden.')
+      } else {
+        setBetError(data.error ?? 'Fehler beim Verkaufen.')
+      }
+      setBetLoading(false)
+      return
+    }
     setUser(prev => prev ? { ...prev, balance: data.newBalance } : prev)
     setBetSuccess(`${data.returned} ₫ erhalten ✓`)
     setBetLoading(false)
@@ -810,10 +819,7 @@ export default function MarketPage() {
   const endDelta    = market.end_price && market.start_price ? market.end_price - market.start_price : null
   const isUp        = delta !== null ? delta >= 0 : (endDelta !== null ? endDelta >= 0 : true)
 
-  // Fix: nextLiveMarket für Finance immer auf 3-Minuten-Markt zeigen
-  const nextLiveMarket = isFinance
-    ? liveMarkets.find(m => m.coin === market.coin && m.id !== marketId && m.group_title === '3-Minuten-Markt')
-    : liveMarkets.find(m => m.coin === market.coin && m.id !== marketId)
+  const nextLiveMarket = liveMarkets.find(m => m.coin === market.coin && m.id !== marketId)
   const otherLiveMarkets = liveMarkets.filter(m => m.coin !== market.coin).slice(0, 4)
 
   const userWon = market.resolved && hasPosition &&
@@ -850,12 +856,10 @@ export default function MarketPage() {
     return 'Nicht eingetreten'
   }
 
-  // Markt-Titel
   const autoMarketTitle = isFinance
     ? `${market.short_label ?? market.coin} · ${market.group_title ?? ''}`
     : `${market.coin} Up or Down – 3 Minuten`
 
-  // Zurück-Button
   const backLabel = isSoccer
     ? '← Zurück zur Bundesliga'
     : isFinance
@@ -867,15 +871,29 @@ export default function MarketPage() {
   const backTarget = isSoccer
     ? '/?category=Bundesliga'
     : isFinance
-    ? `/?category=Finanzen-${market.group_title === '3-Minuten-Markt' ? '3min' : market.group_title === 'Aktueller Handelstag' ? 'Tag' : 'Woche'}`
+    ? `/?category=Finanzen-${market.group_title === 'Aktueller Handelstag' ? 'Tag' : 'Woche'}`
     : market.category
     ? `/?category=${encodeURIComponent(market.category)}`
     : '/'
 
+  // Toast-Label für Krypto: UP ↑ / DOWN ↓
+  const toastIsUp = resultToast?.resolution === 'yes'
+  const toastColor = toastIsUp ? '#16a34a' : '#dc2626'
+  const toastLabel = resultToast?.coin
+    ? (toastIsUp ? `${resultToast.coin} · UP ↑` : `${resultToast.coin} · DOWN ↓`)
+    : (resultToast?.won ? 'POSITION GEWONNEN' : 'POSITION VERLOREN')
+
   return (
     <>
       {resultToast && !isSoccer && (
-        <div style={{ position: 'fixed', top: 80, right: 16, zIndex: 9999, background: '#fff', border: `1px solid ${resultToast.won ? 'rgba(22,163,74,0.3)' : 'rgba(220,38,38,0.3)'}`, borderLeft: `4px solid ${resultToast.won ? '#16a34a' : '#dc2626'}`, borderRadius: 14, padding: '16px 18px', minWidth: 280, maxWidth: 340, boxShadow: '0 4px 24px rgba(0,0,0,0.10)', animation: 'slideInRight 0.35s cubic-bezier(.21,1.02,.73,1)' }}>
+        <div style={{
+          position: 'fixed', top: 80, right: 16, zIndex: 9999,
+          background: 'var(--bg, #fff)',
+          border: `1px solid ${toastIsUp ? 'rgba(22,163,74,0.3)' : 'rgba(220,38,38,0.3)'}`,
+          borderLeft: `4px solid ${toastColor}`,
+          borderRadius: 14, padding: '16px 18px', minWidth: 280, maxWidth: 340,
+          boxShadow: '0 4px 24px rgba(0,0,0,0.10)', animation: 'slideInRight 0.35s cubic-bezier(.21,1.02,.73,1)',
+        }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               {resultToast.coin && (
@@ -883,19 +901,14 @@ export default function MarketPage() {
                   {resultToast.coin.charAt(0)}
                 </span>
               )}
-              <span style={{ fontSize: 14, fontWeight: 700, color: resultToast.won ? '#16a34a' : '#dc2626' }}>
-                {resultToast.won ? 'POSITION GEWONNEN' : 'POSITION VERLOREN'}
+              <span style={{ fontSize: 14, fontWeight: 700, color: toastColor }}>
+                {toastLabel}
               </span>
             </div>
             <button onClick={() => setResultToast(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: '#9ca3af', padding: 0, lineHeight: 1 }}>×</button>
           </div>
-          <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 10 }}>
-            {resultToast.coin} · Ergebnis: <strong style={{ color: resultToast.resolution === 'yes' ? '#16a34a' : '#dc2626' }}>
-              {resultToast.resolution === 'yes' ? 'Up ↑' : 'Down ↓'}
-            </strong>
-          </div>
           {resultToast.won && resultToast.amount > 0 && (
-            <div style={{ fontSize: 30, fontWeight: 800, color: '#16a34a', letterSpacing: '-0.5px', marginBottom: 12, lineHeight: 1 }}>
+            <div style={{ fontSize: 30, fontWeight: 800, color: toastColor, letterSpacing: '-0.5px', marginBottom: 12, lineHeight: 1 }}>
               +{resultToast.amount.toLocaleString('de')} ₫
             </div>
           )}
