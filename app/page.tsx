@@ -1288,16 +1288,27 @@ function MarketsGrid({ markets, onOpen, isSoccer }: { markets: Market[]; onOpen:
             const isMultiOutcome = !isDisplay && mts.length > 2
 
             if (isMultiOutcome) {
-              const sorted = [...mts].sort((a, b) => calcProb(b.q_yes, b.q_no, b.b) - calcProb(a.q_yes, a.q_no, a.b))
+              // Rohe LMSR-Wahrscheinlichkeiten berechnen
+              const rawProbs = mts.map(m => calcProb(m.q_yes, m.q_no, m.b))
+              const totalProb = rawProbs.reduce((s, p) => s + p, 0) || 1
+
+              // Normalisierte Wahrscheinlichkeiten (summieren sich auf 100%)
+              const normalizedProbs = rawProbs.map(p => Math.round((p / totalProb) * 100))
+
+              // Sortiert nach normalisierter Wahrscheinlichkeit absteigend
+              const sortedWithProbs = mts
+                .map((m, i) => ({ m, normProb: normalizedProbs[i] }))
+                .sort((a, b) => b.normProb - a.normProb)
+
               const totalVol = mts.reduce((s, m) => s + m.q_yes + m.q_no, 0)
+
               return (
                 <div key={key} style={{ marginBottom: 32 }}>
                   <div style={{ background: '#1a1f2e', borderRadius: '12px 12px 0 0', padding: '14px 20px' }}>
                     <div style={{ fontSize: 15, fontWeight: 700, color: '#fff' }}>{label}</div>
                   </div>
                   <div style={{ border: '1px solid var(--border)', borderTop: 'none', borderRadius: '0 0 12px 12px', overflow: 'hidden' }}>
-                    {sorted.map((m, i) => {
-                      const prob = calcProb(m.q_yes, m.q_no, m.b)
+                    {sortedWithProbs.map(({ m, normProb }, i) => {
                       const isTop = i === 0
                       return (
                         <div key={m.id}
@@ -1306,7 +1317,7 @@ function MarketsGrid({ markets, onOpen, isSoccer }: { markets: Market[]; onOpen:
                             display: 'grid', gridTemplateColumns: '28px 1fr 80px 180px',
                             alignItems: 'center', gap: 12, padding: '12px 16px',
                             cursor: 'pointer', background: 'var(--card)',
-                            borderBottom: i < sorted.length - 1 ? '1px solid var(--border)' : 'none',
+                            borderBottom: i < sortedWithProbs.length - 1 ? '1px solid var(--border)' : 'none',
                             transition: 'background 0.1s',
                           }}
                           onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface)')}
@@ -1318,18 +1329,18 @@ function MarketsGrid({ markets, onOpen, isSoccer }: { markets: Market[]; onOpen:
                               {m.short_label ?? m.question}
                             </div>
                             <div style={{ marginTop: 6, height: 4, borderRadius: 2, background: 'var(--border)', overflow: 'hidden' }}>
-                              <div style={{ width: `${prob}%`, height: '100%', background: isTop ? '#6366f1' : 'var(--text-muted)', borderRadius: 2, transition: 'width 0.3s' }} />
+                              <div style={{ width: `${normProb}%`, height: '100%', background: isTop ? '#6366f1' : 'var(--text-muted)', borderRadius: 2, transition: 'width 0.3s' }} />
                             </div>
                           </div>
-                          <div style={{ fontSize: 18, fontWeight: 800, color: isTop ? '#6366f1' : 'var(--text)', textAlign: 'right' }}>{prob}%</div>
+                          <div style={{ fontSize: 18, fontWeight: 800, color: isTop ? '#6366f1' : 'var(--text)', textAlign: 'right' }}>{normProb}%</div>
                           <div style={{ display: 'flex', gap: 6 }}>
                             <button onClick={e => { e.stopPropagation(); onOpen(m.id) }}
                               style={{ flex: 1, padding: '7px 0', fontSize: 12, fontWeight: 700, borderRadius: 8, border: 'none', background: 'rgba(22,163,74,0.12)', color: '#16a34a', cursor: 'pointer' }}>
-                              Ja {prob}%
+                              Ja {normProb}%
                             </button>
                             <button onClick={e => { e.stopPropagation(); onOpen(m.id) }}
                               style={{ flex: 1, padding: '7px 0', fontSize: 12, fontWeight: 700, borderRadius: 8, border: 'none', background: 'rgba(220,38,38,0.10)', color: '#dc2626', cursor: 'pointer' }}>
-                              Nein {100 - prob}%
+                              Nein {100 - normProb}%
                             </button>
                           </div>
                         </div>
