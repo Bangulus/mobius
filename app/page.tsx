@@ -307,6 +307,17 @@ export default function Home() {
 
   const ADMIN_ID = 'b75edaf4-141d-41f1-9555-887a8ddbac58'
 
+  // Bereits gezeigte Toast-IDs aus localStorage laden → verhindert Mehrfach-Toasts nach Reload
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('mobius_shown_toasts')
+      if (saved) {
+        const ids: string[] = JSON.parse(saved)
+        ids.forEach(id => shownToastsRef.current.add(id))
+      }
+    } catch {}
+  }, [])
+
   useEffect(() => {
     const cat = new URLSearchParams(window.location.search).get('category')
     if (cat) setCategory(cat)
@@ -472,6 +483,14 @@ export default function Home() {
       const loserPct = market.resolution === 'yes' ? (100 - probAtResolution) : probAtResolution
 
       shownToastsRef.current.add(market.id)
+
+      // In localStorage persistieren → kein Wiederholen nach Reload
+      try {
+        const existing: string[] = JSON.parse(localStorage.getItem('mobius_shown_toasts') ?? '[]')
+        existing.push(market.id)
+        localStorage.setItem('mobius_shown_toasts', JSON.stringify(existing.slice(-200)))
+      } catch {}
+
       newToasts.push({
         id: market.id,
         coin: market.coin,
@@ -654,40 +673,55 @@ export default function Home() {
     <>
       {/* Win Toasts */}
       <div style={{ position: 'fixed', top: 80, right: 16, zIndex: 9999, display: 'flex', flexDirection: 'column', gap: 10, pointerEvents: 'none' }}>
-        {winToasts.map(toast => (
-          <div key={toast.id} style={{
-            pointerEvents: 'all', background: 'var(--bg, #fff)',
-            border: '1px solid rgba(22,163,74,0.3)', borderLeft: '4px solid #16a34a',
-            borderRadius: 12, padding: '14px 16px', minWidth: 270, maxWidth: 330,
-            boxShadow: '0 4px 24px rgba(0,0,0,0.12)', animation: 'slideInRight 0.3s ease',
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                {toast.isKrypto && toast.coin && (
-                  <span style={{ width: 22, height: 22, borderRadius: 6, background: COIN_COLORS[toast.coin] ?? '#f97316', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, color: '#fff', flexShrink: 0 }}>
-                    {toast.coin.charAt(0)}
+        {winToasts.map(toast => {
+          const isUp = toast.direction === 'yes'
+          const accentColor = isUp ? '#16a34a' : '#dc2626'
+          return (
+            <div key={toast.id} style={{
+              pointerEvents: 'all', background: 'var(--bg, #fff)',
+              border: `1px solid ${isUp ? 'rgba(22,163,74,0.3)' : 'rgba(220,38,38,0.3)'}`,
+              borderLeft: `4px solid ${accentColor}`,
+              borderRadius: 12, padding: '14px 16px', minWidth: 270, maxWidth: 330,
+              boxShadow: '0 4px 24px rgba(0,0,0,0.12)', animation: 'slideInRight 0.3s ease',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  {toast.isKrypto && toast.coin && (
+                    <span style={{
+                      width: 22, height: 22, borderRadius: 6,
+                      background: COIN_COLORS[toast.coin] ?? '#f97316',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: 11, fontWeight: 800, color: '#fff', flexShrink: 0,
+                    }}>
+                      {toast.coin.charAt(0)}
+                    </span>
+                  )}
+                  <span style={{ fontSize: 12, fontWeight: 700, color: accentColor, letterSpacing: 0.3 }}>
+                    {toast.isKrypto
+                      ? (isUp ? `${toast.coin} · UP ↑` : `${toast.coin} · DOWN ↓`)
+                      : 'POSITION GEWONNEN'
+                    }
                   </span>
-                )}
-                <span style={{ fontSize: 12, fontWeight: 700, color: '#16a34a', letterSpacing: 0.3 }}>POSITION GEWONNEN</span>
+                </div>
+                <button onClick={() => setWinToasts(prev => prev.filter(t => t.id !== toast.id))}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, color: '#9ca3af', padding: 0, lineHeight: 1 }}>×</button>
               </div>
-              <button onClick={() => setWinToasts(prev => prev.filter(t => t.id !== toast.id))}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, color: '#9ca3af', padding: 0, lineHeight: 1 }}>×</button>
-            </div>
-            <div style={{ fontSize: 11, color: 'var(--text-muted, #6b7280)', marginBottom: 8, lineHeight: 1.4 }}>
-              {toast.isKrypto
-                ? `${toast.coin} · ${toast.direction === 'yes' ? 'UP ↑' : 'DOWN ↓'}`
-                : (toast.question.length > 55 ? toast.question.slice(0, 55) + '…' : toast.question)}
-            </div>
-            <div style={{ fontSize: 26, fontWeight: 900, color: '#16a34a', letterSpacing: '-0.5px', lineHeight: 1, marginBottom: 6 }}>
-              +{toast.amount.toLocaleString('de')} ₫
-            </div>
-            {toast.loserPct !== undefined && toast.loserPct > 5 && (
-              <div style={{ fontSize: 11, color: 'var(--text-muted, #9ca3af)', borderTop: '1px solid rgba(0,0,0,0.06)', paddingTop: 6, marginTop: 2 }}>
-                {toast.loserPct}% der Marktteilnehmer lagen falsch.
+              {!toast.isKrypto && (
+                <div style={{ fontSize: 11, color: 'var(--text-muted, #6b7280)', marginBottom: 8, lineHeight: 1.4 }}>
+                  {toast.question.length > 55 ? toast.question.slice(0, 55) + '…' : toast.question}
+                </div>
+              )}
+              <div style={{ fontSize: 26, fontWeight: 900, color: accentColor, letterSpacing: '-0.5px', lineHeight: 1, marginBottom: 6 }}>
+                +{toast.amount.toLocaleString('de')} ₫
               </div>
-            )}
-          </div>
-        ))}
+              {toast.loserPct !== undefined && toast.loserPct > 5 && (
+                <div style={{ fontSize: 11, color: 'var(--text-muted, #9ca3af)', borderTop: '1px solid rgba(0,0,0,0.06)', paddingTop: 6, marginTop: 2 }}>
+                  {toast.loserPct}% der Marktteilnehmer lagen falsch.
+                </div>
+              )}
+            </div>
+          )
+        })}
       </div>
 
       {/* Wöchentliches Leaderboard Modal */}
@@ -1288,18 +1322,12 @@ function MarketsGrid({ markets, onOpen, isSoccer }: { markets: Market[]; onOpen:
             const isMultiOutcome = !isDisplay && mts.length > 2
 
             if (isMultiOutcome) {
-              // Rohe LMSR-Wahrscheinlichkeiten berechnen
               const rawProbs = mts.map(m => calcProb(m.q_yes, m.q_no, m.b))
               const totalProb = rawProbs.reduce((s, p) => s + p, 0) || 1
-
-              // Normalisierte Wahrscheinlichkeiten (summieren sich auf 100%)
               const normalizedProbs = rawProbs.map(p => Math.round((p / totalProb) * 100))
-
-              // Sortiert nach normalisierter Wahrscheinlichkeit absteigend
               const sortedWithProbs = mts
                 .map((m, i) => ({ m, normProb: normalizedProbs[i] }))
                 .sort((a, b) => b.normProb - a.normProb)
-
               const totalVol = mts.reduce((s, m) => s + m.q_yes + m.q_no, 0)
 
               return (
