@@ -40,6 +40,22 @@ async function updateUserBalance(userId: string, newBalance: number) {
   })
 }
 
+async function writePayoutTrade(marketId: string, userId: string, amount: number) {
+  await fetch(`${supabaseUrl}/rest/v1/trades`, {
+    method: 'POST',
+    headers: { ...adminHeaders(), Prefer: 'return=minimal' },
+    body: JSON.stringify({
+      market_id: marketId,
+      user_id: userId,
+      type: 'payout',
+      shares: amount,
+      cost: amount,
+      price_before: 0,
+      price_after: 0,
+    }),
+  })
+}
+
 async function resolveMarket(marketId: string, resolution: 'yes' | 'no' | 'draw') {
   await fetch(`${supabaseUrl}/rest/v1/markets?id=eq.${marketId}`, {
     method: 'PATCH',
@@ -71,6 +87,7 @@ async function payoutWinners(marketId: string, resolution: 'yes' | 'no' | 'draw'
     for (const [userId, refund] of Object.entries(userRefunds)) {
       const current = await getUserBalance(userId)
       await updateUserBalance(userId, current + refund)
+      await writePayoutTrade(marketId, userId, Math.round(refund))
     }
     return
   }
@@ -85,6 +102,7 @@ async function payoutWinners(marketId: string, resolution: 'yes' | 'no' | 'draw'
   for (const [userId, winnings] of Object.entries(userWinnings)) {
     const current = await getUserBalance(userId)
     await updateUserBalance(userId, current + winnings)
+    await writePayoutTrade(marketId, userId, Math.round(winnings))
   }
 }
 
@@ -95,21 +113,17 @@ export async function GET() {
       return NextResponse.json({ ok: true, resolved: 0, message: 'Keine offenen Märkte' })
     }
 
-    // Alle relevanten Match-IDs sammeln
     const matchIds = Array.from(new Set(
       openMarkets.map((m: { match_id: string }) => m.match_id).filter(Boolean)
     )) as string[]
 
-    // Alle Matches auf einmal laden — prev + current + next Spieltag
     const allMatches = await getCurrentMatches()
 
-    // Map aufbauen: "bl1-12345" → match
     const matchMap = new Map<string, OpenLigaMatch>()
     for (const match of allMatches) {
       matchMap.set(`bl1-${match.matchID}`, match)
     }
 
-    // Wenn ein match_id nicht in der Map ist → gesamte Saison als Fallback laden
     const missingIds = matchIds.filter(id => !matchMap.has(id))
     if (missingIds.length > 0) {
       const season = new Date().getMonth() >= 7 ? new Date().getFullYear() : new Date().getFullYear() - 1
@@ -140,7 +154,7 @@ export async function GET() {
       }
 
       const outcome = getMatchOutcome(match)
-      if (!outcome) continue // Spiel noch nicht fertig
+      if (!outcome) continue
 
       let resolution: 'yes' | 'no' | 'draw'
       if (outcome === 'draw') {
