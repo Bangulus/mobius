@@ -256,12 +256,12 @@ const NAV_ITEMS: NavItemDef[] = [
   ]},
   { id: 'Sport', label: 'Sport', icon: '⚽', children: [
     { id: 'Fußball', label: 'Fußball', icon: '⚽', children: [
-      { id: 'Bundesliga', label: 'Bundesliga', icon: '🇩🇪' },
+      { id: 'Bundesliga', label: 'Bundesliga',       icon: '🇩🇪' },
+      { id: 'WM',         label: 'WM 2026',          icon: '🏆' },
+      { id: 'CL',         label: 'Champions League', icon: '⭐' },
+      { id: 'DFB-Kader',  label: 'DFB-Kader',        icon: '🇩🇪' },
     ]},
-    { id: 'WM',        label: 'WM 2026',          icon: '🏆' },
-    { id: 'CL',        label: 'Champions League', icon: '⭐' },
-    { id: 'F1',        label: 'Formel 1',         icon: '🏎️' },
-    { id: 'DFB-Kader', label: 'DFB-Kader',        icon: '🇩🇪' },
+    { id: 'F1', label: 'Formel 1', icon: '🏎️' },
   ]},
   { id: 'Krypto',        label: 'Krypto',        icon: '₿'  },
   { id: 'Entertainment', label: 'Entertainment', icon: '🎬' },
