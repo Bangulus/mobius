@@ -611,12 +611,17 @@ export default function MarketPage() {
   
   const marketDurationMs = isFinanceMarket ? 8 * 60 * 60 * 1000 : 3 * 60 * 1000
   const marketStartMs = marketEndMs - marketDurationMs
-  
-  const chartStart = priceHistory.length > 0
-    ? Math.min(priceHistory[0].t, marketStartMs)
-    : marketStartMs
+
+  // Startpunkt bei Marktbeginn mit start_price einfügen
+  const anchorPoint: PricePoint = { t: marketStartMs, price: market.start_price }
+  const fullHistory = priceHistory.length > 0
+    ? [anchorPoint, ...priceHistory.filter(p => p.t > marketStartMs)]
+    : [anchorPoint]
 
   const chartEnd = market.resolved ? marketEndMs : Date.now()
+
+  drawCryptoChart(cryptoCanvasRef.current, fullHistory, market.start_price, marketStartMs, chartEnd)
+}, [priceHistory, market?.is_auto, market?.start_price, market?.closes_at, market?.resolved, market?.match_id, market?.category, market?.group_title])
 
   drawCryptoChart(cryptoCanvasRef.current, priceHistory, market.start_price, chartStart, chartEnd)
 }, [priceHistory, market?.is_auto, market?.start_price, market?.closes_at, market?.resolved, market?.match_id, market?.category, market?.group_title])
