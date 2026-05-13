@@ -21,7 +21,7 @@ interface Props {
 }
 
 export default function AdminView({ userId, openMarkets, onMarketResolved }: Props) {
-  const [adminTab, setAdminTab] = useState<'open' | 'resolved' | 'btc' | 'create'>('open');
+  const [adminTab, setAdminTab] = useState<'open' | 'resolved' | 'btc' | 'create' | 'edit'>('open');
   const [adminCategory, setAdminCategory] = useState('');
   const [resolvingMarket, setResolvingMarket] = useState<string | null>(null);
   const [resolvedMarketDetails, setResolvedMarketDetails] = useState<any[]>([]);
@@ -31,6 +31,14 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
   const [btcMarkets, setBtcMarkets] = useState<any[]>([]);
   const [resolvingBtc, setResolvingBtc] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now());
+
+  // Edit tab state
+  const [allMarkets, setAllMarkets] = useState<any[]>([]);
+  const [editingMarket, setEditingMarket] = useState<string | null>(null);
+  const [editDescription, setEditDescription] = useState('');
+  const [editSaving, setEditSaving] = useState(false);
+  const [editMessage, setEditMessage] = useState('');
+  const [editSearch, setEditSearch] = useState('');
 
   // Neuer Markt Form State
   const [newQuestion, setNewQuestion]       = useState('');
@@ -50,6 +58,7 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
 
   useEffect(() => {
     if (adminTab === 'btc') loadBtcMarkets();
+    if (adminTab === 'edit') loadAllMarkets();
   }, [adminTab]);
 
   async function loadBtcMarkets() {
@@ -57,6 +66,36 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
       headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` },
     });
     setBtcMarkets(await res.json());
+  }
+
+  async function loadAllMarkets() {
+    const res = await fetch(`${supabaseUrl}/rest/v1/markets?is_auto=eq.false&select=id,question,short_label,category,description&order=created_at.desc`, {
+      headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` },
+    });
+    setAllMarkets(await res.json());
+  }
+
+  async function saveDescription(marketId: string) {
+    setEditSaving(true);
+    setEditMessage('');
+    const res = await fetch(`${supabaseUrl}/rest/v1/markets?id=eq.${marketId}`, {
+      method: 'PATCH',
+      headers: {
+        apikey: supabaseKey,
+        Authorization: `Bearer ${supabaseKey}`,
+        'Content-Type': 'application/json',
+        Prefer: 'return=minimal',
+      },
+      body: JSON.stringify({ description: editDescription }),
+    });
+    if (res.ok) {
+      setEditMessage('Gespeichert.');
+      setAllMarkets(prev => prev.map(m => m.id === marketId ? { ...m, description: editDescription } : m));
+      setTimeout(() => { setEditMessage(''); setEditingMarket(null); }, 1500);
+    } else {
+      setEditMessage('Fehler beim Speichern.');
+    }
+    setEditSaving(false);
   }
 
   async function createCryptoMarket(coin: string) {
@@ -101,10 +140,8 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
   async function handleCreateMarket() {
     if (!newQuestion.trim()) { setCreateMessage('❌ Frage ist Pflichtfeld.'); return; }
     if (!newClosesAt) { setCreateMessage('❌ Schlussdatum ist Pflichtfeld.'); return; }
-
     setCreateLoading(true);
     setCreateMessage('');
-
     const body: any = {
       question:    newQuestion.trim(),
       short_label: newShortLabel.trim() || newQuestion.trim().slice(0, 60),
@@ -119,7 +156,6 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
       is_auto:     false,
     };
     if (newGroupTitle.trim()) body.group_title = newGroupTitle.trim();
-
     const res = await fetch(`${supabaseUrl}/rest/v1/markets`, {
       method: 'POST',
       headers: {
@@ -130,7 +166,6 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
       },
       body: JSON.stringify(body),
     });
-
     if (res.ok) {
       setCreateMessage('✅ Markt erstellt!');
       setNewQuestion(''); setNewShortLabel(''); setNewDescription('');
@@ -243,58 +278,142 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
     fontWeight: 600,
   });
 
+  const filteredEditMarkets = allMarkets.filter(m =>
+    editSearch === '' ||
+    (m.question ?? '').toLowerCase().includes(editSearch.toLowerCase()) ||
+    (m.short_label ?? '').toLowerCase().includes(editSearch.toLowerCase())
+  );
+
   return (
     <div>
-      {/* ── Tab Bar ── */}
+      {/* Tab Bar */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 24, flexWrap: 'wrap' }}>
         <button style={tabBtn(adminTab === 'open')}              onClick={() => setAdminTab('open')}>Offene Märkte</button>
         <button style={tabBtn(adminTab === 'resolved')}          onClick={() => { setAdminTab('resolved'); loadResolvedMarketDetails(); }}>Aufgelöste Märkte</button>
         <button style={tabBtn(adminTab === 'btc', '#f59e0b')}    onClick={() => setAdminTab('btc')}>🪙 Krypto-Märkte</button>
         <button style={tabBtn(adminTab === 'create', '#16a34a')} onClick={() => setAdminTab('create')}>＋ Markt erstellen</button>
+        <button style={tabBtn(adminTab === 'edit', '#0ea5e9')}   onClick={() => setAdminTab('edit')}>✏️ Regeln bearbeiten</button>
       </div>
+
+      {/* ── Regeln bearbeiten ── */}
+      {adminTab === 'edit' && (
+        <div style={{ maxWidth: 720 }}>
+          <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}>
+            Auflösungsregeln für alle manuellen Märkte. Wird im "Regeln"-Reiter auf der Marktseite angezeigt.
+          </div>
+          <input
+            style={{ ...inputStyle, marginBottom: 16 }}
+            placeholder="Markt suchen…"
+            value={editSearch}
+            onChange={e => setEditSearch(e.target.value)}
+          />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {filteredEditMarkets.map(m => (
+              <div key={m.id} className="card" style={{ padding: 0, overflow: 'hidden' }}>
+                <div
+                  onClick={() => {
+                    if (editingMarket === m.id) {
+                      setEditingMarket(null);
+                    } else {
+                      setEditingMarket(m.id);
+                      setEditDescription(m.description ?? '');
+                      setEditMessage('');
+                    }
+                  }}
+                  style={{
+                    padding: '12px 16px', cursor: 'pointer',
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    background: editingMarket === m.id ? 'var(--accent-light, rgba(14,165,233,0.08))' : 'var(--card)',
+                    borderBottom: editingMarket === m.id ? '1px solid var(--border)' : 'none',
+                  }}
+                >
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>
+                      {m.short_label ?? m.question}
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                      {m.description
+                        ? m.description.slice(0, 60) + (m.description.length > 60 ? '…' : '')
+                        : 'Keine Regeln hinterlegt'}
+                    </div>
+                  </div>
+                  <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0, marginLeft: 12 }}>
+                    {editingMarket === m.id ? '▲ Schließen' : '▼ Bearbeiten'}
+                  </span>
+                </div>
+
+                {editingMarket === m.id && (
+                  <div style={{ padding: 16 }}>
+                    <label style={labelStyle}>Auflösungsregeln</label>
+                    <textarea
+                      style={{ ...inputStyle, minHeight: 120, resize: 'vertical', fontSize: 13, lineHeight: 1.6 }}
+                      value={editDescription}
+                      onChange={e => setEditDescription(e.target.value)}
+                      placeholder="z.B. Löst mit JA auf, wenn…"
+                    />
+                    <div style={{ display: 'flex', gap: 8, marginTop: 10, alignItems: 'center' }}>
+                      <button
+                        onClick={() => saveDescription(m.id)}
+                        disabled={editSaving}
+                        style={{
+                          padding: '8px 20px', background: '#0ea5e9', color: 'white',
+                          border: 'none', borderRadius: 8, cursor: editSaving ? 'not-allowed' : 'pointer',
+                          fontSize: 13, fontWeight: 700, opacity: editSaving ? 0.6 : 1,
+                        }}
+                      >
+                        {editSaving ? 'Speichert…' : 'Speichern'}
+                      </button>
+                      <button
+                        onClick={() => setEditingMarket(null)}
+                        style={{
+                          padding: '8px 16px', background: 'var(--surface)', color: 'var(--text-muted)',
+                          border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', fontSize: 13,
+                        }}
+                      >
+                        Abbrechen
+                      </button>
+                      {editMessage && (
+                        <span style={{ fontSize: 13, color: editMessage.includes('Fehler') ? '#dc2626' : '#16a34a', fontWeight: 600 }}>
+                          {editMessage}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+            {filteredEditMarkets.length === 0 && (
+              <div style={{ color: 'var(--text-muted)', fontSize: 13, padding: '16px 0' }}>Keine Märkte gefunden.</div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ── Markt erstellen ── */}
       {adminTab === 'create' && (
         <div style={{ maxWidth: 600 }}>
           <div className="card" style={{ padding: 24 }}>
             <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', marginBottom: 20 }}>Neuen Markt erstellen</div>
-
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-
               <div>
                 <label style={labelStyle}>Frage *</label>
-                <input
-                  style={inputStyle}
-                  placeholder="z.B. Wird Bitcoin 2026 auf 200.000$ steigen?"
-                  value={newQuestion}
-                  onChange={e => setNewQuestion(e.target.value)}
-                  maxLength={300}
-                />
+                <input style={inputStyle} placeholder="z.B. Wird Bitcoin 2026 auf 200.000$ steigen?" value={newQuestion} onChange={e => setNewQuestion(e.target.value)} maxLength={300} />
               </div>
-
               <div>
                 <label style={labelStyle}>Kurztitel (optional)</label>
-                <input
-                  style={inputStyle}
-                  placeholder="z.B. BTC auf 200k?"
-                  value={newShortLabel}
-                  onChange={e => setNewShortLabel(e.target.value)}
-                  maxLength={80}
-                />
+                <input style={inputStyle} placeholder="z.B. BTC auf 200k?" value={newShortLabel} onChange={e => setNewShortLabel(e.target.value)} maxLength={80} />
                 <div style={{ fontSize: 11, color: 'var(--text-subtle)', marginTop: 4 }}>Wird auf der Marktübersicht angezeigt. Falls leer: Frage wird gekürzt.</div>
               </div>
-
               <div>
-                <label style={labelStyle}>Beschreibung (optional)</label>
+                <label style={labelStyle}>Auflösungsregeln (optional)</label>
                 <textarea
                   style={{ ...inputStyle, minHeight: 80, resize: 'vertical' }}
-                  placeholder="Zusätzliche Infos, Auflösungskriterien…"
+                  placeholder="z.B. Löst mit JA auf, wenn…"
                   value={newDescription}
                   onChange={e => setNewDescription(e.target.value)}
-                  maxLength={1000}
+                  maxLength={2000}
                 />
               </div>
-
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div>
                   <label style={labelStyle}>Kategorie</label>
@@ -304,68 +423,27 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
                 </div>
                 <div>
                   <label style={labelStyle}>Liquiditätsparameter b</label>
-                  <input
-                    style={inputStyle}
-                    type="number"
-                    min={10}
-                    max={10000}
-                    value={newB}
-                    onChange={e => setNewB(Math.max(10, parseInt(e.target.value) || 100))}
-                  />
+                  <input style={inputStyle} type="number" min={10} max={10000} value={newB} onChange={e => setNewB(Math.max(10, parseInt(e.target.value) || 100))} />
                   <div style={{ fontSize: 11, color: 'var(--text-subtle)', marginTop: 4 }}>100 = Standard. Höher = flachere Preiskurve.</div>
                 </div>
               </div>
-
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div>
                   <label style={labelStyle}>Schließt am *</label>
-                  <input
-                    style={inputStyle}
-                    type="datetime-local"
-                    value={newClosesAt}
-                    onChange={e => setNewClosesAt(e.target.value)}
-                  />
+                  <input style={inputStyle} type="datetime-local" value={newClosesAt} onChange={e => setNewClosesAt(e.target.value)} />
                 </div>
                 <div>
                   <label style={labelStyle}>Gruppe (optional)</label>
-                  <input
-                    style={inputStyle}
-                    placeholder="z.B. WM 2026"
-                    value={newGroupTitle}
-                    onChange={e => setNewGroupTitle(e.target.value)}
-                    maxLength={80}
-                  />
+                  <input style={inputStyle} placeholder="z.B. WM 2026" value={newGroupTitle} onChange={e => setNewGroupTitle(e.target.value)} maxLength={80} />
                   <div style={{ fontSize: 11, color: 'var(--text-subtle)', marginTop: 4 }}>Märkte mit gleicher Gruppe werden zusammengefasst.</div>
                 </div>
               </div>
-
               {createMessage && (
-                <div style={{
-                  padding: '10px 14px',
-                  borderRadius: 8,
-                  background: createMessage.startsWith('✅') ? 'rgba(22,163,74,0.1)' : 'rgba(220,38,38,0.1)',
-                  color: createMessage.startsWith('✅') ? '#16a34a' : '#dc2626',
-                  fontSize: 13,
-                  fontWeight: 600,
-                }}>
+                <div style={{ padding: '10px 14px', borderRadius: 8, background: createMessage.startsWith('✅') ? 'rgba(22,163,74,0.1)' : 'rgba(220,38,38,0.1)', color: createMessage.startsWith('✅') ? '#16a34a' : '#dc2626', fontSize: 13, fontWeight: 600 }}>
                   {createMessage}
                 </div>
               )}
-
-              <button
-                onClick={handleCreateMarket}
-                disabled={createLoading}
-                style={{
-                  padding: '12px',
-                  background: createLoading ? 'var(--surface)' : '#16a34a',
-                  color: createLoading ? 'var(--text-muted)' : 'white',
-                  border: 'none',
-                  borderRadius: 10,
-                  cursor: createLoading ? 'not-allowed' : 'pointer',
-                  fontSize: 14,
-                  fontWeight: 700,
-                }}
-              >
+              <button onClick={handleCreateMarket} disabled={createLoading} style={{ padding: '12px', background: createLoading ? 'var(--surface)' : '#16a34a', color: createLoading ? 'var(--text-muted)' : 'white', border: 'none', borderRadius: 10, cursor: createLoading ? 'not-allowed' : 'pointer', fontSize: 14, fontWeight: 700 }}>
                 {createLoading ? 'Wird erstellt…' : 'Markt erstellen'}
               </button>
             </div>
@@ -380,23 +458,15 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
             <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', marginBottom: 12 }}>Neuen 3-Minuten Krypto-Markt starten</div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               {COINS.map((c) => (
-                <button
-                  key={c.id}
-                  onClick={() => createCryptoMarket(c.id)}
-                  disabled={btcCreating}
-                  style={{ padding: '8px 16px', background: c.color, color: 'white', border: 'none', borderRadius: 8, cursor: btcCreating ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 700, opacity: btcCreating ? 0.6 : 1 }}
-                >
+                <button key={c.id} onClick={() => createCryptoMarket(c.id)} disabled={btcCreating} style={{ padding: '8px 16px', background: c.color, color: 'white', border: 'none', borderRadius: 8, cursor: btcCreating ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 700, opacity: btcCreating ? 0.6 : 1 }}>
                   {btcCreating ? '⏳' : c.label}
                 </button>
               ))}
             </div>
             {btcMessage && (
-              <div style={{ marginTop: 10, fontSize: 13, color: btcMessage.startsWith('✅') ? '#16a34a' : '#dc2626', fontWeight: 600 }}>
-                {btcMessage}
-              </div>
+              <div style={{ marginTop: 10, fontSize: 13, color: btcMessage.startsWith('✅') ? '#16a34a' : '#dc2626', fontWeight: 600 }}>{btcMessage}</div>
             )}
           </div>
-
           <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 10 }}>Laufende & vergangene Krypto-Märkte</div>
           {btcMarkets.length === 0 && <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Noch keine Krypto-Märkte erstellt.</div>}
           {btcMarkets.map((market: any) => {
@@ -407,9 +477,7 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
               <div key={market.id} className="card" style={{ padding: '12px 16px', marginBottom: 8 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ padding: '2px 8px', borderRadius: 4, background: coinData?.color ?? '#888', color: 'white', fontSize: 11, fontWeight: 700 }}>
-                      {market.coin ?? 'BTC'}
-                    </span>
+                    <span style={{ padding: '2px 8px', borderRadius: 4, background: coinData?.color ?? '#888', color: 'white', fontSize: 11, fontWeight: 700 }}>{market.coin ?? 'BTC'}</span>
                     <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--text)' }}>{market.short_label}</span>
                   </div>
                   <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 20, background: isOpen ? 'rgba(22,163,74,0.1)' : 'var(--surface)', color: isOpen ? '#16a34a' : 'var(--text-muted)', fontWeight: 600 }}>
@@ -422,11 +490,7 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
                   {isOpen && <span style={{ fontWeight: 700, color: expired ? '#dc2626' : '#f59e0b' }}>{formatCountdown(market.closes_at)}</span>}
                 </div>
                 {isOpen && (
-                  <button
-                    onClick={() => resolveCryptoMarket(market.id)}
-                    disabled={resolvingBtc === market.id}
-                    style={{ padding: '4px 12px', background: expired ? '#dc2626' : 'var(--surface)', color: expired ? 'white' : 'var(--text-muted)', border: `1px solid ${expired ? '#dc2626' : 'var(--border)'}`, borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}
-                  >
+                  <button onClick={() => resolveCryptoMarket(market.id)} disabled={resolvingBtc === market.id} style={{ padding: '4px 12px', background: expired ? '#dc2626' : 'var(--surface)', color: expired ? 'white' : 'var(--text-muted)', border: `1px solid ${expired ? '#dc2626' : 'var(--border)'}`, borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
                     {resolvingBtc === market.id ? '⏳ Wird aufgelöst…' : expired ? '⚡ Jetzt auflösen' : '🔧 Manuell auflösen'}
                   </button>
                 )}
@@ -448,9 +512,7 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
           {Object.entries(adminGrouped).map(([groupTitle, groupMarkets]) => (
             <div key={groupTitle} style={{ marginBottom: 16 }}>
               {groupTitle !== '__ungrouped__' && (
-                <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6, padding: '4px 10px', background: '#7c3aed', color: 'white', borderRadius: 6, display: 'inline-block' }}>
-                  {groupTitle}
-                </div>
+                <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6, padding: '4px 10px', background: '#7c3aed', color: 'white', borderRadius: 6, display: 'inline-block' }}>{groupTitle}</div>
               )}
               {groupMarkets.map((market: any) => (
                 <div key={market.id} style={{ border: '1px solid var(--border)', padding: '10px 14px', marginBottom: 6, borderRadius: 8, background: 'var(--card)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
@@ -472,10 +534,7 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
           {resolvedMarketDetails.length === 0 && <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Noch keine aufgelösten Märkte.</div>}
           {resolvedMarketDetails.map((market: any) => (
             <div key={market.id} style={{ border: '1px solid var(--border)', borderRadius: 10, marginBottom: 8, overflow: 'hidden' }}>
-              <div
-                onClick={() => setExpandedMarket(expandedMarket === market.id ? null : market.id)}
-                style={{ padding: '10px 14px', background: market.resolution === 'yes' ? '#16a34a' : '#dc2626', color: 'white', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-              >
+              <div onClick={() => setExpandedMarket(expandedMarket === market.id ? null : market.id)} style={{ padding: '10px 14px', background: market.resolution === 'yes' ? '#16a34a' : '#dc2626', color: 'white', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
                   <div style={{ fontWeight: 700, fontSize: 13 }}>{market.short_label || market.question}</div>
                   <div style={{ fontSize: 12, marginTop: 2, opacity: 0.85 }}>Ergebnis: {market.resolution === 'yes' ? '✓ YES' : '✗ NO'} · {market.tradeDetails.length} Trades</div>
