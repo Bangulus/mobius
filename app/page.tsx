@@ -372,25 +372,20 @@ export default function Home() {
 
   const loadWeeklyBoard = useCallback(async () => {
     const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
-    const trades = await dbGet('trades', `type=in.(sell_yes,sell_no)&created_at=gte.${since}&select=user_id,shares`)
+    const trades = await dbGet('trades', `type=eq.payout&created_at=gte.${since}&select=user_id,amount`)
     if (!trades || trades.length === 0) { setWeeklyBoard([]); return }
-
     const gainMap: Record<string, number> = {}
-    trades.forEach((t: { user_id: string; shares: number }) => {
-      gainMap[t.user_id] = (gainMap[t.user_id] ?? 0) + (t.shares ?? 0)
+    trades.forEach((t: { user_id: string; amount: number }) => {
+      gainMap[t.user_id] = (gainMap[t.user_id] ?? 0) + (t.amount ?? 0)
     })
-
     const topIds = Object.entries(gainMap)
       .sort((a, b) => b[1] - a[1])
       .slice(0, 10)
       .map(([id]) => id)
-
     if (topIds.length === 0) { setWeeklyBoard([]); return }
-
     const users = await dbGet('users', `id=in.(${topIds.join(',')})&select=id,username`)
     const userMap: Record<string, string> = {}
     users?.forEach((u: { id: string; username: string }) => { userMap[u.id] = u.username })
-
     setWeeklyBoard(topIds.map(id => ({
       user_id: id,
       username: userMap[id] ?? 'Unbekannt',
