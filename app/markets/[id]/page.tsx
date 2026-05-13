@@ -333,12 +333,18 @@ function LivePositionsBar({ trades, isKrypto }: { trades: Trade[]; isKrypto: boo
 }
 
 function CountdownDisplay({ targetMs, redThresholdMs = 30000 }: { targetMs: number; redThresholdMs?: number }) {
-  const [parts, setParts] = useState({ h: 0, m: 0, s: 0, ended: false })
+  const [parts, setParts] = useState({ d: 0, h: 0, m: 0, s: 0, ended: false })
   useEffect(() => {
     const tick = () => {
       const diff = targetMs - Date.now()
-      if (diff <= 0) { setParts({ h: 0, m: 0, s: 0, ended: true }); return }
-      setParts({ h: Math.floor(diff / 3600000), m: Math.floor((diff % 3600000) / 60000), s: Math.floor((diff % 60000) / 1000), ended: false })
+      if (diff <= 0) { setParts({ d: 0, h: 0, m: 0, s: 0, ended: true }); return }
+      setParts({
+        d: Math.floor(diff / 86400000),
+        h: Math.floor((diff % 86400000) / 3600000),
+        m: Math.floor((diff % 3600000) / 60000),
+        s: Math.floor((diff % 60000) / 1000),
+        ended: false,
+      })
     }
     tick()
     const id = setInterval(tick, 1000)
@@ -357,25 +363,38 @@ function CountdownDisplay({ targetMs, redThresholdMs = 30000 }: { targetMs: numb
     </div>
   )
 
+  const numStyle = { fontSize: 32, fontWeight: 900, color: isRed ? '#dc2626' : 'var(--text)', fontVariantNumeric: 'tabular-nums' as const, lineHeight: 1 }
+  const labelStyle = { fontSize: 10, color: 'var(--text-muted)', letterSpacing: 1, marginTop: 4 }
+  const sepStyle = { fontSize: 28, fontWeight: 900, color: 'var(--text-muted)', lineHeight: '36px' }
+
   return (
     <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start' }}>
-      {parts.h > 0 && (
+      {parts.d > 0 && (
         <>
           <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: 32, fontWeight: 900, color: isRed ? '#dc2626' : 'var(--text)', fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>{String(parts.h).padStart(2, '0')}</div>
-            <div style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: 1, marginTop: 4 }}>STD</div>
+            <div style={numStyle}>{String(parts.d).padStart(2, '0')}</div>
+            <div style={labelStyle}>TAG</div>
           </div>
-          <div style={{ fontSize: 28, fontWeight: 900, color: 'var(--text-muted)', lineHeight: '36px' }}>:</div>
+          <div style={sepStyle}>:</div>
+        </>
+      )}
+      {(parts.d > 0 || parts.h > 0) && (
+        <>
+          <div style={{ textAlign: 'center' }}>
+            <div style={numStyle}>{String(parts.h).padStart(2, '0')}</div>
+            <div style={labelStyle}>STD</div>
+          </div>
+          <div style={sepStyle}>:</div>
         </>
       )}
       <div style={{ textAlign: 'center' }}>
-        <div style={{ fontSize: 32, fontWeight: 900, color: isRed ? '#dc2626' : 'var(--text)', fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>{String(parts.m).padStart(2, '0')}</div>
-        <div style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: 1, marginTop: 4 }}>MIN</div>
+        <div style={numStyle}>{String(parts.m).padStart(2, '0')}</div>
+        <div style={labelStyle}>MIN</div>
       </div>
-      <div style={{ fontSize: 28, fontWeight: 900, color: 'var(--text-muted)', lineHeight: '36px' }}>:</div>
+      <div style={sepStyle}>:</div>
       <div style={{ textAlign: 'center' }}>
-        <div style={{ fontSize: 32, fontWeight: 900, color: isRed ? '#dc2626' : 'var(--text)', fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>{String(parts.s).padStart(2, '0')}</div>
-        <div style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: 1, marginTop: 4 }}>SEK</div>
+        <div style={numStyle}>{String(parts.s).padStart(2, '0')}</div>
+        <div style={labelStyle}>SEK</div>
       </div>
     </div>
   )
