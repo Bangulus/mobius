@@ -299,7 +299,7 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
       {adminTab === 'edit' && (
         <div style={{ maxWidth: 720 }}>
           <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}>
-            Auflösungsregeln für alle manuellen Märkte. Wird im "Regeln"-Reiter auf der Marktseite angezeigt.
+            Auflösungsregeln für alle manuellen Märkte. Wird im &quot;Regeln&quot;-Reiter auf der Marktseite angezeigt.
           </div>
           <input
             style={{ ...inputStyle, marginBottom: 16 }}
