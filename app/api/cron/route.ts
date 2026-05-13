@@ -1,15 +1,15 @@
 import { NextResponse } from 'next/server'
- 
+
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY!
- 
+
 const COINS = ['BTC', 'ETH', 'SOL', 'XRP']
- 
+
 async function cleanupZombieMarkets() {
-  // Alle Auto-Märkte die noch open/false sind aber closes_at in der Vergangenheit → schließen
+  // Nur Crypto-Zombie-Märkte (category=crypto) — Finance hat eigene Resolve-Route
   const now = new Date().toISOString()
   await fetch(
-    `${SUPABASE_URL}/rest/v1/markets?is_auto=eq.true&resolved=eq.false&status=eq.open&closes_at=lt.${now}`,
+    `${SUPABASE_URL}/rest/v1/markets?is_auto=eq.true&category=eq.crypto&resolved=eq.false&status=eq.open&closes_at=lt.${now}`,
     {
       method: 'PATCH',
       headers: {
@@ -22,22 +22,22 @@ async function cleanupZombieMarkets() {
     }
   )
 }
- 
+
 export async function GET(request: Request) {
   const host     = request.headers.get('host') || 'localhost:3000'
   const protocol = host.includes('localhost') ? 'http' : 'https'
   const base     = `${protocol}://${host}`
- 
+
   const results: Record<string, unknown> = {}
- 
-  // --- CLEANUP Zombie-Märkte zuerst ---
+
+  // --- CLEANUP nur Crypto-Zombies ---
   try {
     await cleanupZombieMarkets()
     results.zombieCleanup = 'ok'
   } catch (e) {
     results.zombieCleanupError = String(e)
   }
- 
+
   // --- CRYPTO: für jeden Coin einzeln ---
   for (const coin of COINS) {
     try {
@@ -52,7 +52,7 @@ export async function GET(request: Request) {
       results[`cryptoCreate_${coin}_error`] = String(e)
     }
   }
- 
+
   try {
     const cryptoResolve = await fetch(`${base}/api/resolve-crypto-market`, {
       method: 'POST',
@@ -62,18 +62,8 @@ export async function GET(request: Request) {
   } catch (e) {
     results.cryptoResolveError = String(e)
   }
- 
-  // --- FINANCE ---
-  try {
-    const financeCreate = await fetch(`${base}/api/create-finance-market`, {
-      method: 'POST',
-      cache: 'no-store',
-    })
-    results.financeCreate = await financeCreate.json()
-  } catch (e) {
-    results.financeCreateError = String(e)
-  }
- 
+
+  // --- FINANCE: erst resolve, dann create ---
   try {
     const financeResolve = await fetch(`${base}/api/resolve-finance-market`, {
       method: 'POST',
@@ -83,7 +73,17 @@ export async function GET(request: Request) {
   } catch (e) {
     results.financeResolveError = String(e)
   }
- 
+
+  try {
+    const financeCreate = await fetch(`${base}/api/create-finance-market`, {
+      method: 'POST',
+      cache: 'no-store',
+    })
+    results.financeCreate = await financeCreate.json()
+  } catch (e) {
+    results.financeCreateError = String(e)
+  }
+
   // --- SOCCER ---
   try {
     const soccerCreate = await fetch(`${base}/api/create-soccer-market`, {
@@ -94,7 +94,7 @@ export async function GET(request: Request) {
   } catch (e) {
     results.soccerCreateError = String(e)
   }
- 
+
   try {
     const soccerResolve = await fetch(`${base}/api/resolve-soccer-market`, {
       method: 'GET',
@@ -104,6 +104,6 @@ export async function GET(request: Request) {
   } catch (e) {
     results.soccerResolveError = String(e)
   }
- 
+
   return NextResponse.json({ ok: true, results })
 }
