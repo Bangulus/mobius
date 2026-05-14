@@ -586,8 +586,8 @@ export default function Home() {
     resetAuthForm(); setAuthMode(mode); setShowAuth(true)
   }
 
-  const isSportCategory = category === 'Sport' || category === 'Fußball' || category === 'Bundesliga'
-    || category === 'WM' || category === 'CL' || category === 'F1' || category === 'DFB-Kader'
+ const isSportCategory = category === 'Sport' || category === 'Fußball' || category === 'Bundesliga'
+  || category === 'WM' || category === 'CL' || category === 'DFB-Kader'
 
   const isFinanzCategory = category.startsWith('Finanzen-')
 
