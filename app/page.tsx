@@ -624,9 +624,11 @@ export default function Home() {
       matchCat = m.category === 'sport' || m.category === 'Sport'
     } else if (category === 'Sport') {
       matchCat = m.category === 'sport' || m.category === 'Sport'
-    } else if (category === 'WM' || category === 'CL' || category === 'F1') {
-      const groupFilter = SPORT_GROUP_FILTERS[category]
-      matchCat = m.group_title === groupFilter
+    } else if (category === 'WM' || category === 'CL') {
+  const groupFilter = SPORT_GROUP_FILTERS[category]
+  matchCat = m.group_title === groupFilter
+} else if (category === 'F1') {
+  matchCat = m.category === 'formula1'
     } else if (category === 'DFB-Kader') {
       matchCat = (m.category === 'Sport' || m.category === 'sport') && !m.group_title && !m.match_id
     } else if (category === 'Entertainment') {
