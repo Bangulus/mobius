@@ -659,12 +659,13 @@ export default function Home() {
   }
 
   const categoryLabel: Record<string, string> = {
-    'Politik-Deutschland':  'Politik · Deutschland',
-    'Politik-USA':          'Politik · USA',
-    'Politik-Welt':         'Politik · Welt',
-    'Finanzen-Tag':         'Finanzen · Aktueller Handelstag',
-    'Finanzen-Woche':       'Finanzen · Aktuelle Handelswoche',
-  }
+  'Politik-Deutschland':  'Politik · Deutschland',
+  'Politik-USA':          'Politik · USA',
+  'Politik-Welt':         'Politik · Welt',
+  'Finanzen-Tag':         'Finanzen · Aktueller Handelstag',
+  'Finanzen-Woche':       'Finanzen · Aktuelle Handelswoche',
+  'F1':                   'Formel 1',
+}
 
   return (
     <>
