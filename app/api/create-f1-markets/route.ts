@@ -75,7 +75,7 @@ export async function POST() {
     const hoursUntil = (raceStart.getTime() - now.getTime()) / 1000 / 60 / 60
 
     // Nur erstellen wenn zwischen 168h (7 Tage) und 1h vor Rennstart
-    if (hoursUntil > 168 || hoursUntil < 1) {
+    if (hoursUntil > 400 || hoursUntil < 1) {
       return NextResponse.json({ skipped: `Rennen in ${Math.round(hoursUntil)}h — außerhalb Fenster` })
     }
 
