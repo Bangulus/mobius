@@ -333,18 +333,12 @@ function LivePositionsBar({ trades, isKrypto }: { trades: Trade[]; isKrypto: boo
 }
 
 function CountdownDisplay({ targetMs, redThresholdMs = 30000 }: { targetMs: number; redThresholdMs?: number }) {
-  const [parts, setParts] = useState({ d: 0, h: 0, m: 0, s: 0, ended: false })
+  const [parts, setParts] = useState({ h: 0, m: 0, s: 0, ended: false })
   useEffect(() => {
     const tick = () => {
       const diff = targetMs - Date.now()
-      if (diff <= 0) { setParts({ d: 0, h: 0, m: 0, s: 0, ended: true }); return }
-      setParts({
-        d: Math.floor(diff / 86400000),
-        h: Math.floor((diff % 86400000) / 3600000),
-        m: Math.floor((diff % 3600000) / 60000),
-        s: Math.floor((diff % 60000) / 1000),
-        ended: false,
-      })
+      if (diff <= 0) { setParts({ h: 0, m: 0, s: 0, ended: true }); return }
+      setParts({ h: Math.floor(diff / 3600000), m: Math.floor((diff % 3600000) / 60000), s: Math.floor((diff % 60000) / 1000), ended: false })
     }
     tick()
     const id = setInterval(tick, 1000)
@@ -363,38 +357,25 @@ function CountdownDisplay({ targetMs, redThresholdMs = 30000 }: { targetMs: numb
     </div>
   )
 
-  const numStyle = { fontSize: 32, fontWeight: 900, color: isRed ? '#dc2626' : 'var(--text)', fontVariantNumeric: 'tabular-nums' as const, lineHeight: 1 }
-  const labelStyle = { fontSize: 10, color: 'var(--text-muted)', letterSpacing: 1, marginTop: 4 }
-  const sepStyle = { fontSize: 28, fontWeight: 900, color: 'var(--text-muted)', lineHeight: '36px' }
-
   return (
     <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start' }}>
-      {parts.d > 0 && (
+      {parts.h > 0 && (
         <>
           <div style={{ textAlign: 'center' }}>
-            <div style={numStyle}>{String(parts.d).padStart(2, '0')}</div>
-            <div style={labelStyle}>TAG</div>
+            <div style={{ fontSize: 32, fontWeight: 900, color: isRed ? '#dc2626' : 'var(--text)', fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>{String(parts.h).padStart(2, '0')}</div>
+            <div style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: 1, marginTop: 4 }}>STD</div>
           </div>
-          <div style={sepStyle}>:</div>
-        </>
-      )}
-      {(parts.d > 0 || parts.h > 0) && (
-        <>
-          <div style={{ textAlign: 'center' }}>
-            <div style={numStyle}>{String(parts.h).padStart(2, '0')}</div>
-            <div style={labelStyle}>STD</div>
-          </div>
-          <div style={sepStyle}>:</div>
+          <div style={{ fontSize: 28, fontWeight: 900, color: 'var(--text-muted)', lineHeight: '36px' }}>:</div>
         </>
       )}
       <div style={{ textAlign: 'center' }}>
-        <div style={numStyle}>{String(parts.m).padStart(2, '0')}</div>
-        <div style={labelStyle}>MIN</div>
+        <div style={{ fontSize: 32, fontWeight: 900, color: isRed ? '#dc2626' : 'var(--text)', fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>{String(parts.m).padStart(2, '0')}</div>
+        <div style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: 1, marginTop: 4 }}>MIN</div>
       </div>
-      <div style={sepStyle}>:</div>
+      <div style={{ fontSize: 28, fontWeight: 900, color: 'var(--text-muted)', lineHeight: '36px' }}>:</div>
       <div style={{ textAlign: 'center' }}>
-        <div style={numStyle}>{String(parts.s).padStart(2, '0')}</div>
-        <div style={labelStyle}>SEK</div>
+        <div style={{ fontSize: 32, fontWeight: 900, color: isRed ? '#dc2626' : 'var(--text)', fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>{String(parts.s).padStart(2, '0')}</div>
+        <div style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: 1, marginTop: 4 }}>SEK</div>
       </div>
     </div>
   )
@@ -482,6 +463,47 @@ function FinanceOutcomeRow({
         </div>
       ) : (
         <div />
+      )}
+    </div>
+  )
+}
+
+function MarketRules({ description }: { description: string }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div style={{ marginTop: 24 }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 8,
+          background: 'none', border: 'none', cursor: 'pointer',
+          fontSize: 14, fontWeight: 600, color: 'var(--text-muted)',
+          padding: '10px 0',
+        }}
+      >
+        <span style={{
+          width: 20, height: 20, borderRadius: 4,
+          background: 'var(--surface)', border: '1px solid var(--border)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 10, color: 'var(--text-muted)',
+        }}>
+          {open ? '▲' : '▼'}
+        </span>
+        Auflösungsregeln
+      </button>
+      {open && (
+        <div style={{
+          padding: '16px 20px',
+          background: 'var(--surface)',
+          border: '1px solid var(--border)',
+          borderRadius: 10,
+          fontSize: 13,
+          color: 'var(--text-muted)',
+          lineHeight: 1.75,
+          whiteSpace: 'pre-wrap',
+        }}>
+          {description}
+        </div>
       )}
     </div>
   )
@@ -1847,7 +1869,7 @@ export default function MarketPage() {
                         </div>
                         {orderType === 'markt' && (
                           <div style={{ background: 'rgba(22,163,74,0.07)', borderRadius: 10, padding: '14px', marginBottom: 14, textAlign: 'center', border: '1px solid rgba(22,163,74,0.2)' }}>
-                           <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Auszahlung wenn {direction === 'yes' ? 'Up' : 'Down'} eintritt</div>
+                            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Auszahlung wenn {d => d === 'yes' ? 'Up' : 'Down'} eintritt</div>
                             <div style={{ fontSize: 32, fontWeight: 800, color: '#16a34a', letterSpacing: '-0.5px' }}>{payout} ₫</div>
                           </div>
                         )}
@@ -1915,6 +1937,8 @@ export default function MarketPage() {
             </div>
           </div>
         )}
+
+        {market.description && <MarketRules description={market.description} />}
       </div>
 
       <style>{`
