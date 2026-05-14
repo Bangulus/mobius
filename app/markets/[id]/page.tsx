@@ -1869,7 +1869,7 @@ export default function MarketPage() {
                         </div>
                         {orderType === 'markt' && (
                           <div style={{ background: 'rgba(22,163,74,0.07)', borderRadius: 10, padding: '14px', marginBottom: 14, textAlign: 'center', border: '1px solid rgba(22,163,74,0.2)' }}>
-                            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Auszahlung wenn {d => d === 'yes' ? 'Up' : 'Down'} eintritt</div>
+                            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Auszahlung wenn {direction === 'yes' ? 'Up' : 'Down'} eintritt</div>
                             <div style={{ fontSize: 32, fontWeight: 800, color: '#16a34a', letterSpacing: '-0.5px' }}>{payout} ₫</div>
                           </div>
                         )}
