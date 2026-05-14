@@ -2,11 +2,9 @@ import { NextResponse } from 'next/server'
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY!
-
 const COINS = ['BTC', 'ETH', 'SOL', 'XRP']
 
 async function cleanupZombieMarkets() {
-  // Nur Crypto-Zombie-Märkte (category=crypto) — Finance hat eigene Resolve-Route
   const now = new Date().toISOString()
   await fetch(
     `${SUPABASE_URL}/rest/v1/markets?is_auto=eq.true&category=eq.crypto&resolved=eq.false&status=eq.open&closes_at=lt.${now}`,
@@ -27,10 +25,9 @@ export async function GET(request: Request) {
   const host     = request.headers.get('host') || 'localhost:3000'
   const protocol = host.includes('localhost') ? 'http' : 'https'
   const base     = `${protocol}://${host}`
-
   const results: Record<string, unknown> = {}
 
-  // --- CLEANUP nur Crypto-Zombies ---
+  // --- CLEANUP ---
   try {
     await cleanupZombieMarkets()
     results.zombieCleanup = 'ok'
@@ -38,7 +35,7 @@ export async function GET(request: Request) {
     results.zombieCleanupError = String(e)
   }
 
-  // --- CRYPTO: für jeden Coin einzeln ---
+  // --- CRYPTO ---
   for (const coin of COINS) {
     try {
       const res = await fetch(`${base}/api/create-crypto-market`, {
@@ -63,7 +60,7 @@ export async function GET(request: Request) {
     results.cryptoResolveError = String(e)
   }
 
-  // --- FINANCE: erst resolve, dann create ---
+  // --- FINANCE ---
   try {
     const financeResolve = await fetch(`${base}/api/resolve-finance-market`, {
       method: 'POST',
@@ -103,6 +100,27 @@ export async function GET(request: Request) {
     results.soccerResolve = await soccerResolve.json()
   } catch (e) {
     results.soccerResolveError = String(e)
+  }
+
+  // --- FORMULA 1 ---
+  try {
+    const f1Create = await fetch(`${base}/api/create-f1-markets`, {
+      method: 'POST',
+      cache: 'no-store',
+    })
+    results.f1Create = await f1Create.json()
+  } catch (e) {
+    results.f1CreateError = String(e)
+  }
+
+  try {
+    const f1Resolve = await fetch(`${base}/api/resolve-f1-markets`, {
+      method: 'POST',
+      cache: 'no-store',
+    })
+    results.f1Resolve = await f1Resolve.json()
+  } catch (e) {
+    results.f1ResolveError = String(e)
   }
 
   return NextResponse.json({ ok: true, results })
