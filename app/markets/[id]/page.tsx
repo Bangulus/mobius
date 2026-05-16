@@ -1573,7 +1573,6 @@ export default function MarketPage() {
                 )}
               </div>
               <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text)', lineHeight: 1.35, marginBottom: 8 }}>{market.question}</h1>
-              {market.description && !isFormula1 && <p style={{ fontSize: 14, color: 'var(--text-muted)', lineHeight: 1.6 }}>{market.description}</p>}
             </div>
 
             <div className="card" style={{ marginBottom: 20 }}>
