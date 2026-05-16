@@ -154,37 +154,21 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, o
       const isSell = trade.type === 'sell_yes' || trade.type === 'sell_no';
       const dir: 'yes' | 'no' = trade.type.includes('yes') ? 'yes' : 'no';
       if (!entryMap[trade.market_id]) {
+        // resolved_at bevorzugen (manuell gesetzt), sonst closes_at
+        const closedAt = (market as any).resolved_at ?? market.closes_at ?? null;
         entryMap[trade.market_id] = {
           market,
           einsatz: 0,
           direction: dir,
           auszahlung: null,
           tradeCreatedAt: trade.created_at,
-          marketClosedAt: market.closes_at ?? null,
+          marketClosedAt: closedAt,
         };
       }
       const entry = entryMap[trade.market_id];
       if (isBuy)  { entry.einsatz += Math.abs(trade.cost); entry.direction = dir; }
       if (isSell) { entry.auszahlung = (entry.auszahlung ?? 0) + Math.abs(trade.cost); }
     }
-    // Payout-Trades laden für korrekte Schließzeiten bei manuell aufgelösten Märkten
-    const resolvedManualIds = Object.values(entryMap)
-      .filter(e => e.market.resolved && !e.market.is_auto)
-      .map(e => e.market.id);
-
-    if (resolvedManualIds.length > 0) {
-      const payoutTrades: TradeRow[] = await dbGet(
-        'trades',
-        `market_id=in.(${resolvedManualIds.join(',')})&type=eq.payout&select=market_id,created_at&order=created_at.asc`
-      );
-      for (const pt of (payoutTrades ?? [])) {
-        const entry = entryMap[pt.market_id];
-        if (entry && !entry.market.is_auto) {
-          entry.marketClosedAt = pt.created_at;
-        }
-      }
-    }
-
     for (const entry of Object.values(entryMap)) {
       const m = entry.market;
       if (!m.resolved || entry.auszahlung !== null) continue;
