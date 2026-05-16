@@ -208,7 +208,20 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
       headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ market_id: marketId, resolution }),
     });
-    if (response.ok) onMarketResolved();
+    if (response.ok) {
+      // resolved_at direkt setzen — wird im Profil als Schließzeitpunkt angezeigt
+      await fetch(`${supabaseUrl}/rest/v1/markets?id=eq.${marketId}`, {
+        method: 'PATCH',
+        headers: {
+          apikey: supabaseKey,
+          Authorization: `Bearer ${supabaseKey}`,
+          'Content-Type': 'application/json',
+          Prefer: 'return=minimal',
+        },
+        body: JSON.stringify({ resolved_at: new Date().toISOString() }),
+      });
+      onMarketResolved();
+    }
     setResolvingMarket(null);
   }
 
