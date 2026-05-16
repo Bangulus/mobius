@@ -35,7 +35,14 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
   // Edit tab state
   const [allMarkets, setAllMarkets] = useState<any[]>([]);
   const [editingMarket, setEditingMarket] = useState<string | null>(null);
-  const [editDescription, setEditDescription] = useState('');
+  const [editFields, setEditFields] = useState<{
+    question: string;
+    short_label: string;
+    description: string;
+    category: string;
+    closes_at: string;
+    group_title: string;
+  }>({ question: '', short_label: '', description: '', category: '', closes_at: '', group_title: '' });
   const [editSaving, setEditSaving] = useState(false);
   const [editMessage, setEditMessage] = useState('');
   const [editSearch, setEditSearch] = useState('');
@@ -69,15 +76,45 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
   }
 
   async function loadAllMarkets() {
-    const res = await fetch(`${supabaseUrl}/rest/v1/markets?is_auto=eq.false&select=id,question,short_label,category,description&order=created_at.desc`, {
-      headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` },
-    });
+    const res = await fetch(
+      `${supabaseUrl}/rest/v1/markets?is_auto=eq.false&select=id,question,short_label,category,description,closes_at,group_title&order=created_at.desc`,
+      { headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` } }
+    );
     setAllMarkets(await res.json());
   }
 
-  async function saveDescription(marketId: string) {
+  function openEditor(m: any) {
+    setEditingMarket(m.id);
+    let closesAtLocal = '';
+    if (m.closes_at) {
+      const d = new Date(m.closes_at);
+      const pad = (n: number) => String(n).padStart(2, '0');
+      closesAtLocal = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    }
+    setEditFields({
+      question:    m.question    ?? '',
+      short_label: m.short_label ?? '',
+      description: m.description ?? '',
+      category:    m.category    ?? 'Politik',
+      closes_at:   closesAtLocal,
+      group_title: m.group_title ?? '',
+    });
+    setEditMessage('');
+  }
+
+  async function saveMarket(marketId: string) {
     setEditSaving(true);
     setEditMessage('');
+    const body: any = {
+      question:    editFields.question.trim(),
+      short_label: editFields.short_label.trim() || editFields.question.trim().slice(0, 60),
+      description: editFields.description.trim() || null,
+      category:    editFields.category,
+      group_title: editFields.group_title.trim() || null,
+    };
+    if (editFields.closes_at) {
+      body.closes_at = new Date(editFields.closes_at).toISOString();
+    }
     const res = await fetch(`${supabaseUrl}/rest/v1/markets?id=eq.${marketId}`, {
       method: 'PATCH',
       headers: {
@@ -86,14 +123,16 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
         'Content-Type': 'application/json',
         Prefer: 'return=minimal',
       },
-      body: JSON.stringify({ description: editDescription }),
+      body: JSON.stringify(body),
     });
     if (res.ok) {
-      setEditMessage('Gespeichert.');
-      setAllMarkets(prev => prev.map(m => m.id === marketId ? { ...m, description: editDescription } : m));
+      setEditMessage('Gespeichert ✓');
+      setAllMarkets(prev => prev.map(m => m.id === marketId ? { ...m, ...body } : m));
       setTimeout(() => { setEditMessage(''); setEditingMarket(null); }, 1500);
+      onMarketResolved();
     } else {
-      setEditMessage('Fehler beim Speichern.');
+      const err = await res.text();
+      setEditMessage(`Fehler: ${err}`);
     }
     setEditSaving(false);
   }
@@ -209,7 +248,6 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
       body: JSON.stringify({ market_id: marketId, resolution }),
     });
     if (response.ok) {
-      // resolved_at direkt setzen — wird im Profil als Schließzeitpunkt angezeigt
       await fetch(`${supabaseUrl}/rest/v1/markets?id=eq.${marketId}`, {
         method: 'PATCH',
         headers: {
@@ -305,14 +343,14 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
         <button style={tabBtn(adminTab === 'resolved')}          onClick={() => { setAdminTab('resolved'); loadResolvedMarketDetails(); }}>Aufgelöste Märkte</button>
         <button style={tabBtn(adminTab === 'btc', '#f59e0b')}    onClick={() => setAdminTab('btc')}>🪙 Krypto-Märkte</button>
         <button style={tabBtn(adminTab === 'create', '#16a34a')} onClick={() => setAdminTab('create')}>＋ Markt erstellen</button>
-        <button style={tabBtn(adminTab === 'edit', '#0ea5e9')}   onClick={() => setAdminTab('edit')}>✏️ Regeln bearbeiten</button>
+        <button style={tabBtn(adminTab === 'edit', '#0ea5e9')}   onClick={() => setAdminTab('edit')}>✏️ Märkte bearbeiten</button>
       </div>
 
-      {/* ── Regeln bearbeiten ── */}
+      {/* ── Märkte bearbeiten ── */}
       {adminTab === 'edit' && (
         <div style={{ maxWidth: 720 }}>
           <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}>
-            Auflösungsregeln für alle manuellen Märkte. Wird im &quot;Regeln&quot;-Reiter auf der Marktseite angezeigt.
+            Alle manuell erstellten Märkte bearbeiten — Frage, Kurztitel, Regeln, Kategorie, Gruppe und Schließdatum.
           </div>
           <input
             style={{ ...inputStyle, marginBottom: 16 }}
@@ -324,30 +362,21 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
             {filteredEditMarkets.map(m => (
               <div key={m.id} className="card" style={{ padding: 0, overflow: 'hidden' }}>
                 <div
-                  onClick={() => {
-                    if (editingMarket === m.id) {
-                      setEditingMarket(null);
-                    } else {
-                      setEditingMarket(m.id);
-                      setEditDescription(m.description ?? '');
-                      setEditMessage('');
-                    }
-                  }}
+                  onClick={() => editingMarket === m.id ? setEditingMarket(null) : openEditor(m)}
                   style={{
                     padding: '12px 16px', cursor: 'pointer',
                     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                    background: editingMarket === m.id ? 'var(--accent-light, rgba(14,165,233,0.08))' : 'var(--card)',
+                    background: editingMarket === m.id ? 'rgba(14,165,233,0.08)' : 'var(--card)',
                     borderBottom: editingMarket === m.id ? '1px solid var(--border)' : 'none',
                   }}
                 >
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {m.short_label ?? m.question}
                     </div>
-                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
-                      {m.description
-                        ? m.description.slice(0, 60) + (m.description.length > 60 ? '…' : '')
-                        : 'Keine Regeln hinterlegt'}
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, display: 'flex', gap: 8 }}>
+                      <span>{m.category}</span>
+                      {m.group_title && <><span>·</span><span>{m.group_title}</span></>}
                     </div>
                   </div>
                   <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0, marginLeft: 12 }}>
@@ -356,22 +385,85 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
                 </div>
 
                 {editingMarket === m.id && (
-                  <div style={{ padding: 16 }}>
-                    <label style={labelStyle}>Auflösungsregeln</label>
-                    <textarea
-                      style={{ ...inputStyle, minHeight: 120, resize: 'vertical', fontSize: 13, lineHeight: 1.6 }}
-                      value={editDescription}
-                      onChange={e => setEditDescription(e.target.value)}
-                      placeholder="z.B. Löst mit JA auf, wenn…"
-                    />
-                    <div style={{ display: 'flex', gap: 8, marginTop: 10, alignItems: 'center' }}>
+                  <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
+
+                    <div>
+                      <label style={labelStyle}>Frage *</label>
+                      <input
+                        style={inputStyle}
+                        value={editFields.question}
+                        onChange={e => setEditFields(f => ({ ...f, question: e.target.value }))}
+                        maxLength={300}
+                      />
+                    </div>
+
+                    <div>
+                      <label style={labelStyle}>Kurztitel</label>
+                      <input
+                        style={inputStyle}
+                        value={editFields.short_label}
+                        onChange={e => setEditFields(f => ({ ...f, short_label: e.target.value }))}
+                        placeholder="Wird auf der Übersichtsseite angezeigt"
+                        maxLength={80}
+                      />
+                    </div>
+
+                    <div>
+                      <label style={labelStyle}>Auflösungsregeln</label>
+                      <textarea
+                        style={{ ...inputStyle, minHeight: 100, resize: 'vertical', fontSize: 13, lineHeight: 1.6 }}
+                        value={editFields.description}
+                        onChange={e => setEditFields(f => ({ ...f, description: e.target.value }))}
+                        placeholder="z.B. Löst mit JA auf, wenn…"
+                        maxLength={2000}
+                      />
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                      <div>
+                        <label style={labelStyle}>Kategorie</label>
+                        <select
+                          style={inputStyle}
+                          value={editFields.category}
+                          onChange={e => setEditFields(f => ({ ...f, category: e.target.value }))}
+                        >
+                          {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label style={labelStyle}>Gruppe</label>
+                        <input
+                          style={inputStyle}
+                          value={editFields.group_title}
+                          onChange={e => setEditFields(f => ({ ...f, group_title: e.target.value }))}
+                          placeholder="z.B. WM 2026"
+                          maxLength={80}
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label style={labelStyle}>Schließt am</label>
+                      <input
+                        style={inputStyle}
+                        type="datetime-local"
+                        value={editFields.closes_at}
+                        onChange={e => setEditFields(f => ({ ...f, closes_at: e.target.value }))}
+                      />
+                    </div>
+
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 4 }}>
                       <button
-                        onClick={() => saveDescription(m.id)}
-                        disabled={editSaving}
+                        onClick={() => saveMarket(m.id)}
+                        disabled={editSaving || !editFields.question.trim()}
                         style={{
-                          padding: '8px 20px', background: '#0ea5e9', color: 'white',
-                          border: 'none', borderRadius: 8, cursor: editSaving ? 'not-allowed' : 'pointer',
-                          fontSize: 13, fontWeight: 700, opacity: editSaving ? 0.6 : 1,
+                          padding: '9px 22px',
+                          background: editSaving ? 'var(--surface)' : '#0ea5e9',
+                          color: editSaving ? 'var(--text-muted)' : 'white',
+                          border: 'none', borderRadius: 8,
+                          cursor: editSaving ? 'not-allowed' : 'pointer',
+                          fontSize: 13, fontWeight: 700,
+                          opacity: editSaving ? 0.7 : 1,
                         }}
                       >
                         {editSaving ? 'Speichert…' : 'Speichern'}
@@ -379,14 +471,15 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
                       <button
                         onClick={() => setEditingMarket(null)}
                         style={{
-                          padding: '8px 16px', background: 'var(--surface)', color: 'var(--text-muted)',
-                          border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', fontSize: 13,
+                          padding: '9px 16px', background: 'var(--surface)',
+                          color: 'var(--text-muted)', border: '1px solid var(--border)',
+                          borderRadius: 8, cursor: 'pointer', fontSize: 13,
                         }}
                       >
                         Abbrechen
                       </button>
                       {editMessage && (
-                        <span style={{ fontSize: 13, color: editMessage.includes('Fehler') ? '#dc2626' : '#16a34a', fontWeight: 600 }}>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: editMessage.includes('Fehler') ? '#dc2626' : '#16a34a' }}>
                           {editMessage}
                         </span>
                       )}
@@ -419,13 +512,7 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
               </div>
               <div>
                 <label style={labelStyle}>Auflösungsregeln (optional)</label>
-                <textarea
-                  style={{ ...inputStyle, minHeight: 80, resize: 'vertical' }}
-                  placeholder="z.B. Löst mit JA auf, wenn…"
-                  value={newDescription}
-                  onChange={e => setNewDescription(e.target.value)}
-                  maxLength={2000}
-                />
+                <textarea style={{ ...inputStyle, minHeight: 80, resize: 'vertical' }} placeholder="z.B. Löst mit JA auf, wenn…" value={newDescription} onChange={e => setNewDescription(e.target.value)} maxLength={2000} />
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div>
@@ -476,9 +563,7 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
                 </button>
               ))}
             </div>
-            {btcMessage && (
-              <div style={{ marginTop: 10, fontSize: 13, color: btcMessage.startsWith('✅') ? '#16a34a' : '#dc2626', fontWeight: 600 }}>{btcMessage}</div>
-            )}
+            {btcMessage && <div style={{ marginTop: 10, fontSize: 13, color: btcMessage.startsWith('✅') ? '#16a34a' : '#dc2626', fontWeight: 600 }}>{btcMessage}</div>}
           </div>
           <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 10 }}>Laufende & vergangene Krypto-Märkte</div>
           {btcMarkets.length === 0 && <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Noch keine Krypto-Märkte erstellt.</div>}
