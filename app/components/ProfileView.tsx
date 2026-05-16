@@ -39,8 +39,10 @@ interface MarketRow {
   resolution?: string;
   is_auto?: boolean;
   coin?: string;
+  category?: string;
   start_price?: number;
   end_price?: number;
+  closes_at?: string;
 }
 
 interface PortfolioEntry {
@@ -48,6 +50,8 @@ interface PortfolioEntry {
   einsatz: number;
   direction: 'yes' | 'no';
   auszahlung: number | null;
+  tradeCreatedAt: string;
+  marketClosedAt: string | null;
 }
 
 const COIN_COLORS: Record<string, string> = {
@@ -92,6 +96,13 @@ function calcTrefferquote(entries: PortfolioEntry[]): number | null {
   if (resolved.length === 0) return null;
   const correct = resolved.filter(e => e.market.resolution === e.direction).length;
   return Math.round((correct / resolved.length) * 100);
+}
+
+function formatDateTime(iso: string): { date: string; time: string } {
+  const d = new Date(iso);
+  const date = d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit' });
+  const time = d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+  return { date, time };
 }
 
 type TabType = 'positionen' | 'aktivitaet';
@@ -143,7 +154,14 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, o
       const isSell = trade.type === 'sell_yes' || trade.type === 'sell_no';
       const dir: 'yes' | 'no' = trade.type.includes('yes') ? 'yes' : 'no';
       if (!entryMap[trade.market_id]) {
-        entryMap[trade.market_id] = { market, einsatz: 0, direction: dir, auszahlung: null };
+        entryMap[trade.market_id] = {
+          market,
+          einsatz: 0,
+          direction: dir,
+          auszahlung: null,
+          tradeCreatedAt: trade.created_at,
+          marketClosedAt: market.closes_at ?? null,
+        };
       }
       const entry = entryMap[trade.market_id];
       if (isBuy)  { entry.einsatz += Math.abs(trade.cost); entry.direction = dir; }
@@ -307,57 +325,32 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, o
 
           {/* Streak & Trefferquote */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-
-            {/* Streak */}
             <div className="card" style={{ padding: '16px 18px' }}>
-              <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>
-                Streak
-              </div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>Streak</div>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-                <span style={{ fontSize: 28, fontWeight: 900, color: streak >= 3 ? '#f59e0b' : 'var(--text)', letterSpacing: '-1px', lineHeight: 1 }}>
-                  {streak}
-                </span>
-                <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 500 }}>
-                  {streak === 1 ? 'Tag' : 'Tage'}
-                </span>
+                <span style={{ fontSize: 28, fontWeight: 900, color: streak >= 3 ? '#f59e0b' : 'var(--text)', letterSpacing: '-1px', lineHeight: 1 }}>{streak}</span>
+                <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 500 }}>{streak === 1 ? 'Tag' : 'Tage'}</span>
               </div>
               <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6, lineHeight: 1.4 }}>
-                {streak === 0
-                  ? 'Heute noch nicht aktiv'
-                  : streak >= 7
-                  ? 'Serie läuft'
-                  : streak >= 3
-                  ? 'Konstant aktiv'
-                  : 'Starte heute'}
+                {streak === 0 ? 'Heute noch nicht aktiv' : streak >= 7 ? 'Serie läuft' : streak >= 3 ? 'Konstant aktiv' : 'Starte heute'}
               </div>
             </div>
-
-            {/* Trefferquote */}
             <div className="card" style={{ padding: '16px 18px' }}>
-              <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>
-                Trefferquote
-              </div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>Trefferquote</div>
               {trefferquote === null ? (
                 <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>Noch keine Daten</div>
               ) : (
                 <>
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
-                    <span style={{ fontSize: 28, fontWeight: 900, letterSpacing: '-1px', lineHeight: 1, color: trefferquote >= 60 ? 'var(--yes)' : trefferquote >= 40 ? 'var(--text)' : 'var(--no)' }}>
-                      {trefferquote}
-                    </span>
+                    <span style={{ fontSize: 28, fontWeight: 900, letterSpacing: '-1px', lineHeight: 1, color: trefferquote >= 60 ? 'var(--yes)' : trefferquote >= 40 ? 'var(--text)' : 'var(--no)' }}>{trefferquote}</span>
                     <span style={{ fontSize: 14, color: 'var(--text-muted)', fontWeight: 600 }}>%</span>
                   </div>
                   <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6, lineHeight: 1.4 }}>
-                    {trefferquote >= 60
-                      ? 'Überdurchschnittlich'
-                      : trefferquote >= 40
-                      ? 'Solide'
-                      : 'Noch Luft nach oben'}
+                    {trefferquote >= 60 ? 'Überdurchschnittlich' : trefferquote >= 40 ? 'Solide' : 'Noch Luft nach oben'}
                   </div>
                 </>
               )}
             </div>
-
           </div>
         </div>
       </div>
@@ -406,7 +399,7 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, o
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ background: 'var(--surface)' }}>
-                    {['Markt', 'Tipp', 'Eingesetzt', 'Ergebnis', 'Auszahlung'].map((h, i) => (
+                    {['Markt', 'Tipp', 'Eingesetzt', 'Ergebnis', 'Auszahlung', subTab === 'aktiv' ? 'Gesetzt am' : 'Geschlossen am'].map((h, i) => (
                       <th key={h} style={{
                         textAlign: i === 0 ? 'left' : 'right', fontSize: 11, fontWeight: 600,
                         color: 'var(--text-muted)', padding: '12px 20px',
@@ -419,42 +412,88 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, o
                 <tbody>
                   {displayRows.map((entry) => {
                     const m = entry.market;
+                    const isSport = m.category === 'sport';
                     const isYes = entry.direction === 'yes';
-                    const richtungLabel = m.is_auto ? (isYes ? '↑ Up' : '↓ Down') : (isYes ? 'Ja' : 'Nein');
+
+                    // Richtungsbezeichnung
+                    const richtungLabel = isSport
+                      ? (isYes ? 'Ja' : 'Nein')
+                      : m.is_auto
+                        ? (isYes ? '↑ Up' : '↓ Down')
+                        : (isYes ? 'Ja' : 'Nein');
+
+                    // Marktname
+                    const marktName = isSport
+                      ? m.question
+                      : m.is_auto && m.coin
+                        ? `${m.coin} · 3-Minuten-Markt`
+                        : m.question;
+
+                    // Icon
+                    const iconEl = isSport ? (
+                      <span style={{ width: 28, height: 28, borderRadius: 8, background: '#16a34a22', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, flexShrink: 0 }}>
+                        ⚽
+                      </span>
+                    ) : m.is_auto && m.coin ? (
+                      <span style={{ width: 28, height: 28, borderRadius: 8, background: COIN_COLORS[m.coin] ?? '#f97316', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, color: '#fff', flexShrink: 0 }}>
+                        {m.coin.charAt(0)}
+                      </span>
+                    ) : null;
+
                     const resolved = m.resolved;
                     const won  = resolved && entry.auszahlung !== null && entry.auszahlung > 0;
                     const lost = resolved && entry.auszahlung === 0;
+
+                    // Datum
+                    const dateSource = subTab === 'geschlossen' && entry.marketClosedAt
+                      ? entry.marketClosedAt
+                      : entry.tradeCreatedAt;
+                    const { date, time } = formatDateTime(dateSource);
+
+                    // Ergebnis-Label für Sport
+                    let ergebnisLabel = '';
+                    if (resolved) {
+                      if (isSport) {
+                        ergebnisLabel = m.resolution === 'yes' ? 'Ja ✓' : m.resolution === 'no' ? 'Nein ✗' : 'Unentschieden';
+                      } else {
+                        ergebnisLabel = m.is_auto
+                          ? (m.resolution === 'yes' ? 'UP ↑' : 'DOWN ↓')
+                          : (m.resolution === 'yes' ? 'Ja' : 'Nein');
+                      }
+                    }
+
                     return (
                       <tr key={entry.market.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                        <td style={{ padding: '14px 20px', fontSize: 13, color: 'var(--text)', maxWidth: 320 }}>
+                        {/* Markt */}
+                        <td style={{ padding: '14px 20px', fontSize: 13, color: 'var(--text)', maxWidth: 280 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                            {m.is_auto && m.coin && (
-                              <span style={{ width: 28, height: 28, borderRadius: 8, background: COIN_COLORS[m.coin] ?? '#f97316', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, color: '#fff', flexShrink: 0 }}>
-                                {m.coin.charAt(0)}
-                              </span>
-                            )}
-                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block', maxWidth: 260 }}>
-                              {m.is_auto ? `${m.coin} · 3-Minuten-Markt` : m.question}
+                            {iconEl}
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block', maxWidth: 240 }}>
+                              {marktName}
                             </span>
                           </div>
                         </td>
+                        {/* Tipp */}
                         <td style={{ padding: '14px 20px', textAlign: 'right' }}>
                           <span style={{ fontSize: 12, padding: '3px 10px', borderRadius: 20, fontWeight: 600, background: isYes ? 'rgba(22,163,74,0.12)' : 'rgba(220,38,38,0.12)', color: isYes ? '#15803d' : '#b91c1c' }}>
                             {richtungLabel}
                           </span>
                         </td>
+                        {/* Eingesetzt */}
                         <td style={{ padding: '14px 20px', textAlign: 'right', fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>
                           {Math.round(entry.einsatz).toLocaleString('de')} ₫
                         </td>
+                        {/* Ergebnis */}
                         <td style={{ padding: '14px 20px', textAlign: 'right' }}>
                           {!resolved ? (
                             <span style={{ fontSize: 12, padding: '3px 10px', borderRadius: 20, background: 'rgba(245,158,11,0.12)', color: '#b45309', fontWeight: 600 }}>Läuft</span>
                           ) : (
-                            <span style={{ fontSize: 12, padding: '3px 10px', borderRadius: 20, fontWeight: 600, background: m.resolution === 'yes' ? 'rgba(22,163,74,0.12)' : 'rgba(220,38,38,0.12)', color: m.resolution === 'yes' ? '#15803d' : '#b91c1c' }}>
-                              {m.is_auto ? (m.resolution === 'yes' ? 'UP ↑' : 'DOWN ↓') : (m.resolution === 'yes' ? 'Ja' : 'Nein')}
+                            <span style={{ fontSize: 12, padding: '3px 10px', borderRadius: 20, fontWeight: 600, background: won ? 'rgba(22,163,74,0.12)' : 'rgba(220,38,38,0.12)', color: won ? '#15803d' : '#b91c1c' }}>
+                              {ergebnisLabel}
                             </span>
                           )}
                         </td>
+                        {/* Auszahlung */}
                         <td style={{ padding: '14px 20px', textAlign: 'right', fontSize: 13, fontWeight: 700 }}>
                           {!resolved && entry.auszahlung === null ? (
                             <span style={{ color: 'var(--text-muted)', fontWeight: 400, fontSize: 12 }}>ausstehend</span>
@@ -465,6 +504,11 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, o
                           ) : (
                             <span style={{ color: 'var(--text-muted)' }}>—</span>
                           )}
+                        </td>
+                        {/* Datum */}
+                        <td style={{ padding: '14px 20px', textAlign: 'right' }}>
+                          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)' }}>{date}</div>
+                          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{time}</div>
                         </td>
                       </tr>
                     );
@@ -494,6 +538,7 @@ interface FeedMarket {
   question: string;
   is_auto: boolean;
   coin?: string;
+  category?: string;
   resolved: boolean;
   resolution?: string;
 }
@@ -522,7 +567,7 @@ function AktivitaetsFeed({ userId }: { userId: string }) {
       const marketIds: string[] = [];
       raw.forEach(t => { if (!seen[t.market_id]) { seen[t.market_id] = true; marketIds.push(t.market_id); } });
 
-      const markets = await dbGet('markets', `id=in.(${marketIds.join(',')})&select=id,question,is_auto,coin,resolved,resolution`);
+      const markets = await dbGet('markets', `id=in.(${marketIds.join(',')})&select=id,question,is_auto,coin,category,resolved,resolution`);
       const mMap: Record<string, FeedMarket> = {};
       markets?.forEach((m: FeedMarket & { id: string }) => { mMap[m.id] = m; });
 
@@ -596,24 +641,35 @@ function AktivitaetsFeed({ userId }: { userId: string }) {
     <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
       {items.map((item, idx) => {
         const m      = item.market;
+        const isSport = m?.category === 'sport';
         const isBuy  = item.type.startsWith('buy');
         const isSell = item.type.startsWith('sell');
         const isWin  = item.type === 'win';
         const isYes  = item.type.includes('yes');
 
-        const coinColor = !isWin && m?.is_auto && m.coin ? COIN_COLORS_FEED[m.coin] ?? '#f97316' : null;
+        const coinColor = !isWin && !isSport && m?.is_auto && m.coin
+          ? COIN_COLORS_FEED[m.coin] ?? '#f97316'
+          : null;
 
+        // Marktname: Sport zeigt die echte Frage
         const marketLabel = m
-          ? (m.is_auto ? `${m.coin} · 3-Min-Markt` : (m.question.length > 52 ? m.question.slice(0, 52) + '…' : m.question))
+          ? isSport
+            ? (m.question.length > 52 ? m.question.slice(0, 52) + '…' : m.question)
+            : m.is_auto
+              ? `${m.coin} · 3-Min-Markt`
+              : (m.question.length > 52 ? m.question.slice(0, 52) + '…' : m.question)
           : 'Unbekannter Markt';
 
-        const dirLabel = m?.is_auto
-          ? (isYes ? 'Up ↑' : 'Down ↓')
-          : (isYes ? 'Ja' : 'Nein');
+        const dirLabel = isSport
+          ? (isYes ? 'Ja' : 'Nein')
+          : m?.is_auto
+            ? (isYes ? 'Up ↑' : 'Down ↓')
+            : (isYes ? 'Ja' : 'Nein');
 
         let iconBg      = 'rgba(99,102,241,0.12)';
         let iconContent = '⇄';
         if (isWin)       { iconBg = 'rgba(22,163,74,0.15)'; iconContent = '🏆'; }
+        else if (isSport) { iconBg = 'rgba(22,163,74,0.10)'; iconContent = '⚽'; }
         else if (isBuy)  { iconBg = isYes ? 'rgba(22,163,74,0.12)' : 'rgba(220,38,38,0.12)'; iconContent = isYes ? '↑' : '↓'; }
 
         let subText     = '';
@@ -621,9 +677,11 @@ function AktivitaetsFeed({ userId }: { userId: string }) {
         let amountColor = 'var(--text)';
 
         if (isWin) {
-          const resLabel = m?.is_auto
-            ? (m.resolution === 'yes' ? 'Up ↑' : 'Down ↓')
-            : (m?.resolution === 'yes' ? 'Ja' : 'Nein');
+          const resLabel = isSport
+            ? (m?.resolution === 'yes' ? 'Ja ✓' : 'Nein ✗')
+            : m?.is_auto
+              ? (m.resolution === 'yes' ? 'Up ↑' : 'Down ↓')
+              : (m?.resolution === 'yes' ? 'Ja' : 'Nein');
           subText     = `Gewonnen · ${resLabel}`;
           amountLabel = `+${Math.round(item.cost).toLocaleString('de')} ₫`;
           amountColor = 'var(--yes)';
