@@ -1,4 +1,3 @@
-// app/api/create-weather-market/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { WEATHER_CITIES, getTodayMax, getTodayDateUTC } from '@/lib/openmeteo'
 
@@ -32,11 +31,15 @@ async function dbPost(table: string, body: Record<string, unknown>) {
   return res.ok
 }
 
-async function marketExistsForCity(cityId: string, dateStr: string): Promise<boolean> {
-  // match_id wird als eindeutiger Key genutzt: 'weather-hamburg-2026-05-17'
-  const matchId = `weather-${cityId}-${dateStr}`
+// Guard: prüft ob heute schon ein Wetter-Markt für diese Stadt existiert
+// Nutzt coin=city.id und category=weather und created_at >= heute 00:00 UTC
+async function marketExistsForCity(cityId: string): Promise<boolean> {
+  const todayStart = new Date()
+  todayStart.setUTCHours(0, 0, 0, 0)
+  const since = todayStart.toISOString()
+
   const res = await fetch(
-    `${SUPABASE_URL}/rest/v1/markets?match_id=eq.${matchId}&select=id&limit=1`,
+    `${SUPABASE_URL}/rest/v1/markets?category=eq.weather&coin=eq.${cityId}&created_at=gte.${since}&select=id&limit=1`,
     {
       headers: {
         apikey:        SERVICE_KEY,
@@ -55,6 +58,7 @@ async function run() {
   const skipped: string[] = []
   const errors:  string[] = []
 
+  // Schließzeit: morgen 21:59 UTC (= 23:59 MESZ)
   const closesAt = new Date()
   closesAt.setUTCDate(closesAt.getUTCDate() + 1)
   closesAt.setUTCHours(21, 59, 0, 0)
@@ -62,11 +66,11 @@ async function run() {
 
   for (const city of WEATHER_CITIES) {
     try {
-      const matchId = `weather-${city.id}-${today}`
-
-      const exists = await marketExistsForCity(city.id, today)
+      // Idempotenz-Guard
+      const exists = await marketExistsForCity(city.id)
       if (exists) { skipped.push(city.id); continue }
 
+      // Heutiges Tagesmaximum abrufen
       const todayMax = await getTodayMax(city)
       if (todayMax === null) { errors.push(`${city.id}:no-price`); continue }
 
@@ -82,19 +86,19 @@ async function run() {
         q_no:          0,
         closes_at:     closesAtISO,
         category:      'weather',
-        group_title:   'Wetter',
+        group_title:   'Wetter',           // für Gruppierung in MarketsGrid
         short_label:   city.label,
         display_group: `Wetter – ${city.label}`,
         resolved:      false,
         resolution:    null,
         is_auto:       true,
-        coin:          null,
-        match_id:      matchId,
-        start_price:   todayMax,
+        match_id:      null,               // KEIN match_id — sonst als Soccer behandelt
+        coin:          city.id,            // city.id als Identifier für Auflösung
+        start_price:   todayMax,           // heutiges Max — Vergleichswert für Auflösung
         end_price:     null,
       })
 
-      if (ok) created.push(city.id)
+      if (ok) created.push(`${city.id} (${today}: ${todayMax}°C)`)
       else    errors.push(`${city.id}:db-error`)
 
     } catch (e) {
