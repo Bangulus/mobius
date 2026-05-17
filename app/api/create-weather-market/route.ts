@@ -31,22 +31,13 @@ async function dbPost(table: string, body: Record<string, unknown>) {
   return res.ok
 }
 
-// Guard: prüft ob heute schon ein Wetter-Markt für diese Stadt existiert
-// Nutzt coin=city.id und category=weather und created_at >= heute 00:00 UTC
 async function marketExistsForCity(cityId: string): Promise<boolean> {
   const todayStart = new Date()
   todayStart.setUTCHours(0, 0, 0, 0)
   const since = todayStart.toISOString()
-
   const res = await fetch(
     `${SUPABASE_URL}/rest/v1/markets?category=eq.weather&coin=eq.${cityId}&created_at=gte.${since}&select=id&limit=1`,
-    {
-      headers: {
-        apikey:        SERVICE_KEY,
-        Authorization: `Bearer ${SERVICE_KEY}`,
-      },
-      cache: 'no-store',
-    }
+    { headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` }, cache: 'no-store' }
   )
   const data = await res.json()
   return Array.isArray(data) && data.length > 0
@@ -66,16 +57,16 @@ async function run() {
 
   for (const city of WEATHER_CITIES) {
     try {
-      // Idempotenz-Guard
       const exists = await marketExistsForCity(city.id)
       if (exists) { skipped.push(city.id); continue }
 
-      // Heutiges Tagesmaximum abrufen
       const todayMax = await getTodayMax(city)
       if (todayMax === null) { errors.push(`${city.id}:no-price`); continue }
 
-      const question    = `Wird es morgen in ${city.label} wärmer als heute? (${todayMax}°C)`
-      const description = `Löst mit JA auf, wenn das Tagesmaximum von morgen in ${city.label} höher ist als das heutige Maximum von ${todayMax}°C. Datenquelle: Open-Meteo historische Daten.`
+      // Titel: "Wird es in Hamburg heute wärmer als gestern? (17°C)"
+      // Die Temperatur in Klammern ist der gestrige Wert (= heutiges Max bei Erstellung)
+      const question    = `Wird es in ${city.label} heute wärmer als gestern? (${todayMax}°C)`
+      const description = `Löst mit JA auf, wenn das Tagesmaximum von heute in ${city.label} höher ist als das gestrige Maximum von ${todayMax}°C.\n\nDatenquelle: Open-Meteo historische Daten (archive-api.open-meteo.com).`
 
       const ok = await dbPost('markets', {
         question,
@@ -86,15 +77,15 @@ async function run() {
         q_no:          0,
         closes_at:     closesAtISO,
         category:      'weather',
-        group_title:   'Wetter',           // für Gruppierung in MarketsGrid
+        group_title:   null,           // KEIN group_title → kein Multi-Outcome-Ranking
         short_label:   city.label,
-        display_group: `Wetter – ${city.label}`,
+        display_group: null,           // KEIN display_group → landet in ungrouped
         resolved:      false,
         resolution:    null,
         is_auto:       true,
-        match_id:      null,               // KEIN match_id — sonst als Soccer behandelt
-        coin:          city.id,            // city.id als Identifier für Auflösung
-        start_price:   todayMax,           // heutiges Max — Vergleichswert für Auflösung
+        match_id:      null,
+        coin:          city.id,        // city.id als Identifier für Auflösung
+        start_price:   todayMax,       // gestriges Max — Vergleichswert für Auflösung
         end_price:     null,
       })
 
@@ -109,18 +100,12 @@ async function run() {
   return { ok: true, created, skipped, errors }
 }
 
-// POST — vom Cron aufgerufen
 export async function POST(req: NextRequest) {
-  if (!isAuthorized(req)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  if (!isAuthorized(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   return NextResponse.json(await run())
 }
 
-// GET — für manuellen Browser-Trigger
 export async function GET(req: NextRequest) {
-  if (!isAuthorized(req)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  if (!isAuthorized(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   return NextResponse.json(await run())
 }
