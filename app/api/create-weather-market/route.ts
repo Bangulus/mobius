@@ -49,7 +49,6 @@ async function run() {
   const skipped: string[] = []
   const errors:  string[] = []
 
-  // Schließzeit: morgen 21:59 UTC (= 23:59 MESZ)
   const closesAt = new Date()
   closesAt.setUTCDate(closesAt.getUTCDate() + 1)
   closesAt.setUTCHours(21, 59, 0, 0)
@@ -63,10 +62,13 @@ async function run() {
       const todayMax = await getTodayMax(city)
       if (todayMax === null) { errors.push(`${city.id}:no-price`); continue }
 
-      // Titel: "Wird es in Hamburg heute wärmer als gestern? (17°C)"
-      // Die Temperatur in Klammern ist der gestrige Wert (= heutiges Max bei Erstellung)
-      const question    = `Wird es in ${city.label} heute wärmer als gestern? (${todayMax}°C)`
-      const description = `Löst mit JA auf, wenn das Tagesmaximum von heute in ${city.label} höher ist als das gestrige Maximum von ${todayMax}°C.\n\nDatenquelle: Open-Meteo historische Daten (archive-api.open-meteo.com).`
+      const question = `Wird es in ${city.label} heute wärmer als gestern? (${todayMax}°C)`
+
+      const description = `Löst mit JA auf, wenn das von Open-Meteo erfasste Tagesmaximum (temperature_2m_max) für ${city.label} am heutigen Tag höher ist als das gestrige Maximum von ${todayMax}°C.
+
+Maßgeblich ist ausschließlich der Wert der Open-Meteo Archive API für die Koordinaten ${city.latitude}, ${city.longitude} (Timezone: ${city.timezone}). Andere Wetterdienste, eigene Messungen oder abweichende Quellen sind irrelevant.
+
+Auflösung erfolgt automatisch durch den Möbius-Cron nach Marktschluss.`
 
       const ok = await dbPost('markets', {
         question,
@@ -77,15 +79,15 @@ async function run() {
         q_no:          0,
         closes_at:     closesAtISO,
         category:      'weather',
-        group_title:   null,           // KEIN group_title → kein Multi-Outcome-Ranking
+        group_title:   null,
         short_label:   city.label,
-        display_group: null,           // KEIN display_group → landet in ungrouped
+        display_group: null,
         resolved:      false,
         resolution:    null,
         is_auto:       true,
         match_id:      null,
-        coin:          city.id,        // city.id als Identifier für Auflösung
-        start_price:   todayMax,       // gestriges Max — Vergleichswert für Auflösung
+        coin:          city.id,
+        start_price:   todayMax,
         end_price:     null,
       })
 
