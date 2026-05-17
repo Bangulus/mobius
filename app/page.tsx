@@ -638,8 +638,10 @@ export default function Home() {
     } else if (category.startsWith('Finanzen-')) {
       const groupTitle = FINANCE_GROUP_MAP[category]
       matchCat = (m.category === 'finance' || m.category === 'Finanzen') && m.group_title === groupTitle
+    } else if (category === 'Wetter') {
+      matchCat = m.category === 'weather' || m.category === 'Wetter'
     } else {
-      matchCat = m.category === category || m.category === category.toLowerCase()
+      matchCat = m.category === 'weather' || m.category === category || m.category === category.toLowerCase()
     }
 
     const matchSearch = searchQuery === '' ||
