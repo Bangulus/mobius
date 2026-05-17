@@ -1,3 +1,4 @@
+// app/api/cron/route.ts
 import { NextResponse } from 'next/server'
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -11,10 +12,10 @@ async function cleanupZombieMarkets() {
     {
       method: 'PATCH',
       headers: {
-        apikey: SERVICE_KEY,
-        Authorization: `Bearer ${SERVICE_KEY}`,
-        'Content-Type': 'application/json',
-        Prefer: 'return=minimal',
+        apikey:          SERVICE_KEY,
+        Authorization:   `Bearer ${SERVICE_KEY}`,
+        'Content-Type':  'application/json',
+        Prefer:          'return=minimal',
       },
       body: JSON.stringify({ status: 'closed', resolved: true, resolution: 'no' }),
     }
@@ -22,6 +23,15 @@ async function cleanupZombieMarkets() {
 }
 
 export async function GET(request: Request) {
+  // Auth: Secret via Query-Parameter (QStash unterstützt keinen Authorization-Header direkt)
+  const url         = new URL(request.url)
+  const querySecret = url.searchParams.get('secret')
+  const authHeader  = request.headers.get('authorization')
+  const CRON_SECRET = process.env.CRON_SECRET!
+  if (authHeader !== `Bearer ${CRON_SECRET}` && querySecret !== CRON_SECRET) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
   const host     = request.headers.get('host') || 'localhost:3000'
   const protocol = host.includes('localhost') ? 'http' : 'https'
   const base     = `${protocol}://${host}`
@@ -49,7 +59,6 @@ export async function GET(request: Request) {
       results[`cryptoCreate_${coin}_error`] = String(e)
     }
   }
-
   try {
     const cryptoResolve = await fetch(`${base}/api/resolve-crypto-market`, {
       method: 'POST',
@@ -70,7 +79,6 @@ export async function GET(request: Request) {
   } catch (e) {
     results.financeResolveError = String(e)
   }
-
   try {
     const financeCreate = await fetch(`${base}/api/create-finance-market`, {
       method: 'POST',
@@ -91,7 +99,6 @@ export async function GET(request: Request) {
   } catch (e) {
     results.soccerCreateError = String(e)
   }
-
   try {
     const soccerResolve = await fetch(`${base}/api/resolve-soccer-market`, {
       method: 'GET',
@@ -112,7 +119,6 @@ export async function GET(request: Request) {
   } catch (e) {
     results.f1CreateError = String(e)
   }
-
   try {
     const f1Resolve = await fetch(`${base}/api/resolve-f1-markets`, {
       method: 'POST',
@@ -121,6 +127,26 @@ export async function GET(request: Request) {
     results.f1Resolve = await f1Resolve.json()
   } catch (e) {
     results.f1ResolveError = String(e)
+  }
+
+  // --- WETTER ---
+  try {
+    const weatherResolve = await fetch(`${base}/api/resolve-weather-market`, {
+      method: 'POST',
+      cache: 'no-store',
+    })
+    results.weatherResolve = await weatherResolve.json()
+  } catch (e) {
+    results.weatherResolveError = String(e)
+  }
+  try {
+    const weatherCreate = await fetch(`${base}/api/create-weather-market`, {
+      method: 'POST',
+      cache: 'no-store',
+    })
+    results.weatherCreate = await weatherCreate.json()
+  } catch (e) {
+    results.weatherCreateError = String(e)
   }
 
   return NextResponse.json({ ok: true, results })
