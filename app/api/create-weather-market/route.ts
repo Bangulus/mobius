@@ -1,3 +1,4 @@
+// app/api/create-weather-market/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { WEATHER_CITIES, getTodayMax, getTodayDateUTC } from '@/lib/openmeteo'
 
@@ -48,36 +49,27 @@ async function marketExistsForCity(cityId: string, dateStr: string): Promise<boo
   return Array.isArray(data) && data.length > 0
 }
 
-export async function POST(req: NextRequest) {
-  if (!isAuthorized(req)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
-
+async function run() {
   const today   = getTodayDateUTC()
   const created: string[] = []
   const skipped: string[] = []
   const errors:  string[] = []
 
-  // Schließzeit: 23:59 Uhr UTC des nächsten Tages
-  // (damit alle Zeitzonen sicher abgedeckt sind)
   const closesAt = new Date()
   closesAt.setUTCDate(closesAt.getUTCDate() + 1)
-  closesAt.setUTCHours(21, 59, 0, 0)  // 21:59 UTC = 23:59 MESZ
+  closesAt.setUTCHours(21, 59, 0, 0)
   const closesAtISO = closesAt.toISOString()
 
   for (const city of WEATHER_CITIES) {
     try {
       const matchId = `weather-${city.id}-${today}`
 
-      // Idempotenz-Guard: Markt für heute schon vorhanden?
       const exists = await marketExistsForCity(city.id, today)
       if (exists) { skipped.push(city.id); continue }
 
-      // Heutiges Tagesmaximum abrufen
       const todayMax = await getTodayMax(city)
       if (todayMax === null) { errors.push(`${city.id}:no-price`); continue }
 
-      // Markt erstellen
       const question    = `Wird es morgen in ${city.label} wärmer als heute? (${todayMax}°C)`
       const description = `Löst mit JA auf, wenn das Tagesmaximum von morgen in ${city.label} höher ist als das heutige Maximum von ${todayMax}°C. Datenquelle: Open-Meteo historische Daten.`
 
@@ -97,8 +89,8 @@ export async function POST(req: NextRequest) {
         resolution:    null,
         is_auto:       true,
         coin:          null,
-        match_id:      matchId,   // Eindeutiger Key für Auflösung
-        start_price:   todayMax,  // Heutiges Max — Vergleichswert für Auflösung
+        match_id:      matchId,
+        start_price:   todayMax,
         end_price:     null,
       })
 
@@ -110,5 +102,21 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ ok: true, created, skipped, errors })
+  return { ok: true, created, skipped, errors }
+}
+
+// POST — vom Cron aufgerufen
+export async function POST(req: NextRequest) {
+  if (!isAuthorized(req)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+  return NextResponse.json(await run())
+}
+
+// GET — für manuellen Browser-Trigger
+export async function GET(req: NextRequest) {
+  if (!isAuthorized(req)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+  return NextResponse.json(await run())
 }
