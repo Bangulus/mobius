@@ -505,6 +505,88 @@ function MarketRules({ description }: { description: string }) {
   )
 }
 
+// ── Spend Input Block ─────────────────────────────────────────────────────────
+// Wiederverwendbare Komponente für alle drei Markttypen (Soccer, Finance, Normal)
+function SpendInput({
+  spendRaw,
+  setSpendRaw,
+  spend,
+  setSpend,
+  userBalance,
+}: {
+  spendRaw: string
+  setSpendRaw: (v: string) => void
+  spend: number
+  setSpend: (v: number) => void
+  userBalance: number
+}) {
+  const handleAdd = (v: number) => {
+    const next = Math.min(userBalance, spend + v)
+    setSpend(next)
+    setSpendRaw(String(next))
+  }
+  const handleAllIn = () => {
+    setSpend(userBalance)
+    setSpendRaw(String(userBalance))
+  }
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Betrag (₫)</div>
+        <button
+          onClick={handleAllIn}
+          style={{
+            fontSize: 11, fontWeight: 700, padding: '2px 10px', borderRadius: 6,
+            border: '1px solid var(--border)', background: 'var(--surface)',
+            color: 'var(--text-muted)', cursor: 'pointer', letterSpacing: 0.3,
+          }}
+        >
+          All-In
+        </button>
+      </div>
+      <input
+        type="number"
+        min={1}
+        max={userBalance}
+        value={spendRaw}
+        onChange={e => {
+          const raw = e.target.value
+          setSpendRaw(raw)
+          const parsed = parseInt(raw)
+          if (!isNaN(parsed) && parsed >= 1) {
+            setSpend(Math.min(userBalance, parsed))
+          }
+        }}
+        onBlur={() => {
+          // Beim Verlassen: ungültige Werte auf 1 korrigieren
+          const parsed = parseInt(spendRaw)
+          const safe = isNaN(parsed) || parsed < 1 ? 1 : Math.min(userBalance, parsed)
+          setSpend(safe)
+          setSpendRaw(String(safe))
+        }}
+        style={{ width: '100%', fontSize: 22, fontWeight: 700 }}
+      />
+      <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+        {[50, 100, 200, 500].map(v => (
+          <button
+            key={v}
+            onClick={() => handleAdd(v)}
+            style={{
+              flex: 1, fontSize: 11, padding: '4px 0', borderRadius: 6,
+              border: '1px solid var(--border)',
+              background: 'var(--surface)',
+              color: 'var(--text-muted)',
+              cursor: 'pointer',
+            }}
+          >
+            +{v}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 type Tab       = '7T' | '1M' | 'Gesamt'
 type TradeTab  = 'kaufen' | 'verkaufen'
 type OrderType = 'markt' | 'limit'
@@ -526,6 +608,8 @@ export default function MarketPage() {
   const [orderType, setOrderType]   = useState<OrderType>('markt')
   const [direction, setDirection]   = useState<'yes' | 'no'>('yes')
   const [spend, setSpend]           = useState(100)
+  // spendRaw erlaubt temporäre Leereingabe ohne auf 1 zurückzuspringen
+  const [spendRaw, setSpendRaw]     = useState('100')
   const [limitPrice, setLimitPrice] = useState(50)
   const [betLoading, setBetLoading] = useState(false)
   const [betError, setBetError]     = useState('')
@@ -1005,6 +1089,9 @@ export default function MarketPage() {
   const displayIsUp    = displayDelta !== null ? displayDelta >= 0 : true
   const financeIsEnded = market.resolved || closesAtMs < Date.now()
 
+  // Suppress unused variable warning
+  void otherLiveMarkets
+
   return (
     <>
       {resultToast && !isSoccer && !isFormula1 && (
@@ -1218,15 +1305,13 @@ export default function MarketPage() {
                               </button>
                             ))}
                           </div>
-                          <div style={{ marginBottom: 12 }}>
-                            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>Betrag (₫)</div>
-                            <input type="number" min={1} max={Math.min(user.balance, 1000000)} value={spend} onChange={e => setSpend(Math.max(1, Math.min(user.balance, parseInt(e.target.value) || 1)))} style={{ width: '100%', fontSize: 22, fontWeight: 700 }} />
-                            <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
-                              {[50, 100, 200, 500].map(v => (
-                                <button key={v} onClick={() => setSpend(v)} style={{ flex: 1, fontSize: 11, padding: '4px 0', borderRadius: 6, border: '1px solid var(--border)', background: spend === v ? 'var(--accent)' : 'var(--surface)', color: spend === v ? '#fff' : 'var(--text-muted)', cursor: 'pointer' }}>+{v}</button>
-                              ))}
-                            </div>
-                          </div>
+                          <SpendInput
+                            spendRaw={spendRaw}
+                            setSpendRaw={setSpendRaw}
+                            spend={spend}
+                            setSpend={setSpend}
+                            userBalance={user.balance}
+                          />
                           <div style={{ background: 'rgba(22,163,74,0.07)', borderRadius: 10, padding: '14px', marginBottom: 14, textAlign: 'center', border: '1px solid rgba(22,163,74,0.2)' }}>
                             <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Auszahlung wenn {direction === 'yes' ? (thisOutcome === 'home' ? homeTeam : thisOutcome === 'away' ? awayTeam : 'Unentschieden') : 'anderer Ausgang'} eintritt</div>
                             <div style={{ fontSize: 32, fontWeight: 800, color: '#16a34a', letterSpacing: '-0.5px' }}>{payout} ₫</div>
@@ -1409,13 +1494,13 @@ export default function MarketPage() {
                               </button>
                             ))}
                           </div>
-                          <div style={{ marginBottom: 12 }}>
-                            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>Betrag (₫)</div>
-                            <input type="number" min={1} max={Math.min(user.balance, 1000000)} value={spend} onChange={e => setSpend(Math.max(1, Math.min(user.balance, parseInt(e.target.value) || 1)))} style={{ width: '100%', fontSize: 22, fontWeight: 700 }} />
-                            <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
-                              {[50, 100, 200, 500].map(v => (<button key={v} onClick={() => setSpend(v)} style={{ flex: 1, fontSize: 11, padding: '4px 0', borderRadius: 6, border: '1px solid var(--border)', background: spend === v ? 'var(--accent)' : 'var(--surface)', color: spend === v ? '#fff' : 'var(--text-muted)', cursor: 'pointer' }}>+{v}</button>))}
-                            </div>
-                          </div>
+                          <SpendInput
+                            spendRaw={spendRaw}
+                            setSpendRaw={setSpendRaw}
+                            spend={spend}
+                            setSpend={setSpend}
+                            userBalance={user.balance}
+                          />
                           <div style={{ background: 'rgba(22,163,74,0.07)', borderRadius: 10, padding: '14px', marginBottom: 14, textAlign: 'center', border: '1px solid rgba(22,163,74,0.2)' }}>
                             <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Auszahlung wenn {direction === 'yes' ? '↑ Höher' : '↓ Tiefer'} eintritt</div>
                             <div style={{ fontSize: 32, fontWeight: 800, color: '#16a34a', letterSpacing: '-0.5px' }}>{payout} ₫</div>
@@ -1699,13 +1784,13 @@ export default function MarketPage() {
                               <div style={{ fontSize: 11, color: 'var(--text-subtle)', marginTop: 4 }}>Aktuell: {direction === 'yes' ? prob : 100 - prob}¢</div>
                             </div>
                           )}
-                          <div style={{ marginBottom: 12 }}>
-                            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>Betrag (₫)</div>
-                            <input type="number" min={1} max={Math.min(user.balance, 1000000)} value={spend} onChange={e => setSpend(Math.max(1, Math.min(user.balance, parseInt(e.target.value) || 1)))} style={{ width: '100%', fontSize: 22, fontWeight: 700 }} />
-                            <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
-                              {[50, 100, 200, 500].map(v => (<button key={v} onClick={() => setSpend(v)} style={{ flex: 1, fontSize: 11, padding: '4px 0', borderRadius: 6, border: '1px solid var(--border)', background: spend === v ? 'var(--accent)' : 'var(--surface)', color: spend === v ? '#fff' : 'var(--text-muted)', cursor: 'pointer' }}>+{v}</button>))}
-                            </div>
-                          </div>
+                          <SpendInput
+                            spendRaw={spendRaw}
+                            setSpendRaw={setSpendRaw}
+                            spend={spend}
+                            setSpend={setSpend}
+                            userBalance={user.balance}
+                          />
                           <div style={{ background: 'rgba(22,163,74,0.07)', borderRadius: 10, padding: '14px', marginBottom: 14, textAlign: 'center', border: '1px solid rgba(22,163,74,0.2)' }}>
                             <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Auszahlung wenn Ja eintritt</div>
                             <div style={{ fontSize: 32, fontWeight: 800, color: '#16a34a', letterSpacing: '-0.5px' }}>{payout} ₫</div>
