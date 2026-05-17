@@ -656,7 +656,7 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
                   {/* Nutzer löschen Bestätigung */}
                   {deleteUserConfirm === u.id && (
                     <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border)', background: 'rgba(220,38,38,0.04)', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                      <span style={{ fontSize: 13, color: '#dc2626', fontWeight: 600 }}>Nutzer „{u.username}" und alle Daten löschen?</span>
+                      <span style={{ fontSize: 13, color: '#dc2626', fontWeight: 600 }}>Nutzer {u.username} — alle Daten löschen?</span>
                       <button onClick={() => deleteUser(u.id)} style={{ padding: '7px 14px', background: '#dc2626', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>Ja, löschen</button>
                       <button onClick={() => setDeleteUserConfirm(null)} style={{ padding: '7px 12px', background: 'var(--surface)', color: 'var(--text-muted)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>Abbrechen</button>
                     </div>
