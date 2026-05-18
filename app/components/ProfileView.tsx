@@ -106,7 +106,7 @@ function formatDateTime(iso: string): { date: string; time: string } {
 }
 
 type TabType = 'positionen' | 'aktivitaet';
-type SubTabType = 'aktiv' | 'geschlossen';
+type SubTabType = 'offen' | 'geschlossen';
 
 export default function ProfileView({ userId, displayName, avatarUrl, balance, onUsernameChange, onAvatarChange }: Props) {
   const [newUsername, setNewUsername]           = useState(displayName);
