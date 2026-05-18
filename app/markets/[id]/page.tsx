@@ -893,7 +893,7 @@ export default function MarketPage() {
     setTimeout(() => setBetSuccess(''), 2500)
   }
 
-  if (loading) return <div style={{ padding: 32, color: 'var(--text-muted)', fontSize: 14 }}>Markt wird geladen…</div>
+  if (loading) return <div style={{ padding: 32, color: 'var(--text-muted)', fontSize: 14 }}>Let the AI cook...</div>
   if (!market) return (
     <div style={{ padding: 32 }}>
       <div style={{ color: 'var(--no)', fontSize: 14, marginBottom: 16 }}>Markt nicht gefunden.</div>
