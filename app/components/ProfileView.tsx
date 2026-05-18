@@ -391,7 +391,7 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, o
           </div>
 
           {portfolioLoading ? (
-            <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--text-muted)', fontSize: 13 }}>Wird geladen…</div>
+            <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--text-muted)', fontSize: 13 }}>Let the AI cook...</div>
           ) : displayRows.length === 0 ? (
             <div className="card" style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)', fontSize: 13 }}>
               {subTab === 'aktiv' ? 'Keine aktiven Positionen.' : 'Noch keine abgeschlossenen Positionen.'}
@@ -631,7 +631,7 @@ function AktivitaetsFeed({ userId }: { userId: string }) {
   }
 
   if (loading) return (
-    <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--text-muted)', fontSize: 13 }}>Wird geladen…</div>
+    <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--text-muted)', fontSize: 13 }}>Let the AI cook...</div>
   );
   if (items.length === 0) return (
     <div className="card" style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)', fontSize: 13 }}>
