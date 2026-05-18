@@ -20,6 +20,22 @@ interface Props {
   onMarketResolved: () => void;
 }
 
+// Supabase exact count via HEAD-Request
+async function fetchCount(path: string): Promise<number> {
+  const res = await fetch(`${supabaseUrl}/rest/v1/${path}`, {
+    method: 'HEAD',
+    headers: {
+      apikey: supabaseKey,
+      Authorization: `Bearer ${supabaseKey}`,
+      Prefer: 'count=exact',
+    },
+  });
+  const range = res.headers.get('content-range'); // z.B. "0-999/1234"
+  if (!range) return 0;
+  const total = range.split('/')[1];
+  return total ? parseInt(total) : 0;
+}
+
 export default function AdminView({ userId, openMarkets, onMarketResolved }: Props) {
   const [adminTab, setAdminTab] = useState<'dashboard' | 'open' | 'resolved' | 'btc' | 'create' | 'edit' | 'users'>('dashboard');
   const [adminCategory, setAdminCategory] = useState('');
@@ -122,31 +138,36 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
     const todayStart = new Date(); todayStart.setUTCHours(0, 0, 0, 0);
     const since = todayStart.toISOString();
 
-    const [usersRes, marketsRes, tradesTodayRes, allOpenMarketsRes] = await Promise.all([
-      fetch(`${supabaseUrl}/rest/v1/users?select=id`, { headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` } }),
-      fetch(`${supabaseUrl}/rest/v1/markets?select=id,status,resolved`, { headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` } }),
-      fetch(`${supabaseUrl}/rest/v1/trades?created_at=gte.${since}&select=user_id,cost,type`, { headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` } }),
-      fetch(`${supabaseUrl}/rest/v1/markets?status=eq.open&select=id,question,short_label,q_yes,q_no`, { headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` } }),
+    const [totalUsers, totalMarkets, openMarketsCount, tradesTodayRes, allOpenMarketsRes] = await Promise.all([
+      fetchCount('users'),
+      fetchCount('markets'),
+      fetchCount('markets?status=eq.open&resolved=eq.false'),
+      fetch(`${supabaseUrl}/rest/v1/trades?created_at=gte.${since}&select=user_id,cost,type`, {
+        headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` },
+      }),
+      fetch(`${supabaseUrl}/rest/v1/markets?status=eq.open&select=id,question,short_label,q_yes,q_no`, {
+        headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` },
+      }),
     ]);
 
-    const [allUsers, allMarkets, tradesToday, allOpenMarkets] = await Promise.all([
-      usersRes.json(), marketsRes.json(), tradesTodayRes.json(), allOpenMarketsRes.json(),
+    const [tradesToday, allOpenMarkets] = await Promise.all([
+      tradesTodayRes.json(),
+      allOpenMarketsRes.json(),
     ]);
 
     const buyTrades = (tradesToday ?? []).filter((t: any) => t.type === 'buy_yes' || t.type === 'buy_no');
     const volumeToday = buyTrades.reduce((s: number, t: any) => s + Math.abs(t.cost ?? 0), 0);
     const activeUsersToday = new Set(buyTrades.map((t: any) => t.user_id)).size;
-    const openCount = (allMarkets ?? []).filter((m: any) => m.status === 'open' && !m.resolved).length;
 
-    // Sort open markets by total volume (q_yes + q_no) descending, take top 5
+    // Sort by total volume (q_yes + q_no), take top 5
     const topMarkets = [...(allOpenMarkets ?? [])]
       .sort((a: any, b: any) => (b.q_yes + b.q_no) - (a.q_yes + a.q_no))
       .slice(0, 5);
 
     setDashStats({
-      totalUsers: (allUsers ?? []).length,
-      totalMarkets: (allMarkets ?? []).length,
-      openMarkets: openCount,
+      totalUsers,
+      totalMarkets,
+      openMarkets: openMarketsCount,
       tradesToday: buyTrades.length,
       volumeToday: Math.round(volumeToday),
       activeUsersToday,
