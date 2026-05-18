@@ -12,7 +12,7 @@ const COINS = [
   { id: 'XRP', label: '✕ XRP', color: '#00aae4' },
 ];
 
-const CATEGORIES = ['Politik', 'Sport', 'Krypto', 'Entertainment', 'Wirtschaft', 'Geopolitik', 'Finanzen', 'Wetter', 'Kultur', 'formula1', 'finance', 'weather'];
+const CATEGORIES = ['Politik', 'Sport', 'Krypto', 'Entertainment', 'Wirtschaft', 'Geopolitik', 'Finanzen', 'Tech', 'Wetter', 'Kultur', 'formula1', 'finance', 'weather'];
 
 interface Props {
   userId: string;
@@ -122,21 +122,26 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
     const todayStart = new Date(); todayStart.setUTCHours(0, 0, 0, 0);
     const since = todayStart.toISOString();
 
-    const [usersRes, marketsRes, tradesTodayRes, topMarketsRes] = await Promise.all([
+    const [usersRes, marketsRes, tradesTodayRes, allOpenMarketsRes] = await Promise.all([
       fetch(`${supabaseUrl}/rest/v1/users?select=id`, { headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` } }),
       fetch(`${supabaseUrl}/rest/v1/markets?select=id,status,resolved`, { headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` } }),
       fetch(`${supabaseUrl}/rest/v1/trades?created_at=gte.${since}&select=user_id,cost,type`, { headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` } }),
-      fetch(`${supabaseUrl}/rest/v1/markets?status=eq.open&select=id,question,short_label,q_yes,q_no&order=q_yes.desc&limit=5`, { headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` } }),
+      fetch(`${supabaseUrl}/rest/v1/markets?status=eq.open&select=id,question,short_label,q_yes,q_no`, { headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` } }),
     ]);
 
-    const [allUsers, allMarkets, tradesToday, topMarkets] = await Promise.all([
-      usersRes.json(), marketsRes.json(), tradesTodayRes.json(), topMarketsRes.json(),
+    const [allUsers, allMarkets, tradesToday, allOpenMarkets] = await Promise.all([
+      usersRes.json(), marketsRes.json(), tradesTodayRes.json(), allOpenMarketsRes.json(),
     ]);
 
     const buyTrades = (tradesToday ?? []).filter((t: any) => t.type === 'buy_yes' || t.type === 'buy_no');
     const volumeToday = buyTrades.reduce((s: number, t: any) => s + Math.abs(t.cost ?? 0), 0);
     const activeUsersToday = new Set(buyTrades.map((t: any) => t.user_id)).size;
     const openCount = (allMarkets ?? []).filter((m: any) => m.status === 'open' && !m.resolved).length;
+
+    // Sort open markets by total volume (q_yes + q_no) descending, take top 5
+    const topMarkets = [...(allOpenMarkets ?? [])]
+      .sort((a: any, b: any) => (b.q_yes + b.q_no) - (a.q_yes + a.q_no))
+      .slice(0, 5);
 
     setDashStats({
       totalUsers: (allUsers ?? []).length,
@@ -145,7 +150,7 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
       tradesToday: buyTrades.length,
       volumeToday: Math.round(volumeToday),
       activeUsersToday,
-      topMarkets: topMarkets ?? [],
+      topMarkets,
     });
     setDashLoading(false);
   }
@@ -200,7 +205,6 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
 
   async function deleteMarket(marketId: string) {
     setDeleteLoading(true);
-    // Zuerst abhängige Trades + Positionen löschen
     await fetch(`${supabaseUrl}/rest/v1/trades?market_id=eq.${marketId}`, {
       method: 'DELETE',
       headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` },
@@ -241,7 +245,6 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
   }
 
   async function deleteUser(uid: string) {
-    // Trades + Positionen des Nutzers löschen, dann Nutzer
     await fetch(`${supabaseUrl}/rest/v1/trades?user_id=eq.${uid}`, { method: 'DELETE', headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` } });
     await fetch(`${supabaseUrl}/rest/v1/positions?user_id=eq.${uid}`, { method: 'DELETE', headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` } });
     await fetch(`${supabaseUrl}/rest/v1/users?id=eq.${uid}`, { method: 'DELETE', headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` } });
@@ -374,9 +377,9 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
   const filteredEditMarkets = allMarkets.filter(m => {
     const matchSearch = editSearch === '' ||
       (m.question ?? '').toLowerCase().includes(editSearch.toLowerCase()) ||
-      (m.short_label ?? '').toLowerCase().includes(editSearch.toLowerCase())
-    const matchFilter = editFilter === 'all' || (editFilter === 'auto' ? m.is_auto : !m.is_auto)
-    return matchSearch && matchFilter
+      (m.short_label ?? '').toLowerCase().includes(editSearch.toLowerCase());
+    const matchFilter = editFilter === 'all' || (editFilter === 'auto' ? m.is_auto : !m.is_auto);
+    return matchSearch && matchFilter;
   });
 
   const filteredUsers = users.filter(u =>
@@ -563,7 +566,6 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
                         Abbrechen
                       </button>
 
-                      {/* Löschen */}
                       {deleteConfirm === m.id ? (
                         <>
                           <span style={{ fontSize: 13, color: '#dc2626', fontWeight: 600 }}>Sicher löschen?</span>
@@ -639,7 +641,6 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
                     </div>
                   </div>
 
-                  {/* Guthaben bearbeiten */}
                   {editingUser === u.id && (
                     <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border)', background: 'rgba(249,115,22,0.04)', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                       <input
@@ -653,7 +654,6 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
                     </div>
                   )}
 
-                  {/* Nutzer löschen Bestätigung */}
                   {deleteUserConfirm === u.id && (
                     <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border)', background: 'rgba(220,38,38,0.04)', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                       <span style={{ fontSize: 13, color: '#dc2626', fontWeight: 600 }}>Nutzer {u.username} — alle Daten löschen?</span>
