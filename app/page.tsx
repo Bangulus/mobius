@@ -661,7 +661,7 @@ export default function Home() {
             <input type="password" placeholder="Passwort" value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} maxLength={128} onKeyDown={(e) => e.key === 'Enter' && (authMode === 'login' ? handleLogin() : handleRegister())} style={{ width: '100%' }} />
             {authError && <div className="alert alert-error">{authError}</div>}
             <button className="submit-btn yes" onClick={authMode === 'login' ? handleLogin : handleRegister} disabled={authLoading} style={{ marginTop: 4 }}>
-              {authLoading ? 'Thinking…' : authMode === 'login' ? 'Anmelden' : 'Konto erstellen'}
+              {authLoading ? 'not me waiting...' : authMode === 'login' ? 'Anmelden' : 'Konto erstellen'}
             </button>
             {authMode === 'register' && (<div style={{ fontSize: 12, color: 'var(--text-subtle)', textAlign: 'center' }}>Du startest mit 1.000 ₫ Dukaten.</div>)}
           </div>
@@ -741,7 +741,7 @@ export default function Home() {
                 </div>
               )}
               {loading ? (
-                <div style={{ color: 'var(--text-muted)', fontSize: 14, padding: '24px 0' }}>Thinking…</div>
+                <div style={{ color: 'var(--text-muted)', fontSize: 14, padding: '24px 0' }}>it´s giving... data</div>
               ) : filteredMarkets.length === 0 && category !== 'Bundesliga' ? (
                 <div style={{ color: 'var(--text-muted)', fontSize: 14, padding: '24px 0' }}>
                   {isFinanzCategory ? 'Derzeit sind keine Märkte aktiv. Sie starten automatisch zu Beginn der offiziellen Handelszeiten der deutschen (09:00 – 17:30 Uhr) und amerikanischen Börsen (15:30 – 22:00 Uhr).' : 'Keine Märkte gefunden.'}
@@ -1207,7 +1207,7 @@ function PortfolioView({ userId, router }: { userId: string; router: ReturnType<
     })
   }, [userId])
 
-  if (loading) return <div style={{ color: 'var(--text-muted)', padding: '24px 0' }}>Thinking…</div>
+  if (loading) return <div style={{ color: 'var(--text-muted)', padding: '24px 0' }}>manifesting results...</div>
   if (positions.length === 0) return (<div className="card" style={{ textAlign: 'center', padding: 32 }}><div style={{ fontSize: 14, color: 'var(--text-muted)', marginBottom: 8 }}>Noch keine Positionen.</div><div style={{ fontSize: 13, color: 'var(--text-subtle)' }}>Platziere deine erste Wette auf einen Markt.</div></div>)
 
   return (
