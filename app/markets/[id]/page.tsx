@@ -1057,22 +1057,71 @@ export default function MarketPage() {
             </div>
           </div>
           <div style={{ padding: 16 }}>
-            {tradeTab === 'kaufen' && (
-              <>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 16 }}>
-                  {(['yes', 'no'] as const).map(d => (
-                    <button key={d} onClick={() => setDirection(d)} style={{ padding: '10px 0', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 14, background: direction === d ? (d === 'yes' ? 'rgba(22,163,74,0.15)' : 'rgba(220,38,38,0.15)') : 'var(--surface)', color: direction === d ? (d === 'yes' ? 'var(--yes)' : 'var(--no)') : 'var(--text-muted)', outline: direction === d ? `2px solid ${d === 'yes' ? 'var(--yes)' : 'var(--no)'}` : '2px solid transparent' }}>
-                      {d === 'yes' ? `Ja · ${prob}¢` : `Nein · ${100 - prob}¢`}
-                    </button>
-                  ))}
-                </div>
-                <SpendInput spendRaw={spendRaw} setSpendRaw={setSpendRaw} spend={spend} setSpend={setSpend} userBalance={user.balance} />
-                <div style={{ background: 'rgba(22,163,74,0.07)', borderRadius: 10, padding: '14px', marginBottom: 14, textAlign: 'center', border: '1px solid rgba(22,163,74,0.2)' }}>
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Auszahlung wenn Ja eintritt</div>
-                  <div style={{ fontSize: 32, fontWeight: 800, color: '#16a34a', letterSpacing: '-0.5px' }}>{payout} ₫</div>
-                </div>
-              </>
-            )}
+           {tradeTab === 'kaufen' && (
+  <>
+    <div style={{ display: 'flex', gap: 4, marginBottom: 14, background: 'var(--surface)', borderRadius: 8, padding: 4 }}>
+      {(['markt', 'limit'] as OrderType[]).map(ot => (
+        <button key={ot} onClick={() => setOrderType(ot)} style={{
+          flex: 1, padding: '7px 0', borderRadius: 6, border: 'none', cursor: 'pointer',
+          fontSize: 12, fontWeight: 700,
+          background: orderType === ot ? 'var(--card)' : 'transparent',
+          color: orderType === ot ? 'var(--text)' : 'var(--text-muted)',
+          boxShadow: orderType === ot ? '0 1px 4px rgba(0,0,0,0.08)' : 'none',
+          transition: 'all 0.15s',
+        }}>
+          {ot === 'markt' ? 'Marktorder' : 'Limit-Order'}
+        </button>
+      ))}
+    </div>
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 16 }}>
+      {(['yes', 'no'] as const).map(d => (
+        <button key={d} onClick={() => setDirection(d)} style={{ padding: '10px 0', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 14, background: direction === d ? (d === 'yes' ? 'rgba(22,163,74,0.15)' : 'rgba(220,38,38,0.15)') : 'var(--surface)', color: direction === d ? (d === 'yes' ? 'var(--yes)' : 'var(--no)') : 'var(--text-muted)', outline: direction === d ? `2px solid ${d === 'yes' ? 'var(--yes)' : 'var(--no)'}` : '2px solid transparent' }}>
+          {d === 'yes' ? `Ja · ${prob}¢` : `Nein · ${100 - prob}¢`}
+        </button>
+      ))}
+    </div>
+    <SpendInput spendRaw={spendRaw} setSpendRaw={setSpendRaw} spend={spend} setSpend={setSpend} userBalance={user.balance} />
+    {orderType === 'limit' && (
+      <div style={{ marginBottom: 14 }}>
+        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>
+          Limit-Preis — Order wird ausgeführt wenn Preis ≤ diesem Wert
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <input type="range" min={1} max={99} value={limitPrice}
+            onChange={e => setLimitPrice(Number(e.target.value))}
+            style={{ flex: 1, accentColor: direction === 'yes' ? 'var(--yes)' : 'var(--no)' }} />
+          <div style={{ minWidth: 52, textAlign: 'center', fontSize: 20, fontWeight: 800, color: direction === 'yes' ? 'var(--yes)' : 'var(--no)' }}>
+            {limitPrice}¢
+          </div>
+        </div>
+        <div style={{ fontSize: 11, color: 'var(--text-subtle)', marginTop: 4 }}>
+          Aktueller Preis: {direction === 'yes' ? prob : 100 - prob}¢
+          {limitPrice < (direction === 'yes' ? prob : 100 - prob)
+            ? ' · Wartet auf besseren Kurs'
+            : ' · Wird sofort ausgeführt'}
+        </div>
+      </div>
+    )}
+    <div style={{ background: 'rgba(22,163,74,0.07)', borderRadius: 10, padding: '14px', marginBottom: 14, textAlign: 'center', border: '1px solid rgba(22,163,74,0.2)' }}>
+      {orderType === 'markt' ? (
+        <>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Auszahlung wenn Ja eintritt</div>
+          <div style={{ fontSize: 32, fontWeight: 800, color: '#16a34a', letterSpacing: '-0.5px' }}>{payout} ₫</div>
+        </>
+      ) : (
+        <>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>
+            {limitPrice < (direction === 'yes' ? prob : 100 - prob) ? 'Wartet auf Ausführung' : 'Wird sofort ausgeführt'}
+          </div>
+          <div style={{ fontSize: 18, fontWeight: 700, color: '#16a34a' }}>
+            {spend} ₫ · max {Math.round(lmsrSharesForSpend(market.q_yes, market.q_no, market.b, direction, spend))} Anteile
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--text-subtle)', marginTop: 2 }}>bei {limitPrice}¢ oder besser</div>
+        </>
+      )}
+    </div>
+  </>
+)}
             {tradeTab === 'verkaufen' && (
               <>
                 {!hasPosition ? (
