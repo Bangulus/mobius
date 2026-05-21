@@ -744,7 +744,7 @@ const accentColor = toast.isKrypto ? (isUp ? '#16a34a' : '#dc2626') : '#16a34a'
                 </div>
               )}
               {loading ? (
-                <div style={{ color: 'var(--text-muted)', fontSize: 14, padding: '24px 0' }}>it´s giving... data</div>
+                <div style={{ color: 'var(--text-muted)', fontSize: 14, padding: '24px 0' }}>Wird mit 1 % Motivation geladen…</div>
               ) : filteredMarkets.length === 0 && category !== 'Bundesliga' ? (
                 <div style={{ color: 'var(--text-muted)', fontSize: 14, padding: '24px 0' }}>
                   {isFinanzCategory ? 'Derzeit sind keine Märkte aktiv. Sie starten automatisch zu Beginn der offiziellen Handelszeiten der deutschen (09:00 – 17:30 Uhr) und amerikanischen Börsen (15:30 – 22:00 Uhr).' : 'Keine Märkte gefunden.'}
