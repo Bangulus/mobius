@@ -256,7 +256,6 @@ const NAV_ITEMS: NavItemDef[] = [
   { id: 'Politik', label: 'Politik', icon: '🏛️', parentOnly: true, children: [
     { id: 'Politik-Deutschland', label: 'Deutschland', icon: '🇩🇪' },
     { id: 'Politik-USA',        label: 'USA',         icon: '🇺🇸' },
-    { id: 'Politik-Welt',       label: 'Welt',        icon: '🌍' },
   ]},
   { id: 'Sport', label: 'Sport', icon: '⚽', children: [
     { id: 'Fußball', label: 'Fußball', icon: '⚽', children: [
