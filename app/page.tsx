@@ -381,10 +381,10 @@ trades.forEach((t: { user_id: string; shares: number }) => {
 })
     const topIds = Object.entries(gainMap).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([id]) => id)
     if (topIds.length === 0) { setWeeklyBoard([]); return }
-    const users = await dbGet('users', `id=in.(${topIds.join(',')})&select=id,username`)
-    const userMap: Record<string, string> = {}
-    users?.forEach((u: { id: string; username: string }) => { userMap[u.id] = u.username })
-    setWeeklyBoard(topIds.map(id => ({ user_id: id, username: userMap[id] ?? 'Unbekannt', weekly_gain: Math.round(gainMap[id]) })))
+const users = await dbGet('users', `id=in.(${topIds.join(',')})&select=id,username,avatar_url`)
+const userMap: Record<string, { username: string; avatar_url?: string }> = {}
+users?.forEach((u: { id: string; username: string; avatar_url?: string }) => { userMap[u.id] = { username: u.username, avatar_url: u.avatar_url } })
+setWeeklyBoard(topIds.map(id => ({ user_id: id, username: userMap[id]?.username ?? 'Unbekannt', weekly_gain: Math.round(gainMap[id]), avatar_url: userMap[id]?.avatar_url })))
   }, [])
 
   useEffect(() => { loadMarkets(true); loadLeaderboard() }, [loadMarkets, loadLeaderboard])
