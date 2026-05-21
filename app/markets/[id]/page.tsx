@@ -859,7 +859,27 @@ export default function MarketPage() {
     if (spend <= 0 || spend > 1000000) { setBetError('Ungültiger Betrag.'); return }
     if (user.balance < spend) { setBetError('Nicht genug Guthaben.'); return }
     setBetLoading(true); setBetError('')
-    if (orderType === 'limit') { setBetSuccess(`Limit-Order bei ${limitPrice}¢ platziert.`); setBetLoading(false); setTimeout(() => setBetSuccess(''), 4000); return }
+ if (orderType === 'limit') {
+  const token = getToken()
+  if (!token) { setBetError('Sitzung abgelaufen — bitte erneut anmelden.'); setBetLoading(false); return }
+  const res = await fetch('/api/limit-order', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+    body: JSON.stringify({ marketId, direction, spend, limitPrice }),
+  })
+  const data = await res.json()
+  if (!res.ok) { setBetError(data.error ?? 'Fehler.'); setBetLoading(false); return }
+  if (data.filled) {
+    setBetSuccess('Limit-Order sofort ausgeführt ✓')
+    loadMarket(); loadTrades(); loadPosition(user.id)
+    setUser(prev => prev ? { ...prev, balance: prev.balance - spend } : prev)
+  } else {
+    setBetSuccess(`Limit-Order bei ${limitPrice}¢ platziert — wartet auf Ausführung ✓`)
+  }
+  setBetLoading(false)
+  setTimeout(() => setBetSuccess(''), 4000)
+  return
+}
     const token = getToken()
     if (!token) { setBetError('Sitzung abgelaufen — bitte erneut anmelden.'); setBetLoading(false); return }
     const res = await fetch('/api/place-bet', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ marketId, action: 'buy', direction, spend }) })
