@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import AdminPanel from './components/AdminPanel'
 import ProfileView from './components/ProfileView'
-import CommentsSection from './components/CommentsSection'
+
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -756,9 +756,6 @@ export default function Home() {
           {view === 'portfolio' && user && (<PortfolioView userId={user.id} router={router} />)}
         </main>
       </div>
-<div style={{ maxWidth: 980, margin: '0 auto', padding: '0 16px 48px' }}>
-  <CommentsSection marketId={marketId} />
-</div>
       <style>{`
         @keyframes slideInRight { from { transform: translateX(120%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
         .nav-item-btn { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 12px; border: none; background: transparent; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 500; color: var(--text-muted); text-align: left; transition: background 0.1s, color 0.1s; }
