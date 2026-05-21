@@ -182,10 +182,10 @@ export async function GET(request: Request) {
   // --- CRON LOG ---
   try {
     const hadErrors =
-      (results.weatherCreate as { errors?: unknown[] })?.errors?.length > 0 ||
-      (results.financeCreate as { errors?: unknown[] })?.errors?.length > 0 ||
-      (results.weatherResolve as { errors?: unknown[] })?.errors?.length > 0 ||
-      Object.keys(results).some(k => k.endsWith('Error'))
+  ((results.weatherCreate as { errors?: unknown[] })?.errors?.length ?? 0) > 0 ||
+  ((results.financeCreate as { errors?: unknown[] })?.errors?.length ?? 0) > 0 ||
+  ((results.weatherResolve as { errors?: unknown[] })?.errors?.length ?? 0) > 0 ||
+  Object.keys(results).some(k => k.endsWith('Error'))
 
     await fetch(`${SUPABASE_URL}/rest/v1/cron_logs`, {
       method: 'POST',
