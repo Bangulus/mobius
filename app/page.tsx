@@ -394,30 +394,10 @@ setWeeklyBoard(topIds.map(id => ({ user_id: id, username: userMap[id]?.username 
   }, [category, loadPastSoccerMarkets])
 
   useEffect(() => {
-    const id = setInterval(() => {
-      const now = Date.now()
-      const autoMarkets = marketsRef.current.filter(m => m.is_auto && m.coin && !m.resolved && !m.match_id && m.category !== 'weather' && m.category !== 'Wetter')
-      for (const coin of COINS) {
-        const market = autoMarkets.find(m => m.coin === coin)
-        if (!market) {
-          const lastTriggered = triggeredCoinsRef.current[coin + '_missing'] ?? 0
-          if (now - lastTriggered > 30000) {
-            triggeredCoinsRef.current[coin + '_missing'] = now
-            fetch('/api/create-crypto-market', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ coin }) }).then(() => loadMarkets()).catch(() => {})
-          }
-          continue
-        }
-        const closesAtMs = parseUTC(market.closes_at).getTime()
-        const diff       = closesAtMs - now
-        const triggerKey = coin + '_' + closesAtMs
-        if (diff < 10000 && diff > -30000 && !triggeredCoinsRef.current[triggerKey]) {
-          triggeredCoinsRef.current[triggerKey] = now
-          fetch('/api/create-crypto-market', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ coin }) }).then(() => setTimeout(loadMarkets, 2000)).catch(() => {})
-        }
-      }
-    }, 1000)
-    return () => clearInterval(id)
-  }, [loadMarkets])
+    useEffect(() => {
+  // Krypto-Märkte werden ausschließlich vom Cron erstellt (jede Minute).
+  // Kein Client-seitiger Creator — verhindert Race Conditions und Duplikate.
+}, [])
 
   useEffect(() => {
     const id = setInterval(() => loadMarkets(), 10000)
