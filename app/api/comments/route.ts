@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
   if (!Array.isArray(comments)) return NextResponse.json([], { status: 200 })
 
   // Usernames laden
-  const userIds = [...new Set(comments.map((c: { user_id: string }) => c.user_id))]
+  const userIds = Array.from(new Set(comments.map((c: { user_id: string }) => c.user_id)))
   let users: { id: string; username: string; avatar_url?: string }[] = []
   if (userIds.length > 0) {
     const uRes = await fetch(
