@@ -394,12 +394,6 @@ setWeeklyBoard(topIds.map(id => ({ user_id: id, username: userMap[id]?.username 
   }, [category, loadPastSoccerMarkets])
 
   useEffect(() => {
-    useEffect(() => {
-  // Krypto-Märkte werden ausschließlich vom Cron erstellt (jede Minute).
-  // Kein Client-seitiger Creator — verhindert Race Conditions und Duplikate.
-}, [])
-
-  useEffect(() => {
     const id = setInterval(() => loadMarkets(), 10000)
     return () => clearInterval(id)
   }, [loadMarkets])
