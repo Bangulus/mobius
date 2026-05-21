@@ -398,6 +398,31 @@ setWeeklyBoard(topIds.map(id => ({ user_id: id, username: userMap[id]?.username 
     return () => clearInterval(id)
   }, [loadMarkets])
 
+  useEffect(() => {
+    const id = setInterval(() => {
+      const now = Date.now()
+      const autoMarkets = marketsRef.current.filter(
+        m => m.is_auto && m.coin && !m.resolved && !m.match_id &&
+        m.category !== 'weather' && m.category !== 'Wetter'
+      )
+      for (const coin of COINS) {
+        const market = autoMarkets.find(m => m.coin === coin)
+        if (!market) {
+          const lastTriggered = triggeredCoinsRef.current[coin + '_missing'] ?? 0
+          if (now - lastTriggered > 60000) {
+            triggeredCoinsRef.current[coin + '_missing'] = now
+            fetch('/api/create-crypto-market', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ coin }),
+            }).then(() => loadMarkets()).catch(() => {})
+          }
+        }
+      }
+    }, 5000)
+    return () => clearInterval(id)
+  }, [loadMarkets])
+
   const checkWins = useCallback(async (userId: string) => {
     const since = new Date(Date.now() - 10 * 60 * 1000).toISOString()
     const trades = await dbGet('trades', `user_id=eq.${userId}&type=in.(buy_yes,buy_no)&created_at=gte.${since}&select=market_id,type,shares`)
