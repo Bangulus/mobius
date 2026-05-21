@@ -20,7 +20,6 @@ interface Props {
   onMarketResolved: () => void;
 }
 
-// Supabase exact count via HEAD-Request
 async function fetchCount(path: string): Promise<number> {
   const res = await fetch(`${supabaseUrl}/rest/v1/${path}`, {
     method: 'HEAD',
@@ -30,14 +29,14 @@ async function fetchCount(path: string): Promise<number> {
       Prefer: 'count=exact',
     },
   });
-  const range = res.headers.get('content-range'); // z.B. "0-999/1234"
+  const range = res.headers.get('content-range');
   if (!range) return 0;
   const total = range.split('/')[1];
   return total ? parseInt(total) : 0;
 }
 
 export default function AdminView({ userId, openMarkets, onMarketResolved }: Props) {
-  const [adminTab, setAdminTab] = useState<'dashboard' | 'open' | 'resolved' | 'btc' | 'create' | 'edit' | 'users'>('dashboard');
+  const [adminTab, setAdminTab] = useState<'dashboard' | 'open' | 'resolved' | 'btc' | 'create' | 'edit' | 'users' | 'cronlogs'>('dashboard');
   const [adminCategory, setAdminCategory] = useState('');
   const [resolvingMarket, setResolvingMarket] = useState<string | null>(null);
   const [resolvedMarketDetails, setResolvedMarketDetails] = useState<any[]>([]);
@@ -48,7 +47,6 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
   const [resolvingBtc, setResolvingBtc] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now());
 
-  // Edit tab
   const [allMarkets, setAllMarkets] = useState<any[]>([]);
   const [editingMarket, setEditingMarket] = useState<string | null>(null);
   const [editFields, setEditFields] = useState<{
@@ -62,7 +60,6 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
-  // Create tab
   const [newQuestion, setNewQuestion]       = useState('');
   const [newShortLabel, setNewShortLabel]   = useState('');
   const [newDescription, setNewDescription] = useState('');
@@ -73,7 +70,6 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
   const [createLoading, setCreateLoading]   = useState(false);
   const [createMessage, setCreateMessage]   = useState('');
 
-  // Users tab
   const [users, setUsers] = useState<any[]>([]);
   const [usersLoading, setUsersLoading] = useState(false);
   const [editingUser, setEditingUser] = useState<string | null>(null);
@@ -82,7 +78,6 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
   const [deleteUserConfirm, setDeleteUserConfirm] = useState<string | null>(null);
   const [userSearch, setUserSearch] = useState('');
 
-  // Dashboard
   const [dashStats, setDashStats] = useState<{
     totalUsers: number;
     totalMarkets: number;
@@ -94,16 +89,20 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
   } | null>(null);
   const [dashLoading, setDashLoading] = useState(false);
 
+  const [cronLogs, setCronLogs] = useState<any[]>([]);
+  const [cronLogsLoading, setCronLogsLoading] = useState(false);
+
   useEffect(() => {
     const interval = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
-    if (adminTab === 'btc') loadBtcMarkets();
-    if (adminTab === 'edit') loadAllMarkets();
-    if (adminTab === 'users') loadUsers();
+    if (adminTab === 'btc')      loadBtcMarkets();
+    if (adminTab === 'edit')     loadAllMarkets();
+    if (adminTab === 'users')    loadUsers();
     if (adminTab === 'dashboard') loadDashboard();
+    if (adminTab === 'cronlogs') loadCronLogs();
   }, [adminTab]);
 
   // ── Loaders ──────────────────────────────────────────────────────────────
@@ -159,14 +158,12 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
     const volumeToday = buyTrades.reduce((s: number, t: any) => s + Math.abs(t.cost ?? 0), 0);
     const activeUsersToday = new Set(buyTrades.map((t: any) => t.user_id)).size;
 
-    // Sort by total volume (q_yes + q_no), take top 5
     const topMarkets = [...(allOpenMarkets ?? [])]
       .sort((a: any, b: any) => (b.q_yes + b.q_no) - (a.q_yes + a.q_no))
       .slice(0, 5);
 
     setDashStats({
-      totalUsers,
-      totalMarkets,
+      totalUsers, totalMarkets,
       openMarkets: openMarketsCount,
       tradesToday: buyTrades.length,
       volumeToday: Math.round(volumeToday),
@@ -174,6 +171,16 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
       topMarkets,
     });
     setDashLoading(false);
+  }
+
+  async function loadCronLogs() {
+    setCronLogsLoading(true);
+    const res = await fetch(
+      `${supabaseUrl}/rest/v1/cron_logs?select=*&order=ran_at.desc&limit=20`,
+      { headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` } }
+    );
+    setCronLogs(await res.json());
+    setCronLogsLoading(false);
   }
 
   // ── Editor ────────────────────────────────────────────────────────────────
@@ -444,6 +451,7 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
         <button style={tabBtn(adminTab === 'create', '#16a34a')}        onClick={() => setAdminTab('create')}>＋ Markt erstellen</button>
         <button style={tabBtn(adminTab === 'edit', '#0ea5e9')}          onClick={() => setAdminTab('edit')}>✏️ Märkte bearbeiten</button>
         <button style={tabBtn(adminTab === 'users', '#f97316')}         onClick={() => setAdminTab('users')}>👥 Nutzer</button>
+        <button style={tabBtn(adminTab === 'cronlogs', '#64748b')}      onClick={() => setAdminTab('cronlogs')}>🔍 Cron-Logs</button>
       </div>
 
       {/* ── DASHBOARD ── */}
@@ -461,7 +469,6 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
                 {statCard('Volumen heute', `${dashStats.volumeToday.toLocaleString('de')} ₫`, '#f59e0b')}
                 {statCard('Aktive Nutzer heute', dashStats.activeUsersToday, '#0ea5e9')}
               </div>
-
               {dashStats.topMarkets.length > 0 && (
                 <div>
                   <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', marginBottom: 12 }}>Top-Märkte nach Volumen</div>
@@ -479,7 +486,6 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
                   </div>
                 </div>
               )}
-
               <div style={{ marginTop: 20 }}>
                 <button onClick={loadDashboard} style={{ padding: '8px 16px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}>
                   ↺ Aktualisieren
@@ -487,6 +493,79 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
               </div>
             </>
           ) : null}
+        </div>
+      )}
+
+      {/* ── CRON LOGS ── */}
+      {adminTab === 'cronlogs' && (
+        <div style={{ maxWidth: 860 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>Letzte 20 Cron-Läufe</div>
+            <button onClick={loadCronLogs} style={{ padding: '6px 14px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}>↺ Aktualisieren</button>
+          </div>
+          {cronLogsLoading ? (
+            <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Lädt…</div>
+          ) : cronLogs.length === 0 ? (
+            <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Noch keine Logs. Cron einmal manuell triggern.</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {cronLogs.map((log: any) => {
+                const r = log.results ?? {}
+                const ranAt = new Date(log.ran_at)
+                const cryptoOk  = !r.cryptoResolveError && Object.keys(r).filter(k => k.startsWith('cryptoCreate_') && k.endsWith('_error')).length === 0
+                const financeOk = !r.financeCreateError && !r.financeResolveError
+                const weatherOk = !r.weatherCreateError && !r.weatherResolveError
+                const weatherCreated  = r.weatherCreate?.created?.length ?? 0
+                const weatherResolved = r.weatherResolve?.resolved ?? 0
+                const financeCreated  = r.financeCreate?.created?.length ?? 0
+                const financeErrors   = r.financeCreate?.errors?.length ?? 0
+
+                return (
+                  <div key={log.id} style={{
+                    border: `1px solid ${log.had_errors ? 'rgba(220,38,38,0.3)' : 'rgba(22,163,74,0.2)'}`,
+                    borderLeft: `4px solid ${log.had_errors ? '#dc2626' : '#16a34a'}`,
+                    borderRadius: 10, overflow: 'hidden', background: 'var(--card)',
+                  }}>
+                    <div style={{ padding: '10px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <span style={{ fontSize: 16 }}>{log.had_errors ? '🔴' : '🟢'}</span>
+                        <div>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>
+                            {ranAt.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })} · {ranAt.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                          </div>
+                          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                            {log.had_errors ? 'Mit Fehlern' : 'Erfolgreich'}
+                          </div>
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 6, background: cryptoOk ? 'rgba(22,163,74,0.1)' : 'rgba(220,38,38,0.1)', color: cryptoOk ? '#16a34a' : '#dc2626' }}>
+                          🪙 Krypto {cryptoOk ? '✓' : '✗'}
+                        </span>
+                        <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 6, background: financeOk ? 'rgba(22,163,74,0.1)' : 'rgba(220,38,38,0.1)', color: financeOk ? '#16a34a' : '#dc2626' }}>
+                          📈 Finance {financeOk ? `✓ ${financeCreated} neu` : `✗ ${financeErrors} Fehler`}
+                        </span>
+                        <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 6, background: weatherOk ? 'rgba(22,163,74,0.1)' : 'rgba(220,38,38,0.1)', color: weatherOk ? '#16a34a' : '#dc2626' }}>
+                          🌤 Wetter {weatherOk ? `✓ ${weatherCreated} neu · ${weatherResolved} aufgelöst` : '✗ Fehler'}
+                        </span>
+                      </div>
+                    </div>
+                    {log.had_errors && (
+                      <div style={{ padding: '8px 16px', borderTop: '1px solid var(--border)', background: 'rgba(220,38,38,0.04)', fontSize: 12, color: '#dc2626', display: 'flex', flexDirection: 'column', gap: 2 }}>
+                        {r.weatherCreateError  && <div>weatherCreate: {String(r.weatherCreateError)}</div>}
+                        {r.weatherResolveError && <div>weatherResolve: {String(r.weatherResolveError)}</div>}
+                        {r.financeCreateError  && <div>financeCreate: {String(r.financeCreateError)}</div>}
+                        {r.financeResolveError && <div>financeResolve: {String(r.financeResolveError)}</div>}
+                        {r.cryptoResolveError  && <div>cryptoResolve: {String(r.cryptoResolveError)}</div>}
+                        {r.weatherCreate?.errors?.length > 0 && <div>Wetter-Fehler: {r.weatherCreate.errors.join(', ')}</div>}
+                        {r.financeCreate?.errors?.length  > 0 && <div>Finance-Fehler: {r.financeCreate.errors.join(', ')}</div>}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
       )}
 
@@ -507,7 +586,6 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
             ))}
             <span style={{ fontSize: 12, color: 'var(--text-muted)', marginLeft: 4 }}>{filteredEditMarkets.length} Märkte</span>
           </div>
-
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {filteredEditMarkets.map(m => (
               <div key={m.id} className="card" style={{ padding: 0, overflow: 'hidden' }}>
@@ -537,7 +615,6 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
                     {editingMarket === m.id ? '▲' : '▼'}
                   </span>
                 </div>
-
                 {editingMarket === m.id && (
                   <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
                     <div>
@@ -574,19 +651,13 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
                       <label style={labelStyle}>Schließt am</label>
                       <input style={inputStyle} type="datetime-local" value={editFields.closes_at} onChange={e => setEditFields(f => ({ ...f, closes_at: e.target.value }))} />
                     </div>
-
                     <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 4, flexWrap: 'wrap' }}>
-                      <button
-                        onClick={() => saveMarket(m.id)}
-                        disabled={editSaving || !editFields.question.trim()}
-                        style={{ padding: '9px 22px', background: editSaving ? 'var(--surface)' : '#0ea5e9', color: editSaving ? 'var(--text-muted)' : 'white', border: 'none', borderRadius: 8, cursor: editSaving ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 700, opacity: editSaving ? 0.7 : 1 }}
-                      >
+                      <button onClick={() => saveMarket(m.id)} disabled={editSaving || !editFields.question.trim()} style={{ padding: '9px 22px', background: editSaving ? 'var(--surface)' : '#0ea5e9', color: editSaving ? 'var(--text-muted)' : 'white', border: 'none', borderRadius: 8, cursor: editSaving ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 700, opacity: editSaving ? 0.7 : 1 }}>
                         {editSaving ? 'Speichert…' : 'Speichern'}
                       </button>
                       <button onClick={() => setEditingMarket(null)} style={{ padding: '9px 16px', background: 'var(--surface)', color: 'var(--text-muted)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>
                         Abbrechen
                       </button>
-
                       {deleteConfirm === m.id ? (
                         <>
                           <span style={{ fontSize: 13, color: '#dc2626', fontWeight: 600 }}>Sicher löschen?</span>
@@ -602,7 +673,6 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
                           🗑 Löschen
                         </button>
                       )}
-
                       {editMessage && (
                         <span style={{ fontSize: 13, fontWeight: 600, color: editMessage.includes('Fehler') ? '#dc2626' : '#16a34a' }}>{editMessage}</span>
                       )}
@@ -645,36 +715,24 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
                       <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>{(u.balance ?? 0).toLocaleString('de')} ₫</div>
                     </div>
                     <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-                      <button
-                        onClick={() => { setEditingUser(u.id); setNewBalance(String(u.balance ?? 0)); setUserMessage(''); }}
-                        style={{ padding: '6px 12px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, cursor: 'pointer', fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}
-                      >
+                      <button onClick={() => { setEditingUser(u.id); setNewBalance(String(u.balance ?? 0)); setUserMessage(''); }} style={{ padding: '6px 12px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, cursor: 'pointer', fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}>
                         ✏️ Guthaben
                       </button>
                       {u.id !== userId && (
-                        <button
-                          onClick={() => setDeleteUserConfirm(u.id)}
-                          style={{ padding: '6px 10px', background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)', borderRadius: 6, cursor: 'pointer', fontSize: 12, color: '#dc2626', fontWeight: 600 }}
-                        >
+                        <button onClick={() => setDeleteUserConfirm(u.id)} style={{ padding: '6px 10px', background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)', borderRadius: 6, cursor: 'pointer', fontSize: 12, color: '#dc2626', fontWeight: 600 }}>
                           🗑
                         </button>
                       )}
                     </div>
                   </div>
-
                   {editingUser === u.id && (
                     <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border)', background: 'rgba(249,115,22,0.04)', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                      <input
-                        type="number" min={0} style={{ ...inputStyle, width: 140, marginBottom: 0, fontSize: 14 }}
-                        value={newBalance} onChange={e => setNewBalance(e.target.value)}
-                        placeholder="Neues Guthaben"
-                      />
+                      <input type="number" min={0} style={{ ...inputStyle, width: 140, marginBottom: 0, fontSize: 14 }} value={newBalance} onChange={e => setNewBalance(e.target.value)} placeholder="Neues Guthaben" />
                       <button onClick={() => saveUserBalance(u.id)} style={{ padding: '8px 16px', background: '#f97316', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>Speichern</button>
                       <button onClick={() => setEditingUser(null)} style={{ padding: '8px 12px', background: 'var(--surface)', color: 'var(--text-muted)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>Abbrechen</button>
                       {userMessage && <span style={{ fontSize: 13, fontWeight: 600, color: userMessage.includes('Fehler') || userMessage.includes('Ungültig') ? '#dc2626' : '#16a34a' }}>{userMessage}</span>}
                     </div>
                   )}
-
                   {deleteUserConfirm === u.id && (
                     <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border)', background: 'rgba(220,38,38,0.04)', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                       <span style={{ fontSize: 13, color: '#dc2626', fontWeight: 600 }}>Nutzer {u.username} — alle Daten löschen?</span>
