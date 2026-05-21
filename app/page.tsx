@@ -599,7 +599,7 @@ export default function Home() {
       <div style={{ position: 'fixed', top: 80, right: 16, zIndex: 9999, display: 'flex', flexDirection: 'column', gap: 10, pointerEvents: 'none' }}>
         {winToasts.map(toast => {
           const isUp = toast.direction === 'yes'
-          const accentColor = isUp ? '#16a34a' : '#dc2626'
+const accentColor = toast.isKrypto ? (isUp ? '#16a34a' : '#dc2626') : '#16a34a'
           return (
             <div key={toast.id} style={{ pointerEvents: 'all', background: 'var(--bg, #fff)', border: `1px solid ${isUp ? 'rgba(22,163,74,0.3)' : 'rgba(220,38,38,0.3)'}`, borderLeft: `4px solid ${accentColor}`, borderRadius: 12, padding: '14px 16px', minWidth: 270, maxWidth: 330, boxShadow: '0 4px 24px rgba(0,0,0,0.12)', animation: 'slideInRight 0.3s ease' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
