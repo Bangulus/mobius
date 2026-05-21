@@ -82,8 +82,8 @@ interface WeeklyEntry {
   user_id: string
   username: string
   weekly_gain: number
+  avatar_url?: string
 }
-
 interface WinToast {
   id: string
   coin?: string
