@@ -633,7 +633,12 @@ const accentColor = toast.isKrypto ? (isUp ? '#16a34a' : '#dc2626') : '#16a34a'
                   return (
                     <div key={e.user_id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 10, background: isMe ? 'var(--accent-light, rgba(99,102,241,0.08))' : 'var(--surface)', border: isMe ? '1px solid rgba(99,102,241,0.2)' : '1px solid transparent' }}>
                       <span style={{ fontSize: 16, width: 24, textAlign: 'center', flexShrink: 0 }}>{medal}</span>
-                      <div style={{ width: 30, height: 30, borderRadius: '50%', background: av.bg, color: av.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{e.username.slice(0, 2).toUpperCase()}</div>
+                    {e.avatar_url ? (
+  // eslint-disable-next-line @next/next/no-img-element
+  <img src={e.avatar_url} alt={e.username} style={{ width: 30, height: 30, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+) : (
+  <div style={{ width: 30, height: 30, borderRadius: '50%', background: av.bg, color: av.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{e.username.slice(0, 2).toUpperCase()}</div>
+)}
                       <span style={{ fontSize: 13, color: 'var(--text)', fontWeight: isMe ? 700 : 500, flex: 1 }}>{e.username}{isMe ? ' (du)' : ''}</span>
                       <span style={{ fontSize: 13, fontWeight: 700, color: '#16a34a' }}>+{e.weekly_gain.toLocaleString('de')} ₫</span>
                     </div>
