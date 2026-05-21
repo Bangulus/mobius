@@ -1560,6 +1560,7 @@ export default function MarketPage() {
         )}
 
         {!isFormula1 && !isWeather && market.description && <MarketRules description={market.description} />}
+        <CommentsSection marketId={marketId} />
       </div>
 
       <style>{`
