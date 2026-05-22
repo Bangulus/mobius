@@ -598,6 +598,7 @@ export default function MarketPage() {
   const resolveTriggeredRef             = useRef(false)
 
   const [resultToast, setResultToast] = useState<ResultToast | null>(null)
+const [copied, setCopied] = useState(false)
   const toastShownRef                 = useRef(false)
 
   const currentIntervalMs = useRef(10000)
