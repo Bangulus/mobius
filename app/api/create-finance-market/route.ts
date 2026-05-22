@@ -43,7 +43,6 @@ export async function POST() {
       activeMarkets.map((m: { coin: string; group_title: string }) => `${m.coin}|${m.group_title}`)
     )
 
-    // FIX: getBerlinParts() statt getBerlinTime().getDay()
     const { day } = getBerlinParts()
     const isWeekday = [1, 2, 3, 4, 5].includes(day)
 
@@ -114,4 +113,8 @@ export async function POST() {
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })
   }
+}
+
+export async function GET() {
+  return POST()
 }
