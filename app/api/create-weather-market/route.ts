@@ -28,7 +28,11 @@ async function dbPost(table: string, body: Record<string, unknown>) {
     },
     body: JSON.stringify(body),
   })
-  return res.ok
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`db:${res.status}:${text}`)
+  }
+  return true
 }
 
 async function marketExistsForCity(cityId: string): Promise<boolean> {
