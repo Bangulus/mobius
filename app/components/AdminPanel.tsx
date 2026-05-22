@@ -103,6 +103,11 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
     if (adminTab === 'users')    loadUsers();
     if (adminTab === 'dashboard') loadDashboard();
     if (adminTab === 'cronlogs') loadCronLogs();
+
+    if (adminTab === 'cronlogs') {
+      const interval = setInterval(loadCronLogs, 30000);
+      return () => clearInterval(interval);
+    }
   }, [adminTab]);
 
   // ── Loaders ──────────────────────────────────────────────────────────────
