@@ -182,10 +182,10 @@ export async function GET(request: Request) {
   // --- CRON LOG ---
   try {
     const hadErrors =
-  ((results.weatherCreate as { errors?: unknown[] })?.errors?.length ?? 0) > 0 ||
-  ((results.financeCreate as { errors?: unknown[] })?.errors?.length ?? 0) > 0 ||
-  ((results.weatherResolve as { errors?: unknown[] })?.errors?.length ?? 0) > 0 ||
-  Object.keys(results).some(k => k.endsWith('Error'))
+      ((results.weatherCreate as { errors?: unknown[] })?.errors?.length ?? 0) > 0 ||
+      ((results.financeCreate as { errors?: unknown[] })?.errors?.length ?? 0) > 0 ||
+      ((results.weatherResolve as { errors?: unknown[] })?.errors?.length ?? 0) > 0 ||
+      Object.keys(results).some(k => k.endsWith('Error'))
 
     await fetch(`${SUPABASE_URL}/rest/v1/cron_logs`, {
       method: 'POST',
@@ -198,9 +198,12 @@ export async function GET(request: Request) {
       body: JSON.stringify({ results, had_errors: hadErrors }),
     })
   } catch (e) {
-    // Logging-Fehler nie den Cron blockieren lassen
     console.error('cron_log write failed:', e)
   }
 
   return NextResponse.json({ ok: true, results })
+}
+
+export async function POST(request: Request) {
+  return GET(request)
 }
