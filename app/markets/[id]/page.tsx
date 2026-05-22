@@ -1195,34 +1195,33 @@ const [copied, setCopied] = useState(false)
           <img src="/logo-weiss.png" alt="Möbius" className="nav-logo" onClick={() => router.push('/')} style={{ cursor: 'pointer' }} />
           <button className="nav-pill" onClick={() => router.push(backTarget)} style={{ fontSize: 13 }}>{backLabel}</button>
         </div>
-        <div className="nav-right">
+      <div className="nav-right">
+          <button
+            onClick={() => {
+              navigator.clipboard.writeText(window.location.href)
+              setCopied(true)
+              setTimeout(() => setCopied(false), 2000)
+            }}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              padding: '6px 14px', borderRadius: 20,
+              border: '1px solid var(--border)',
+              background: copied ? 'rgba(22,163,74,0.1)' : 'var(--surface)',
+              color: copied ? '#16a34a' : 'var(--text-muted)',
+              cursor: 'pointer', fontSize: 13, fontWeight: 600,
+              transition: 'all 0.2s',
+            }}
+          >
+            {copied ? '✓ Kopiert' : '↗ Teilen'}
+          </button>
           {user ? (
-           <button
-  onClick={() => {
-    navigator.clipboard.writeText(window.location.href)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }}
-  style={{
-    display: 'flex', alignItems: 'center', gap: 6,
-    padding: '6px 14px', borderRadius: 20,
-    border: '1px solid var(--border)',
-    background: copied ? 'rgba(22,163,74,0.1)' : 'var(--surface)',
-    color: copied ? '#16a34a' : 'var(--text-muted)',
-    cursor: 'pointer', fontSize: 13, fontWeight: 600,
-    transition: 'all 0.2s',
-  }}
->
-  {copied ? '✓ Kopiert' : '↗ Teilen'}
-</button>
-{user ? (
-  <div className="nav-stat">
-    <div className="nav-stat-label">Guthaben</div>
-    <div className="nav-stat-value">{user.balance.toLocaleString('de')} ₫</div>
-  </div>
-) : (
-  <button className="nav-pill accent" onClick={() => router.push('/')}>Anmelden</button>
-)}
+            <div className="nav-stat">
+              <div className="nav-stat-label">Guthaben</div>
+              <div className="nav-stat-value">{user.balance.toLocaleString('de')} ₫</div>
+            </div>
+          ) : (
+            <button className="nav-pill accent" onClick={() => router.push('/')}>Anmelden</button>
+          )}
         </div>
       </nav>
 
