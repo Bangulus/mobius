@@ -29,7 +29,11 @@ async function createMarket(payload: Record<string, unknown>) {
     headers: { ...getAdminHeaders(), Prefer: 'return=representation' },
     body: JSON.stringify(payload),
   })
-  return res.ok
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`db:${res.status}:${text}`)
+  }
+  return true
 }
 
 export async function POST() {
