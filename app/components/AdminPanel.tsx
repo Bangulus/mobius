@@ -80,11 +80,11 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
 
   const [dashStats, setDashStats] = useState<{
     totalUsers: number;
-    totalMarkets: number;
     openMarkets: number;
     tradesToday: number;
     volumeToday: number;
     activeUsersToday: number;
+    activeUsersWeek: number;
     topMarkets: any[];
   } | null>(null);
   const [dashLoading, setDashLoading] = useState(false);
@@ -135,13 +135,17 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
   async function loadDashboard() {
     setDashLoading(true);
     const todayStart = new Date(); todayStart.setUTCHours(0, 0, 0, 0);
-    const since = todayStart.toISOString();
+    const weekStart = new Date(); weekStart.setUTCDate(weekStart.getUTCDate() - 7); weekStart.setUTCHours(0, 0, 0, 0);
+    const sinceToday = todayStart.toISOString();
+    const sinceWeek = weekStart.toISOString();
 
-    const [totalUsers, totalMarkets, openMarketsCount, tradesTodayRes, allOpenMarketsRes] = await Promise.all([
+    const [totalUsers, openMarketsCount, tradesTodayRes, tradesWeekRes, allOpenMarketsRes] = await Promise.all([
       fetchCount('users'),
-      fetchCount('markets'),
       fetchCount('markets?status=eq.open&resolved=eq.false'),
-      fetch(`${supabaseUrl}/rest/v1/trades?created_at=gte.${since}&select=user_id,cost,type`, {
+      fetch(`${supabaseUrl}/rest/v1/trades?created_at=gte.${sinceToday}&select=user_id,cost,type`, {
+        headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` },
+      }),
+      fetch(`${supabaseUrl}/rest/v1/trades?created_at=gte.${sinceWeek}&select=user_id,type`, {
         headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` },
       }),
       fetch(`${supabaseUrl}/rest/v1/markets?status=eq.open&select=id,question,short_label,q_yes,q_no`, {
@@ -149,25 +153,30 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
       }),
     ]);
 
-    const [tradesToday, allOpenMarkets] = await Promise.all([
+    const [tradesToday, tradesWeek, allOpenMarkets] = await Promise.all([
       tradesTodayRes.json(),
+      tradesWeekRes.json(),
       allOpenMarketsRes.json(),
     ]);
 
-    const buyTrades = (tradesToday ?? []).filter((t: any) => t.type === 'buy_yes' || t.type === 'buy_no');
-    const volumeToday = buyTrades.reduce((s: number, t: any) => s + Math.abs(t.cost ?? 0), 0);
-    const activeUsersToday = new Set(buyTrades.map((t: any) => t.user_id)).size;
+    const buyTradesToday = (tradesToday ?? []).filter((t: any) => t.type === 'buy_yes' || t.type === 'buy_no');
+    const buyTradesWeek  = (tradesWeek  ?? []).filter((t: any) => t.type === 'buy_yes' || t.type === 'buy_no');
+
+    const volumeToday      = buyTradesToday.reduce((s: number, t: any) => s + Math.abs(t.cost ?? 0), 0);
+    const activeUsersToday = new Set(buyTradesToday.map((t: any) => t.user_id)).size;
+    const activeUsersWeek  = new Set(buyTradesWeek.map((t: any) => t.user_id)).size;
 
     const topMarkets = [...(allOpenMarkets ?? [])]
       .sort((a: any, b: any) => (b.q_yes + b.q_no) - (a.q_yes + a.q_no))
       .slice(0, 5);
 
     setDashStats({
-      totalUsers, totalMarkets,
+      totalUsers,
       openMarkets: openMarketsCount,
-      tradesToday: buyTrades.length,
+      tradesToday: buyTradesToday.length,
       volumeToday: Math.round(volumeToday),
       activeUsersToday,
+      activeUsersWeek,
       topMarkets,
     });
     setDashLoading(false);
@@ -463,11 +472,11 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
             <>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 12, marginBottom: 28 }}>
                 {statCard('Nutzer gesamt', dashStats.totalUsers)}
-                {statCard('Märkte gesamt', dashStats.totalMarkets)}
                 {statCard('Offene Märkte', dashStats.openMarkets, '#16a34a')}
                 {statCard('Trades heute', dashStats.tradesToday, '#6366f1')}
                 {statCard('Volumen heute', `${dashStats.volumeToday.toLocaleString('de')} ₫`, '#f59e0b')}
                 {statCard('Aktive Nutzer heute', dashStats.activeUsersToday, '#0ea5e9')}
+                {statCard('Aktive Nutzer diese Woche', dashStats.activeUsersWeek, '#8b5cf6')}
               </div>
               {dashStats.topMarkets.length > 0 && (
                 <div>
