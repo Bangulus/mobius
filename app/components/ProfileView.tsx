@@ -115,7 +115,7 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, o
   const [profileMessage, setProfileMessage]     = useState('');
   const [editingUsername, setEditingUsername]   = useState(false);
   const [tab, setTab]                           = useState<TabType>('positionen');
-  const [subTab, setSubTab]                     = useState<SubTabType>('aktiv');
+  const [subTab, setSubTab]                     = useState<SubTabType>('offen');
   const [allRows, setAllRows]                   = useState<PortfolioEntry[]>([]);
   const [allTrades, setAllTrades]               = useState<TradeRow[]>([]);
   const [portfolioLoading, setPortfolioLoading] = useState(true);
@@ -125,9 +125,9 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, o
   const offeneCount      = allRows.filter(r => !r.market.resolved).length;
   const gewonnen         = allRows.filter(r => r.market.resolved && r.auszahlung !== null && r.auszahlung > 0);
   const groessterGewinn  = gewonnen.length > 0 ? Math.max(...gewonnen.map(r => r.auszahlung ?? 0)) : 0;
-  const aktiveRows       = allRows.filter(r => !r.market.resolved);
+  const offeneRows       = allRows.filter(r => !r.market.resolved);
   const geschlosseneRows = allRows.filter(r => r.market.resolved);
-  const displayRows      = subTab === 'aktiv' ? aktiveRows : geschlosseneRows;
+  const displayRows      = subTab === 'offen' ? offeneRows : geschlosseneRows;
 
   const streak       = calcStreak(allTrades);
   const trefferquote = calcTrefferquote(allRows);
@@ -154,7 +154,6 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, o
       const isSell = trade.type === 'sell_yes' || trade.type === 'sell_no';
       const dir: 'yes' | 'no' = trade.type.includes('yes') ? 'yes' : 'no';
       if (!entryMap[trade.market_id]) {
-        // resolved_at bevorzugen (manuell gesetzt), sonst closes_at
         const closedAt = (market as any).resolved_at ?? market.closes_at ?? null;
         entryMap[trade.market_id] = {
           market,
@@ -377,7 +376,7 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, o
       {tab === 'positionen' && (
         <>
           <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
-            {(['aktiv', 'geschlossen'] as SubTabType[]).map(s => (
+            {(['offen', 'geschlossen'] as SubTabType[]).map(s => (
               <button key={s} onClick={() => setSubTab(s)} style={{
                 padding: '6px 16px', borderRadius: 20, fontSize: 13, fontWeight: 600, cursor: 'pointer',
                 border: '1px solid var(--border)',
@@ -385,7 +384,7 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, o
                 color: subTab === s ? 'var(--bg)' : 'var(--text-muted)',
                 transition: 'all 0.15s',
               }}>
-                {s === 'aktiv' ? `Aktiv (${aktiveRows.length})` : `Geschlossen (${geschlosseneRows.length})`}
+                {s === 'offen' ? `Offen (${offeneRows.length})` : `Geschlossen (${geschlosseneRows.length})`}
               </button>
             ))}
           </div>
@@ -394,14 +393,14 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, o
             <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--text-muted)', fontSize: 13 }}>Let the AI cook...</div>
           ) : displayRows.length === 0 ? (
             <div className="card" style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)', fontSize: 13 }}>
-              {subTab === 'aktiv' ? 'Keine aktiven Positionen.' : 'Noch keine abgeschlossenen Positionen.'}
+              {subTab === 'offen' ? 'Keine offenen Positionen.' : 'Noch keine abgeschlossenen Positionen.'}
             </div>
           ) : (
             <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ background: 'var(--surface)' }}>
-                    {['Markt', 'Tipp', 'Eingesetzt', 'Ergebnis', 'Auszahlung', subTab === 'aktiv' ? 'Gesetzt am' : 'Geschlossen am'].map((h, i) => (
+                    {['Markt', 'Tipp', 'Eingesetzt', 'Ergebnis', 'Auszahlung', subTab === 'offen' ? 'Gesetzt am' : 'Geschlossen am'].map((h, i) => (
                       <th key={h} style={{
                         textAlign: i === 0 ? 'left' : 'right', fontSize: 11, fontWeight: 600,
                         color: 'var(--text-muted)', padding: '12px 20px',
@@ -417,21 +416,18 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, o
                     const isSport = m.category === 'sport';
                     const isYes = entry.direction === 'yes';
 
-                    // Richtungsbezeichnung
                     const richtungLabel = isSport
                       ? (isYes ? 'Ja' : 'Nein')
                       : m.is_auto
                         ? (isYes ? '↑ Up' : '↓ Down')
                         : (isYes ? 'Ja' : 'Nein');
 
-                    // Marktname
                     const marktName = isSport
                       ? m.question
                       : m.is_auto && m.coin
                         ? `${m.coin} · 3-Minuten-Markt`
                         : m.question;
 
-                    // Icon
                     const iconEl = isSport ? (
                       <span style={{ width: 28, height: 28, borderRadius: 8, background: '#16a34a22', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, flexShrink: 0 }}>
                         ⚽
@@ -446,13 +442,11 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, o
                     const won  = resolved && entry.auszahlung !== null && entry.auszahlung > 0;
                     const lost = resolved && entry.auszahlung === 0;
 
-                    // Datum
                     const dateSource = subTab === 'geschlossen' && entry.marketClosedAt
                       ? entry.marketClosedAt
                       : entry.tradeCreatedAt;
                     const { date, time } = formatDateTime(dateSource);
 
-                    // Ergebnis-Label für Sport
                     let ergebnisLabel = '';
                     if (resolved) {
                       if (isSport) {
@@ -466,7 +460,6 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, o
 
                     return (
                       <tr key={entry.market.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                        {/* Markt */}
                         <td style={{ padding: '14px 20px', fontSize: 13, color: 'var(--text)', maxWidth: 280 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                             {iconEl}
@@ -475,17 +468,14 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, o
                             </span>
                           </div>
                         </td>
-                        {/* Tipp */}
                         <td style={{ padding: '14px 20px', textAlign: 'right' }}>
                           <span style={{ fontSize: 12, padding: '3px 10px', borderRadius: 20, fontWeight: 600, background: isYes ? 'rgba(22,163,74,0.12)' : 'rgba(220,38,38,0.12)', color: isYes ? '#15803d' : '#b91c1c' }}>
                             {richtungLabel}
                           </span>
                         </td>
-                        {/* Eingesetzt */}
                         <td style={{ padding: '14px 20px', textAlign: 'right', fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>
                           {Math.round(entry.einsatz).toLocaleString('de')} ₫
                         </td>
-                        {/* Ergebnis */}
                         <td style={{ padding: '14px 20px', textAlign: 'right' }}>
                           {!resolved ? (
                             <span style={{ fontSize: 12, padding: '3px 10px', borderRadius: 20, background: 'rgba(245,158,11,0.12)', color: '#b45309', fontWeight: 600 }}>Läuft</span>
@@ -495,7 +485,6 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, o
                             </span>
                           )}
                         </td>
-                        {/* Auszahlung */}
                         <td style={{ padding: '14px 20px', textAlign: 'right', fontSize: 13, fontWeight: 700 }}>
                           {!resolved && entry.auszahlung === null ? (
                             <span style={{ color: 'var(--text-muted)', fontWeight: 400, fontSize: 12 }}>ausstehend</span>
@@ -507,7 +496,6 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, o
                             <span style={{ color: 'var(--text-muted)' }}>—</span>
                           )}
                         </td>
-                        {/* Datum */}
                         <td style={{ padding: '14px 20px', textAlign: 'right' }}>
                           <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)' }}>{date}</div>
                           <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{time}</div>
@@ -642,18 +630,17 @@ function AktivitaetsFeed({ userId }: { userId: string }) {
   return (
     <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
       {items.map((item, idx) => {
-        const m      = item.market;
+        const m       = item.market;
         const isSport = m?.category === 'sport';
-        const isBuy  = item.type.startsWith('buy');
-        const isSell = item.type.startsWith('sell');
-        const isWin  = item.type === 'win';
-        const isYes  = item.type.includes('yes');
+        const isBuy   = item.type.startsWith('buy');
+        const isSell  = item.type.startsWith('sell');
+        const isWin   = item.type === 'win';
+        const isYes   = item.type.includes('yes');
 
         const coinColor = !isWin && !isSport && m?.is_auto && m.coin
           ? COIN_COLORS_FEED[m.coin] ?? '#f97316'
           : null;
 
-        // Marktname: Sport zeigt die echte Frage
         const marketLabel = m
           ? isSport
             ? (m.question.length > 52 ? m.question.slice(0, 52) + '…' : m.question)
@@ -670,9 +657,9 @@ function AktivitaetsFeed({ userId }: { userId: string }) {
 
         let iconBg      = 'rgba(99,102,241,0.12)';
         let iconContent = '⇄';
-        if (isWin)       { iconBg = 'rgba(22,163,74,0.15)'; iconContent = '🏆'; }
+        if (isWin)        { iconBg = 'rgba(22,163,74,0.15)'; iconContent = '🏆'; }
         else if (isSport) { iconBg = 'rgba(22,163,74,0.10)'; iconContent = '⚽'; }
-        else if (isBuy)  { iconBg = isYes ? 'rgba(22,163,74,0.12)' : 'rgba(220,38,38,0.12)'; iconContent = isYes ? '↑' : '↓'; }
+        else if (isBuy)   { iconBg = isYes ? 'rgba(22,163,74,0.12)' : 'rgba(220,38,38,0.12)'; iconContent = isYes ? '↑' : '↓'; }
 
         let subText     = '';
         let amountLabel = '';
