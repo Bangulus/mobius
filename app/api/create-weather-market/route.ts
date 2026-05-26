@@ -9,7 +9,10 @@ function isAuthorized(req: NextRequest): boolean {
   const authHeader  = req.headers.get('authorization')
   const querySecret = new URL(req.url).searchParams.get('secret')
   const host        = req.headers.get('host') ?? ''
-  const isInternal  = host.includes('vercel.app') || host.includes('localhost')
+  const isInternal  =
+    host.includes('vercel.app') ||
+    host.includes('localhost') ||
+    host.includes('moebiusmarkets.de')
   return (
     authHeader === `Bearer ${CRON_SECRET}` ||
     querySecret === CRON_SECRET ||
