@@ -12,7 +12,26 @@ const COINS = [
   { id: 'XRP', label: '✕ XRP', color: '#00aae4' },
 ];
 
-const CATEGORIES = ['Politik', 'Sport', 'Krypto', 'Entertainment', 'Wirtschaft', 'Geopolitik', 'Finanzen', 'Tech', 'Wetter', 'Kultur', 'formula1', 'finance', 'weather'];
+const CATEGORIES = [
+  'Politik',
+  'Politik-Deutschland',
+  'Politik-USA',
+  'Sport',
+  'Sport-Fußball-Bundesliga',
+  'Sport-Fußball-CL',
+  'Sport-Fußball-WM 2026',
+  'Krypto',
+  'Entertainment',
+  'Wirtschaft',
+  'Geopolitik',
+  'Finanzen',
+  'Tech',
+  'Wetter',
+  'Kultur',
+  'formula1',
+  'finance',
+  'weather',
+];
 
 interface Props {
   userId: string;
@@ -110,8 +129,6 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
     }
   }, [adminTab]);
 
-  // ── Loaders ──────────────────────────────────────────────────────────────
-
   async function loadBtcMarkets() {
     const res = await fetch(`${supabaseUrl}/rest/v1/markets?is_auto=eq.true&select=*&order=created_at.desc`, {
       headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` },
@@ -197,8 +214,6 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
     setCronLogsLoading(false);
   }
 
-  // ── Editor ────────────────────────────────────────────────────────────────
-
   function openEditor(m: any) {
     setEditingMarket(m.id);
     let closesAtLocal = '';
@@ -267,8 +282,6 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
     setDeleteLoading(false);
   }
 
-  // ── Users ─────────────────────────────────────────────────────────────────
-
   async function saveUserBalance(userId: string) {
     const parsed = parseInt(newBalance);
     if (isNaN(parsed) || parsed < 0) { setUserMessage('Ungültiger Betrag.'); return; }
@@ -294,8 +307,6 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
     setDeleteUserConfirm(null);
   }
 
-  // ── Krypto ────────────────────────────────────────────────────────────────
-
   async function createCryptoMarket(coin: string) {
     setBtcCreating(true); setBtcMessage('');
     const res = await fetch('/api/create-crypto-market', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ coin }) });
@@ -318,8 +329,6 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
     } else { setBtcMessage(`❌ Fehler: ${data.error ?? data.message}`); }
     setResolvingBtc(null);
   }
-
-  // ── Create ────────────────────────────────────────────────────────────────
 
   async function handleCreateMarket() {
     if (!newQuestion.trim()) { setCreateMessage('❌ Frage ist Pflichtfeld.'); return; }
@@ -348,8 +357,6 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
     } else { setCreateMessage(`❌ Fehler: ${await res.text()}`); }
     setCreateLoading(false);
   }
-
-  // ── Resolve manual markets ────────────────────────────────────────────────
 
   async function resolveMarket(marketId: string, resolution: 'yes' | 'no') {
     setResolvingMarket(marketId);
@@ -393,8 +400,6 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
     }));
   }
 
-  // ── Helpers ───────────────────────────────────────────────────────────────
-
   function formatCountdown(closesAt: string) {
     const diff = new Date(closesAt).getTime() - now;
     if (diff <= 0) return '⏰ Abgelaufen';
@@ -428,8 +433,6 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
     userSearch === '' || (u.username ?? '').toLowerCase().includes(userSearch.toLowerCase())
   );
 
-  // ── Styles ────────────────────────────────────────────────────────────────
-
   const inputStyle: React.CSSProperties = {
     width: '100%', padding: '10px 12px', border: '1px solid var(--border)',
     borderRadius: 8, fontSize: 14, color: 'var(--text)', background: 'var(--bg)',
@@ -456,7 +459,6 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
 
   return (
     <div>
-      {/* Tab Bar */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 24, flexWrap: 'wrap' }}>
         <button style={tabBtn(adminTab === 'dashboard', '#7c3aed')}    onClick={() => setAdminTab('dashboard')}>📊 Dashboard</button>
         <button style={tabBtn(adminTab === 'open')}                     onClick={() => setAdminTab('open')}>Offene Märkte</button>
@@ -520,7 +522,7 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
           {cronLogsLoading ? (
             <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Lädt…</div>
           ) : cronLogs.length === 0 ? (
-            <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Noch keine Logs. Cron einmal manuell triggern.</div>
+            <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Noch keine Logs.</div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {cronLogs.map((log: any) => {
@@ -533,13 +535,8 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
                 const weatherResolved = r.weatherResolve?.resolved ?? 0
                 const financeCreated  = r.financeCreate?.created?.length ?? 0
                 const financeErrors   = r.financeCreate?.errors?.length ?? 0
-
                 return (
-                  <div key={log.id} style={{
-                    border: `1px solid ${log.had_errors ? 'rgba(220,38,38,0.3)' : 'rgba(22,163,74,0.2)'}`,
-                    borderLeft: `4px solid ${log.had_errors ? '#dc2626' : '#16a34a'}`,
-                    borderRadius: 10, overflow: 'hidden', background: 'var(--card)',
-                  }}>
+                  <div key={log.id} style={{ border: `1px solid ${log.had_errors ? 'rgba(220,38,38,0.3)' : 'rgba(22,163,74,0.2)'}`, borderLeft: `4px solid ${log.had_errors ? '#dc2626' : '#16a34a'}`, borderRadius: 10, overflow: 'hidden', background: 'var(--card)' }}>
                     <div style={{ padding: '10px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                         <span style={{ fontSize: 16 }}>{log.had_errors ? '🔴' : '🟢'}</span>
@@ -547,21 +544,13 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
                           <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>
                             {ranAt.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })} · {ranAt.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                           </div>
-                          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
-                            {log.had_errors ? 'Mit Fehlern' : 'Erfolgreich'}
-                          </div>
+                          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{log.had_errors ? 'Mit Fehlern' : 'Erfolgreich'}</div>
                         </div>
                       </div>
                       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                        <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 6, background: cryptoOk ? 'rgba(22,163,74,0.1)' : 'rgba(220,38,38,0.1)', color: cryptoOk ? '#16a34a' : '#dc2626' }}>
-                          🪙 Krypto {cryptoOk ? '✓' : '✗'}
-                        </span>
-                        <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 6, background: financeOk ? 'rgba(22,163,74,0.1)' : 'rgba(220,38,38,0.1)', color: financeOk ? '#16a34a' : '#dc2626' }}>
-                          📈 Finance {financeOk ? `✓ ${financeCreated} neu` : `✗ ${financeErrors} Fehler`}
-                        </span>
-                        <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 6, background: weatherOk ? 'rgba(22,163,74,0.1)' : 'rgba(220,38,38,0.1)', color: weatherOk ? '#16a34a' : '#dc2626' }}>
-                          🌤 Wetter {weatherOk ? `✓ ${weatherCreated} neu · ${weatherResolved} aufgelöst` : '✗ Fehler'}
-                        </span>
+                        <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 6, background: cryptoOk ? 'rgba(22,163,74,0.1)' : 'rgba(220,38,38,0.1)', color: cryptoOk ? '#16a34a' : '#dc2626' }}>🪙 Krypto {cryptoOk ? '✓' : '✗'}</span>
+                        <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 6, background: financeOk ? 'rgba(22,163,74,0.1)' : 'rgba(220,38,38,0.1)', color: financeOk ? '#16a34a' : '#dc2626' }}>📈 Finance {financeOk ? `✓ ${financeCreated} neu` : `✗ ${financeErrors} Fehler`}</span>
+                        <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 6, background: weatherOk ? 'rgba(22,163,74,0.1)' : 'rgba(220,38,38,0.1)', color: weatherOk ? '#16a34a' : '#dc2626' }}>🌤 Wetter {weatherOk ? `✓ ${weatherCreated} neu · ${weatherResolved} aufgelöst` : '✗ Fehler'}</span>
                       </div>
                     </div>
                     {log.had_errors && (
@@ -587,12 +576,7 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
       {adminTab === 'edit' && (
         <div style={{ maxWidth: 720 }}>
           <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
-            <input
-              style={{ ...inputStyle, width: 260, marginBottom: 0 }}
-              placeholder="Markt suchen…"
-              value={editSearch}
-              onChange={e => setEditSearch(e.target.value)}
-            />
+            <input style={{ ...inputStyle, width: 260, marginBottom: 0 }} placeholder="Markt suchen…" value={editSearch} onChange={e => setEditSearch(e.target.value)} />
             {(['all', 'manual', 'auto'] as const).map(f => (
               <button key={f} onClick={() => setEditFilter(f)} style={{ padding: '8px 14px', borderRadius: 8, border: `1px solid ${editFilter === f ? '#0ea5e9' : 'var(--border)'}`, background: editFilter === f ? '#0ea5e9' : 'var(--surface)', color: editFilter === f ? '#fff' : 'var(--text-muted)', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
                 {f === 'all' ? 'Alle' : f === 'manual' ? 'Manuell' : 'Automatisch'}
@@ -603,31 +587,17 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {filteredEditMarkets.map(m => (
               <div key={m.id} className="card" style={{ padding: 0, overflow: 'hidden' }}>
-                <div
-                  onClick={() => editingMarket === m.id ? setEditingMarket(null) : openEditor(m)}
-                  style={{
-                    padding: '12px 16px', cursor: 'pointer',
-                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                    background: editingMarket === m.id ? 'rgba(14,165,233,0.08)' : 'var(--card)',
-                    borderBottom: editingMarket === m.id ? '1px solid var(--border)' : 'none',
-                  }}
-                >
+                <div onClick={() => editingMarket === m.id ? setEditingMarket(null) : openEditor(m)} style={{ padding: '12px 16px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: editingMarket === m.id ? 'rgba(14,165,233,0.08)' : 'var(--card)', borderBottom: editingMarket === m.id ? '1px solid var(--border)' : 'none' }}>
                   <div style={{ minWidth: 0, flex: 1 }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {m.short_label ?? m.question}
-                    </div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.short_label ?? m.question}</div>
                     <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, display: 'flex', gap: 8, alignItems: 'center' }}>
                       <span>{m.category}</span>
                       {m.group_title && <><span>·</span><span>{m.group_title}</span></>}
-                      <span style={{ padding: '1px 6px', borderRadius: 4, background: m.is_auto ? 'rgba(99,102,241,0.12)' : 'rgba(100,116,139,0.12)', color: m.is_auto ? '#6366f1' : 'var(--text-muted)', fontSize: 10, fontWeight: 700 }}>
-                        {m.is_auto ? 'AUTO' : 'MANUELL'}
-                      </span>
+                      <span style={{ padding: '1px 6px', borderRadius: 4, background: m.is_auto ? 'rgba(99,102,241,0.12)' : 'rgba(100,116,139,0.12)', color: m.is_auto ? '#6366f1' : 'var(--text-muted)', fontSize: 10, fontWeight: 700 }}>{m.is_auto ? 'AUTO' : 'MANUELL'}</span>
                       {m.resolved && <span style={{ padding: '1px 6px', borderRadius: 4, background: 'rgba(220,38,38,0.1)', color: '#dc2626', fontSize: 10, fontWeight: 700 }}>AUFGELÖST</span>}
                     </div>
                   </div>
-                  <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0, marginLeft: 12 }}>
-                    {editingMarket === m.id ? '▲' : '▼'}
-                  </span>
+                  <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0, marginLeft: 12 }}>{editingMarket === m.id ? '▲' : '▼'}</span>
                 </div>
                 {editingMarket === m.id && (
                   <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -642,7 +612,7 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
                     <div>
                       <label style={labelStyle}>Auflösungsregeln</label>
                       <textarea
-                        style={{ ...inputStyle, minHeight: 100, resize: 'vertical', fontSize: 13, lineHeight: 1.6 }}
+                        style={{ ...inputStyle, minHeight: 160, resize: 'vertical', fontSize: 13, lineHeight: 1.6 }}
                         value={editFields.description}
                         onChange={e => setEditFields(f => ({ ...f, description: e.target.value }))}
                         placeholder="z.B. Löst mit JA auf, wenn…"
@@ -669,35 +639,23 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
                       <button onClick={() => saveMarket(m.id)} disabled={editSaving || !editFields.question.trim()} style={{ padding: '9px 22px', background: editSaving ? 'var(--surface)' : '#0ea5e9', color: editSaving ? 'var(--text-muted)' : 'white', border: 'none', borderRadius: 8, cursor: editSaving ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 700, opacity: editSaving ? 0.7 : 1 }}>
                         {editSaving ? 'Speichert…' : 'Speichern'}
                       </button>
-                      <button onClick={() => setEditingMarket(null)} style={{ padding: '9px 16px', background: 'var(--surface)', color: 'var(--text-muted)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>
-                        Abbrechen
-                      </button>
+                      <button onClick={() => setEditingMarket(null)} style={{ padding: '9px 16px', background: 'var(--surface)', color: 'var(--text-muted)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>Abbrechen</button>
                       {deleteConfirm === m.id ? (
                         <>
                           <span style={{ fontSize: 13, color: '#dc2626', fontWeight: 600 }}>Sicher löschen?</span>
-                          <button onClick={() => deleteMarket(m.id)} disabled={deleteLoading} style={{ padding: '9px 16px', background: '#dc2626', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>
-                            {deleteLoading ? 'Löscht…' : 'Ja, löschen'}
-                          </button>
-                          <button onClick={() => setDeleteConfirm(null)} style={{ padding: '9px 12px', background: 'var(--surface)', color: 'var(--text-muted)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>
-                            Abbrechen
-                          </button>
+                          <button onClick={() => deleteMarket(m.id)} disabled={deleteLoading} style={{ padding: '9px 16px', background: '#dc2626', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>{deleteLoading ? 'Löscht…' : 'Ja, löschen'}</button>
+                          <button onClick={() => setDeleteConfirm(null)} style={{ padding: '9px 12px', background: 'var(--surface)', color: 'var(--text-muted)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>Abbrechen</button>
                         </>
                       ) : (
-                        <button onClick={() => setDeleteConfirm(m.id)} style={{ padding: '9px 16px', background: 'rgba(220,38,38,0.08)', color: '#dc2626', border: '1px solid rgba(220,38,38,0.2)', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600, marginLeft: 'auto' }}>
-                          🗑 Löschen
-                        </button>
+                        <button onClick={() => setDeleteConfirm(m.id)} style={{ padding: '9px 16px', background: 'rgba(220,38,38,0.08)', color: '#dc2626', border: '1px solid rgba(220,38,38,0.2)', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600, marginLeft: 'auto' }}>🗑 Löschen</button>
                       )}
-                      {editMessage && (
-                        <span style={{ fontSize: 13, fontWeight: 600, color: editMessage.includes('Fehler') ? '#dc2626' : '#16a34a' }}>{editMessage}</span>
-                      )}
+                      {editMessage && <span style={{ fontSize: 13, fontWeight: 600, color: editMessage.includes('Fehler') ? '#dc2626' : '#16a34a' }}>{editMessage}</span>}
                     </div>
                   </div>
                 )}
               </div>
             ))}
-            {filteredEditMarkets.length === 0 && (
-              <div style={{ color: 'var(--text-muted)', fontSize: 13, padding: '16px 0' }}>Keine Märkte gefunden.</div>
-            )}
+            {filteredEditMarkets.length === 0 && <div style={{ color: 'var(--text-muted)', fontSize: 13, padding: '16px 0' }}>Keine Märkte gefunden.</div>}
           </div>
         </div>
       )}
@@ -729,13 +687,9 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
                       <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>{(u.balance ?? 0).toLocaleString('de')} ₫</div>
                     </div>
                     <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-                      <button onClick={() => { setEditingUser(u.id); setNewBalance(String(u.balance ?? 0)); setUserMessage(''); }} style={{ padding: '6px 12px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, cursor: 'pointer', fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}>
-                        ✏️ Guthaben
-                      </button>
+                      <button onClick={() => { setEditingUser(u.id); setNewBalance(String(u.balance ?? 0)); setUserMessage(''); }} style={{ padding: '6px 12px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, cursor: 'pointer', fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}>✏️ Guthaben</button>
                       {u.id !== userId && (
-                        <button onClick={() => setDeleteUserConfirm(u.id)} style={{ padding: '6px 10px', background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)', borderRadius: 6, cursor: 'pointer', fontSize: 12, color: '#dc2626', fontWeight: 600 }}>
-                          🗑
-                        </button>
+                        <button onClick={() => setDeleteUserConfirm(u.id)} style={{ padding: '6px 10px', background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)', borderRadius: 6, cursor: 'pointer', fontSize: 12, color: '#dc2626', fontWeight: 600 }}>🗑</button>
                       )}
                     </div>
                   </div>
@@ -778,7 +732,13 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
               </div>
               <div>
                 <label style={labelStyle}>Auflösungsregeln (optional)</label>
-                <textarea style={{ ...inputStyle, minHeight: 80, resize: 'vertical' }} placeholder="z.B. Löst mit JA auf, wenn…" value={newDescription} onChange={e => setNewDescription(e.target.value)} maxLength={2000} />
+                <textarea
+                  style={{ ...inputStyle, minHeight: 160, resize: 'vertical', fontSize: 13, lineHeight: 1.6 }}
+                  placeholder="z.B. Löst mit JA auf, wenn…"
+                  value={newDescription}
+                  onChange={e => setNewDescription(e.target.value)}
+                  maxLength={2000}
+                />
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div>
