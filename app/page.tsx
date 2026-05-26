@@ -554,9 +554,9 @@ function isPolitikWelt(m: Market): boolean {
       matchCat = m.category === 'sport' || m.category === 'Sport'
     } else if (category === 'Sport') {
       matchCat = m.category === 'sport' || m.category === 'Sport'
-    } else if (category === 'WM' || category === 'CL') {
-      const groupFilter = SPORT_GROUP_FILTERS[category]
-      matchCat = m.group_title === groupFilter
+   } else if (category === 'WM' || category === 'CL') {
+  const groupFilter = SPORT_GROUP_FILTERS[category]
+  matchCat = m.group_title === groupFilter || m.category === `Sport-Fußball-${category === 'WM' ? 'WM 2026' : 'CL'}`
     } else if (category === 'F1') {
       matchCat = m.category === 'formula1'
     } else if (category === 'DFB-Kader') {
