@@ -522,21 +522,23 @@ setWeeklyBoard(topIds.map(id => ({ user_id: id, username: userMap[id]?.username 
     || category === 'WM' || category === 'CL' || category === 'DFB-Kader'
   const isFinanzCategory = category.startsWith('Finanzen-')
 
-  function isPolitikDeutschland(m: Market): boolean {
-    return m.category === 'Politik' && !!(m.group_title && m.group_title.toLowerCase().includes('landtag'))
-  }
-  function isPolitikUSA(m: Market): boolean {
-    if (m.category !== 'Politik') return false
-    if (m.group_title) return false
-    const q = (m.question ?? '').toLowerCase()
-    return q.includes('trump') || q.includes('demokraten') || q.includes('us-senat') || q.includes('usa') || q.includes('senat 2026')
-  }
-  function isPolitikWelt(m: Market): boolean {
-    if (m.category !== 'Politik') return false
-    if (isPolitikDeutschland(m)) return false
-    if (isPolitikUSA(m)) return false
-    return true
-  }
+ function isPolitikDeutschland(m: Market): boolean {
+  if (m.category === 'Politik-Deutschland') return true
+  return m.category === 'Politik' && !!(m.group_title && m.group_title.toLowerCase().includes('landtag'))
+}
+function isPolitikUSA(m: Market): boolean {
+  if (m.category === 'Politik-USA') return true
+  if (m.category !== 'Politik') return false
+  if (m.group_title) return false
+  const q = (m.question ?? '').toLowerCase()
+  return q.includes('trump') || q.includes('demokraten') || q.includes('us-senat') || q.includes('usa') || q.includes('senat 2026')
+}
+function isPolitikWelt(m: Market): boolean {
+  if (m.category !== 'Politik' && m.category !== 'Politik-Deutschland' && m.category !== 'Politik-USA') return false
+  if (isPolitikDeutschland(m)) return false
+  if (isPolitikUSA(m)) return false
+  return true
+}
 
   const filteredMarkets = markets.filter((m) => {
     let matchCat = false
