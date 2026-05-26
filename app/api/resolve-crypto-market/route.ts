@@ -62,40 +62,19 @@ async function dbPost(table: string, body: object) {
   return res
 }
 
-export async function POST(req: NextRequest) {
-  if (!isAuthorized(req)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+async function resolveMarket(marketId: string, coin: string, startPrice: number) {
+  const endPrice = await getCoinPrice(coin)
+  if (!endPrice) return { error: 'Preis nicht abrufbar' }
 
-  let body: Record<string, unknown>
-  try {
-    body = await req.json()
-  } catch {
-    return NextResponse.json({ error: 'Ungültige Anfrage.' }, { status: 400 })
-  }
-
-  const marketId = body.market_id
-  if (!marketId || typeof marketId !== 'string' || marketId.length > 100) {
-    return NextResponse.json({ error: 'market_id fehlt oder ungültig' }, { status: 400 })
-  }
-
-  const markets = await dbGet('markets', `id=eq.${marketId}&select=*`)
-  const market  = markets?.[0]
-  if (!market)         return NextResponse.json({ message: 'Markt nicht gefunden' })
-  if (market.resolved) return NextResponse.json({ message: 'Bereits aufgelöst' })
-
-  const endPrice = await getCoinPrice(market.coin ?? 'BTC')
-  if (!endPrice) return NextResponse.json({ error: 'Preis nicht abrufbar' }, { status: 500 })
-
-  const resolution = endPrice > (market.start_price ?? 0) ? 'yes' : 'no'
+  const resolution = endPrice > startPrice ? 'yes' : 'no'
 
   await dbPatch('markets', `id=eq.${marketId}`, {
     resolved: true, resolution, status: 'resolved', end_price: endPrice,
   })
 
   const positions = await dbGet('positions', `market_id=eq.${marketId}&select=*`)
-  const errors: string[] = []
   let payoutCount = 0
+  const errors: string[] = []
 
   for (const pos of (positions ?? [])) {
     if (!pos.user_id) continue
@@ -128,9 +107,44 @@ export async function POST(req: NextRequest) {
     headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` },
   })
 
-  return NextResponse.json({
-    success: true, market_id: marketId, resolution,
-    end_price: endPrice, start_price: market.start_price,
-    payouts: payoutCount, coin: market.coin, errors,
-  })
+  return { success: true, market_id: marketId, resolution, end_price: endPrice, payouts: payoutCount, errors }
+}
+
+export async function POST(req: NextRequest) {
+  if (!isAuthorized(req)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  // Einzelner Markt per market_id
+  try {
+    const body = await req.json()
+    const marketId = body?.market_id
+    if (marketId && typeof marketId === 'string' && marketId.length <= 100) {
+      const markets = await dbGet('markets', `id=eq.${marketId}&select=*`)
+      const market  = markets?.[0]
+      if (!market)         return NextResponse.json({ message: 'Markt nicht gefunden' })
+      if (market.resolved) return NextResponse.json({ message: 'Bereits aufgelöst' })
+      const result = await resolveMarket(marketId, market.coin ?? 'BTC', market.start_price ?? 0)
+      return NextResponse.json(result)
+    }
+  } catch {}
+
+  // Kein Body — alle abgelaufenen Krypto-Märkte auflösen
+  const now = new Date().toISOString()
+  const expired = await dbGet(
+    'markets',
+    `is_auto=eq.true&category=eq.Krypto&resolved=eq.false&status=eq.open&closes_at=lt.${now}&select=*`
+  )
+
+  if (!Array.isArray(expired) || expired.length === 0) {
+    return NextResponse.json({ ok: true, resolved: [], message: 'Keine abgelaufenen Märkte' })
+  }
+
+  const results = []
+  for (const market of expired) {
+    const result = await resolveMarket(market.id, market.coin ?? 'BTC', market.start_price ?? 0)
+    results.push(result)
+  }
+
+  return NextResponse.json({ ok: true, resolved: results })
 }
