@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
- 
+
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY!
 const CRON_SECRET  = process.env.CRON_SECRET!
 const VALID_COINS  = ['BTC', 'ETH', 'SOL', 'XRP']
- 
+
 function isAuthorized(req: NextRequest): boolean {
   const authHeader  = req.headers.get('authorization')
   const querySecret = new URL(req.url).searchParams.get('secret')
@@ -12,15 +12,17 @@ function isAuthorized(req: NextRequest): boolean {
   const host        = req.headers.get('host') ?? ''
   const isInternal  =
     origin.includes('mobius-lemon.vercel.app') ||
+    origin.includes('moebiusmarkets.de') ||
     origin.includes('localhost') ||
-    host.includes('vercel.app')
+    host.includes('vercel.app') ||
+    host.includes('moebiusmarkets.de')
   return (
     authHeader === `Bearer ${CRON_SECRET}` ||
     querySecret === CRON_SECRET ||
     isInternal
   )
 }
- 
+
 async function getCoinPrice(coin: string): Promise<number | null> {
   try {
     const res  = await fetch(`https://api.coinbase.com/v2/prices/${coin}-USD/spot`, { cache: 'no-store' })
@@ -28,33 +30,29 @@ async function getCoinPrice(coin: string): Promise<number | null> {
     return parseFloat(data.data.amount)
   } catch { return null }
 }
- 
+
 export async function POST(req: NextRequest) {
   if (!isAuthorized(req)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
- 
+
   let coin: string | undefined
   try {
     const body = await req.json()
     coin = body?.coin
   } catch {}
- 
+
   if (!coin || typeof coin !== 'string' || !VALID_COINS.includes(coin.toUpperCase())) {
     return NextResponse.json(
       { error: 'Ungültiger oder fehlender coin. Erlaubt: BTC, ETH, SOL, XRP' },
       { status: 400 }
     )
   }
- 
+
   coin = coin.toUpperCase()
- 
-  // Guard: prüfe ob bereits ein OFFENER (nicht resolved, status=open) Markt
-  // für diese Coin existiert, der noch nicht abgelaufen ist.
-  // Puffer: 60 Sekunden in die Vergangenheit — verhindert Race Conditions
-  // auch wenn der Cron mehrfach feuert oder die Auflösung kurz verzögert ist.
+
   const guardWindow = new Date(Date.now() - 60 * 1000).toISOString()
- 
+
   const checkRes = await fetch(
     `${SUPABASE_URL}/rest/v1/markets?is_auto=eq.true&status=eq.open&resolved=eq.false&coin=eq.${coin}&closes_at=gt.${guardWindow}&select=id,closes_at`,
     {
@@ -63,7 +61,7 @@ export async function POST(req: NextRequest) {
     }
   )
   const existing = await checkRes.json()
- 
+
   if (Array.isArray(existing) && existing.length > 0) {
     return NextResponse.json({
       message: 'Markt bereits offen',
@@ -71,15 +69,15 @@ export async function POST(req: NextRequest) {
       closes_at: existing[0].closes_at,
     })
   }
- 
+
   const price = await getCoinPrice(coin)
   if (!price) {
     return NextResponse.json({ error: 'Preis nicht abrufbar' }, { status: 502 })
   }
- 
+
   const now      = new Date()
   const closesAt = new Date(now.getTime() + 3 * 60 * 1000)
- 
+
   const res = await fetch(`${SUPABASE_URL}/rest/v1/markets`, {
     method: 'POST',
     headers: {
@@ -104,16 +102,16 @@ export async function POST(req: NextRequest) {
       start_price: price,
     }),
   })
- 
+
   if (!res.ok) {
     const err = await res.text()
     return NextResponse.json({ error: err }, { status: 500 })
   }
- 
+
   const created = await res.json()
   return NextResponse.json({ message: 'Erstellt', id: created?.[0]?.id, price })
 }
- 
+
 export async function GET() {
   return NextResponse.json({ error: 'GET nicht unterstützt' }, { status: 405 })
 }
