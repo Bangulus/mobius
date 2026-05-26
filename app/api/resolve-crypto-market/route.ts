@@ -9,7 +9,12 @@ function isAuthorized(req: NextRequest): boolean {
   const querySecret = new URL(req.url).searchParams.get('secret')
   const host   = req.headers.get('host') ?? ''
   const origin = req.headers.get('origin') ?? ''
-  const isInternal = origin.includes('mobius-lemon.vercel.app') || origin.includes('localhost') || host.includes('vercel.app')
+  const isInternal =
+    origin.includes('mobius-lemon.vercel.app') ||
+    origin.includes('moebiusmarkets.de') ||
+    origin.includes('localhost') ||
+    host.includes('vercel.app') ||
+    host.includes('moebiusmarkets.de')
   return (
     authHeader === `Bearer ${CRON_SECRET}` ||
     querySecret === CRON_SECRET ||
@@ -104,7 +109,6 @@ export async function POST(req: NextRequest) {
     })
     if (patchRes.ok) {
       payoutCount++
-      // Payout-Trade für Wochenranking
       await dbPost('trades', {
         market_id: marketId,
         user_id: pos.user_id,
