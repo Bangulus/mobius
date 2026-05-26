@@ -9,7 +9,10 @@ function isAuthorized(req: NextRequest): boolean {
   const authHeader  = req.headers.get('authorization')
   const querySecret = new URL(req.url).searchParams.get('secret')
   const host        = req.headers.get('host') ?? ''
-  const isInternal  = host.includes('vercel.app') || host.includes('localhost')
+  const isInternal  =
+    host.includes('vercel.app') ||
+    host.includes('localhost') ||
+    host.includes('moebiusmarkets.de')
   return (
     authHeader === `Bearer ${CRON_SECRET}` ||
     querySecret === CRON_SECRET ||
@@ -77,7 +80,6 @@ export async function POST(req: NextRequest) {
 
   for (const city of WEATHER_CITIES) {
     try {
-      // FIX: Suche über coin statt match_id (match_id ist null bei Wetter-Märkten)
       const markets = await dbGet(
         'markets',
         `category=eq.weather&coin=eq.${city.id}&resolved=eq.false&status=eq.open&select=*&order=created_at.desc&limit=1`
@@ -87,7 +89,6 @@ export async function POST(req: NextRequest) {
 
       const market = markets[0]
 
-      // closes_at prüfen — nur auflösen wenn Markt abgelaufen
       const closesAt = new Date(market.closes_at)
       if (closesAt.getTime() > Date.now()) continue
 
