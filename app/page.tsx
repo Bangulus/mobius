@@ -84,6 +84,7 @@ interface WeeklyEntry {
   weekly_gain: number
   avatar_url?: string
 }
+
 interface WinToast {
   id: string
   coin?: string
@@ -275,7 +276,25 @@ const NAV_ITEMS: NavItemDef[] = [
   { id: 'Kultur',        label: 'Kultur',        icon: '🎭' },
 ]
 
+// Flache Liste für mobile Category Pills
+const MOBILE_CAT_PILLS = [
+  { id: 'Politik-Deutschland', label: 'Politik', icon: '🏛️' },
+  { id: 'Bundesliga',          label: 'Fußball', icon: '⚽' },
+  { id: 'Krypto',              label: 'Krypto',  icon: '₿'  },
+  { id: 'Wirtschaft',          label: 'Wirtschaft', icon: '📈' },
+  { id: 'Finanzen-Tag',        label: 'Finanzen', icon: '💰' },
+  { id: 'Wetter',              label: 'Wetter',  icon: '🌤️' },
+  { id: 'Entertainment',       label: 'Entertainment', icon: '🎬' },
+  { id: 'Tech',                label: 'Tech',    icon: '💻' },
+  { id: 'Geopolitik',          label: 'Geopolitik', icon: '🌍' },
+  { id: 'F1',                  label: 'Formel 1', icon: '🏎️' },
+  { id: 'Kultur',              label: 'Kultur',  icon: '🎭' },
+  { id: 'WM',                  label: 'WM 2026', icon: '🏆' },
+  { id: 'CL',                  label: 'Champions League', icon: '⭐' },
+]
+
 type AuthMode = 'login' | 'register'
+type MobileTab = 'markets' | 'portfolio' | 'ranking' | 'profil'
 
 export default function Home() {
   const router = useRouter()
@@ -287,6 +306,7 @@ export default function Home() {
   const [showLeaderboard, setShowLeaderboard] = useState(false)
   const [category, setCategory]               = useState('Politik-Deutschland')
   const [view, setView]                       = useState<'markets' | 'portfolio' | 'admin' | 'profil'>('markets')
+  const [mobileTab, setMobileTab]             = useState<MobileTab>('markets')
   const [loading, setLoading]                 = useState(true)
   const [darkMode, setDarkMode]               = useState(() => {
     if (typeof window === 'undefined') return false
@@ -374,17 +394,17 @@ export default function Home() {
   const loadWeeklyBoard = useCallback(async () => {
     const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
     const trades = await dbGet('trades', `type=eq.payout&created_at=gte.${since}&select=user_id,shares`)
-if (!trades || trades.length === 0) { setWeeklyBoard([]); return }
-const gainMap: Record<string, number> = {}
-trades.forEach((t: { user_id: string; shares: number }) => {
-  gainMap[t.user_id] = (gainMap[t.user_id] ?? 0) + (t.shares ?? 0)
-})
+    if (!trades || trades.length === 0) { setWeeklyBoard([]); return }
+    const gainMap: Record<string, number> = {}
+    trades.forEach((t: { user_id: string; shares: number }) => {
+      gainMap[t.user_id] = (gainMap[t.user_id] ?? 0) + (t.shares ?? 0)
+    })
     const topIds = Object.entries(gainMap).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([id]) => id)
     if (topIds.length === 0) { setWeeklyBoard([]); return }
-const users = await dbGet('users', `id=in.(${topIds.join(',')})&select=id,username,avatar_url`)
-const userMap: Record<string, { username: string; avatar_url?: string }> = {}
-users?.forEach((u: { id: string; username: string; avatar_url?: string }) => { userMap[u.id] = { username: u.username, avatar_url: u.avatar_url } })
-setWeeklyBoard(topIds.map(id => ({ user_id: id, username: userMap[id]?.username ?? 'Unbekannt', weekly_gain: Math.round(gainMap[id]), avatar_url: userMap[id]?.avatar_url })))
+    const users = await dbGet('users', `id=in.(${topIds.join(',')})&select=id,username,avatar_url`)
+    const userMap: Record<string, { username: string; avatar_url?: string }> = {}
+    users?.forEach((u: { id: string; username: string; avatar_url?: string }) => { userMap[u.id] = { username: u.username, avatar_url: u.avatar_url } })
+    setWeeklyBoard(topIds.map(id => ({ user_id: id, username: userMap[id]?.username ?? 'Unbekannt', weekly_gain: Math.round(gainMap[id]), avatar_url: userMap[id]?.avatar_url })))
   }, [])
 
   useEffect(() => { loadMarkets(true); loadLeaderboard() }, [loadMarkets, loadLeaderboard])
@@ -512,7 +532,7 @@ setWeeklyBoard(topIds.map(id => ({ user_id: id, username: userMap[id]?.username 
   const handleLogout = () => {
     setUser(null); userRef.current = null
     localStorage.removeItem('mobius_session')
-    setView('markets'); setWinToasts([]); shownToastsRef.current = new Set()
+    setView('markets'); setMobileTab('markets'); setWinToasts([]); shownToastsRef.current = new Set()
   }
 
   const resetAuthForm = () => { setAuthEmail(''); setAuthPassword(''); setAuthUsername(''); setAuthError('') }
@@ -522,23 +542,23 @@ setWeeklyBoard(topIds.map(id => ({ user_id: id, username: userMap[id]?.username 
     || category === 'WM' || category === 'CL' || category === 'DFB-Kader'
   const isFinanzCategory = category.startsWith('Finanzen-')
 
- function isPolitikDeutschland(m: Market): boolean {
-  if (m.category === 'Politik-Deutschland') return true
-  return m.category === 'Politik' && !!(m.group_title && m.group_title.toLowerCase().includes('landtag'))
-}
-function isPolitikUSA(m: Market): boolean {
-  if (m.category === 'Politik-USA') return true
-  if (m.category !== 'Politik') return false
-  if (m.group_title) return false
-  const q = (m.question ?? '').toLowerCase()
-  return q.includes('trump') || q.includes('demokraten') || q.includes('us-senat') || q.includes('usa') || q.includes('senat 2026')
-}
-function isPolitikWelt(m: Market): boolean {
-  if (m.category !== 'Politik' && m.category !== 'Politik-Deutschland' && m.category !== 'Politik-USA') return false
-  if (isPolitikDeutschland(m)) return false
-  if (isPolitikUSA(m)) return false
-  return true
-}
+  function isPolitikDeutschland(m: Market): boolean {
+    if (m.category === 'Politik-Deutschland') return true
+    return m.category === 'Politik' && !!(m.group_title && m.group_title.toLowerCase().includes('landtag'))
+  }
+  function isPolitikUSA(m: Market): boolean {
+    if (m.category === 'Politik-USA') return true
+    if (m.category !== 'Politik') return false
+    if (m.group_title) return false
+    const q = (m.question ?? '').toLowerCase()
+    return q.includes('trump') || q.includes('demokraten') || q.includes('us-senat') || q.includes('usa') || q.includes('senat 2026')
+  }
+  function isPolitikWelt(m: Market): boolean {
+    if (m.category !== 'Politik' && m.category !== 'Politik-Deutschland' && m.category !== 'Politik-USA') return false
+    if (isPolitikDeutschland(m)) return false
+    if (isPolitikUSA(m)) return false
+    return true
+  }
 
   const filteredMarkets = markets.filter((m) => {
     let matchCat = false
@@ -554,9 +574,9 @@ function isPolitikWelt(m: Market): boolean {
       matchCat = m.category === 'sport' || m.category === 'Sport'
     } else if (category === 'Sport') {
       matchCat = m.category === 'sport' || m.category === 'Sport'
-   } else if (category === 'WM' || category === 'CL') {
-  const groupFilter = SPORT_GROUP_FILTERS[category]
-  matchCat = m.group_title === groupFilter || m.category === `Sport-Fußball-${category === 'WM' ? 'WM 2026' : 'CL'}`
+    } else if (category === 'WM' || category === 'CL') {
+      const groupFilter = SPORT_GROUP_FILTERS[category]
+      matchCat = m.group_title === groupFilter || m.category === `Sport-Fußball-${category === 'WM' ? 'WM 2026' : 'CL'}`
     } else if (category === 'F1') {
       matchCat = m.category === 'formula1'
     } else if (category === 'DFB-Kader') {
@@ -581,7 +601,7 @@ function isPolitikWelt(m: Market): boolean {
   })
 
   const toggleNav = (id: string) => setExpandedNav(prev => ({ ...prev, [id]: !prev[id] }))
-  const selectCategory = (id: string) => { setCategory(id); setView('markets'); setSearchQuery('') }
+  const selectCategory = (id: string) => { setCategory(id); setView('markets'); setMobileTab('markets'); setSearchQuery('') }
 
   const categoryLabel: Record<string, string> = {
     'Politik-Deutschland': 'Politik · Deutschland',
@@ -592,13 +612,25 @@ function isPolitikWelt(m: Market): boolean {
     'F1':                  'Formel 1',
   }
 
+  // Mobile Tab Handler
+  const handleMobileTab = (tab: MobileTab) => {
+    setMobileTab(tab)
+    if (tab === 'markets') setView('markets')
+    else if (tab === 'portfolio') setView('portfolio')
+    else if (tab === 'ranking') { loadWeeklyBoard(); setShowLeaderboard(true) }
+    else if (tab === 'profil') {
+      if (user) setView('profil')
+      else openAuth('login')
+    }
+  }
+
   return (
     <>
       {/* Win Toasts */}
       <div style={{ position: 'fixed', top: 80, right: 16, zIndex: 9999, display: 'flex', flexDirection: 'column', gap: 10, pointerEvents: 'none' }}>
         {winToasts.map(toast => {
           const isUp = toast.direction === 'yes'
-const accentColor = toast.isKrypto ? (isUp ? '#16a34a' : '#dc2626') : '#16a34a'
+          const accentColor = toast.isKrypto ? (isUp ? '#16a34a' : '#dc2626') : '#16a34a'
           return (
             <div key={toast.id} style={{ pointerEvents: 'all', background: 'var(--bg, #fff)', border: `1px solid ${isUp ? 'rgba(22,163,74,0.3)' : 'rgba(220,38,38,0.3)'}`, borderLeft: `4px solid ${accentColor}`, borderRadius: 12, padding: '14px 16px', minWidth: 270, maxWidth: 330, boxShadow: '0 4px 24px rgba(0,0,0,0.12)', animation: 'slideInRight 0.3s ease' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
@@ -634,12 +666,12 @@ const accentColor = toast.isKrypto ? (isUp ? '#16a34a' : '#dc2626') : '#16a34a'
                   return (
                     <div key={e.user_id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 10, background: isMe ? 'var(--accent-light, rgba(99,102,241,0.08))' : 'var(--surface)', border: isMe ? '1px solid rgba(99,102,241,0.2)' : '1px solid transparent' }}>
                       <span style={{ fontSize: 16, width: 24, textAlign: 'center', flexShrink: 0 }}>{medal}</span>
-                    {e.avatar_url ? (
-  // eslint-disable-next-line @next/next/no-img-element
-  <img src={e.avatar_url} alt={e.username} style={{ width: 30, height: 30, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
-) : (
-  <div style={{ width: 30, height: 30, borderRadius: '50%', background: av.bg, color: av.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{e.username.slice(0, 2).toUpperCase()}</div>
-)}
+                      {e.avatar_url ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={e.avatar_url} alt={e.username} style={{ width: 30, height: 30, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+                      ) : (
+                        <div style={{ width: 30, height: 30, borderRadius: '50%', background: av.bg, color: av.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{e.username.slice(0, 2).toUpperCase()}</div>
+                      )}
                       <span style={{ fontSize: 13, color: 'var(--text)', fontWeight: isMe ? 700 : 500, flex: 1 }}>{e.username}{isMe ? ' (du)' : ''}</span>
                       <span style={{ fontSize: 13, fontWeight: 700, color: '#16a34a' }}>+{e.weekly_gain.toLocaleString('de')} ₫</span>
                     </div>
@@ -677,34 +709,26 @@ const accentColor = toast.isKrypto ? (isUp ? '#16a34a' : '#dc2626') : '#16a34a'
       <nav className="nav">
         <div className="nav-left">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo-weiss.png" alt="Möbius" className="nav-logo" onClick={() => { setView('markets'); setSearchQuery(''); setCategory('Politik-Deutschland') }} />
+          <img src="/logo-weiss.png" alt="Möbius" className="nav-logo" onClick={() => { setView('markets'); setMobileTab('markets'); setSearchQuery(''); setCategory('Politik-Deutschland') }} />
           <div className="nav-search-wrap">
             <span className="nav-search-icon">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             </span>
-            <input className="nav-search" type="text" placeholder="Märkte durchsuchen…" value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setView('markets') }} />
+            <input className="nav-search" type="text" placeholder="Märkte durchsuchen…" value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setView('markets'); setMobileTab('markets') }} />
           </div>
         </div>
         <div className="nav-right">
           {user ? (
             <>
+              {/* Desktop only */}
               <button className="nav-pill" onClick={() => { loadWeeklyBoard(); setShowLeaderboard(true) }} style={{ display: 'flex', alignItems: 'center', gap: 5, fontWeight: 600 }}>
                 <span style={{ fontSize: 13 }}>🏆</span><span>Ranking</span>
               </button>
               <div className="nav-stat"><div className="nav-stat-label">Guthaben</div><div className="nav-stat-value">{user.balance.toLocaleString('de')} ₫</div></div>
               <div className="nav-divider" />
-              {user?.id === ADMIN_ID && (<button className="nav-pill" onClick={() => setView('admin')} style={{ background: 'rgba(124,58,237,0.25)', borderColor: 'rgba(124,58,237,0.5)', color: '#c4b5fd' }}>Admin</button>)}
-            </>
-          ) : (
-            <>
-              <button className="nav-pill" onClick={() => openAuth('login')}>Anmelden</button>
-              <button className="nav-pill accent" onClick={() => openAuth('register')}>Registrieren</button>
-            </>
-          )}
-          <button className="nav-icon-btn" onClick={() => setDarkMode(!darkMode)}>{darkMode ? '☀️' : '🌙'}</button>
-          {user && (
-            <>
-              <div className="nav-avatar" onClick={() => setView('profil')} title={user.username}>
+              {user?.id === ADMIN_ID && (<button className="nav-pill" onClick={() => { setView('admin'); setMobileTab('markets') }} style={{ background: 'rgba(124,58,237,0.25)', borderColor: 'rgba(124,58,237,0.5)', color: '#c4b5fd' }}>Admin</button>)}
+              {/* Mobile: Guthaben + Avatar sichtbar via CSS */}
+              <div className="nav-avatar" onClick={() => { setView('profil'); setMobileTab('profil') }} title={user.username}>
                 {user.avatar_url ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={user.avatar_url} alt={user.username} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
@@ -714,12 +738,33 @@ const accentColor = toast.isKrypto ? (isUp ? '#16a34a' : '#dc2626') : '#16a34a'
               </div>
               <button className="nav-pill" onClick={handleLogout}>Abmelden</button>
             </>
+          ) : (
+            <>
+              <button className="nav-pill" onClick={() => openAuth('login')}>Anmelden</button>
+              <button className="nav-pill accent" onClick={() => openAuth('register')}>Registrieren</button>
+            </>
           )}
+          <button className="nav-icon-btn" onClick={() => setDarkMode(!darkMode)}>{darkMode ? '☀️' : '🌙'}</button>
         </div>
       </nav>
 
+      {/* Mobile Category Pills — nur unter Nav auf Mobile */}
+      <div className="mobile-cat-scroll">
+        {MOBILE_CAT_PILLS.map(pill => (
+          <button
+            key={pill.id}
+            className={`mobile-cat-pill ${category === pill.id ? 'active' : ''}`}
+            onClick={() => selectCategory(pill.id)}
+          >
+            {pill.icon} {pill.label}
+          </button>
+        ))}
+      </div>
+
       {/* Layout */}
       <div style={{ display: 'flex', minHeight: 'calc(100vh - var(--nav-height, 56px))', maxWidth: 1400, margin: '0 auto' }}>
+
+        {/* Desktop Sidebar */}
         <aside style={{ width: 220, flexShrink: 0, borderRight: '1px solid var(--border)', padding: '20px 0', position: 'sticky', top: 'var(--nav-height, 56px)', height: 'calc(100vh - var(--nav-height, 56px))', overflowY: 'auto', background: 'var(--bg)' }}>
           {user && (<div style={{ padding: '0 16px 16px', borderBottom: '1px solid var(--border)', marginBottom: 12 }}><div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Guthaben</div><div style={{ fontSize: 20, fontWeight: 800, color: 'var(--text)' }}>{user.balance.toLocaleString('de')} ₫</div></div>)}
           <div style={{ padding: '0 8px' }}>
@@ -729,7 +774,35 @@ const accentColor = toast.isKrypto ? (isUp ? '#16a34a' : '#dc2626') : '#16a34a'
 
         <main style={{ flex: 1, minWidth: 0, padding: '24px 32px' }}>
           {view === 'admin' && user?.id === ADMIN_ID && (<AdminPanel userId={user.id} openMarkets={markets} onMarketResolved={loadMarkets} />)}
-          {view === 'profil' && user && (<ProfileView userId={user.id} token={user.id} displayName={user.username} avatarUrl={user.avatar_url ?? ''} balance={user.balance} onUsernameChange={(name) => setUser({ ...user, username: name })} onAvatarChange={(url) => setUser({ ...user, avatar_url: url })} />)}
+          {view === 'profil' && user && (
+            <>
+              <ProfileView
+                userId={user.id}
+                token={user.id}
+                displayName={user.username}
+                avatarUrl={user.avatar_url ?? ''}
+                balance={user.balance}
+                onUsernameChange={(name) => setUser({ ...user, username: name })}
+                onAvatarChange={(url) => setUser({ ...user, avatar_url: url })}
+              />
+              {/* Dark Mode Toggle auf Mobile im Profil */}
+              <div style={{ marginTop: 24 }}>
+                <button
+                  onClick={() => setDarkMode(!darkMode)}
+                  style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', background: 'var(--surface)', border: '0.5px solid var(--border)', borderRadius: 12, cursor: 'pointer', fontSize: 14, color: 'var(--text)', width: '100%' }}
+                >
+                  <span style={{ fontSize: 20 }}>{darkMode ? '☀️' : '🌙'}</span>
+                  <span>{darkMode ? 'Light Mode aktivieren' : 'Dark Mode aktivieren'}</span>
+                </button>
+                <button
+                  onClick={handleLogout}
+                  style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', background: 'var(--no-light)', border: '0.5px solid var(--no-border)', borderRadius: 12, cursor: 'pointer', fontSize: 14, color: 'var(--no)', width: '100%', marginTop: 8 }}
+                >
+                  <span>Abmelden</span>
+                </button>
+              </div>
+            </>
+          )}
           {view === 'markets' && (
             <>
               <div className="section-head">
@@ -758,8 +831,36 @@ const accentColor = toast.isKrypto ? (isUp ? '#16a34a' : '#dc2626') : '#16a34a'
             </>
           )}
           {view === 'portfolio' && user && (<PortfolioView userId={user.id} router={router} />)}
+          {view === 'portfolio' && !user && (
+            <div style={{ textAlign: 'center', padding: '48px 16px' }}>
+              <div style={{ fontSize: 32, marginBottom: 12 }}>📊</div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', marginBottom: 8 }}>Kein Konto</div>
+              <div style={{ fontSize: 14, color: 'var(--text-muted)', marginBottom: 20 }}>Melde dich an um dein Portfolio zu sehen.</div>
+              <button className="submit-btn yes" onClick={() => openAuth('login')} style={{ maxWidth: 200, margin: '0 auto' }}>Anmelden</button>
+            </div>
+          )}
         </main>
       </div>
+
+      {/* Mobile Bottom Tab Bar */}
+      <nav className="mobile-tab-bar">
+        {[
+          { id: 'markets',   label: 'Märkte',    icon: '📊' },
+          { id: 'portfolio', label: 'Portfolio',  icon: '💼' },
+          { id: 'ranking',   label: 'Ranking',    icon: '🏆' },
+          { id: 'profil',    label: 'Profil',     icon: '👤' },
+        ].map(tab => (
+          <button
+            key={tab.id}
+            className={`mobile-tab-item ${mobileTab === tab.id ? 'active' : ''}`}
+            onClick={() => handleMobileTab(tab.id as MobileTab)}
+          >
+            <span>{tab.icon}</span>
+            <span>{tab.label}</span>
+          </button>
+        ))}
+      </nav>
+
       <style>{`
         @keyframes slideInRight { from { transform: translateX(120%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
         .nav-item-btn { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 12px; border: none; background: transparent; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 500; color: var(--text-muted); text-align: left; transition: background 0.1s, color 0.1s; }
@@ -767,6 +868,12 @@ const accentColor = toast.isKrypto ? (isUp ? '#16a34a' : '#dc2626') : '#16a34a'
         .nav-item-btn.active { background: var(--accent-light, rgba(99,102,241,0.1)); color: var(--accent, #6366f1); font-weight: 700; }
         .nav-chevron { margin-left: auto; font-size: 10px; opacity: 0.5; transition: transform 0.2s; }
         .nav-chevron.open { transform: rotate(180deg); }
+        @media (max-width: 768px) {
+          .nav-right .nav-pill { display: none !important; }
+          .nav-right .nav-icon-btn { display: none !important; }
+          .nav-right .nav-divider { display: none !important; }
+          .nav-right .nav-stat { display: none !important; }
+        }
       `}</style>
     </>
   )
@@ -897,13 +1004,10 @@ function PastMatchRow({ markets, score, onOpen }: { markets: Market[]; score?: {
   )
 }
 
-// ── Wetter-Karte ─────────────────────────────────────────────────────────────
 function WeatherMarketCard({ market, onClick }: { market: Market; onClick: () => void }) {
   const prob  = calcProb(market.q_yes, market.q_no, market.b)
   const isLow = prob < 50
   const city  = market.short_label ?? market.display_group ?? market.question
-
-  // Temperatur aus question parsen: "...heute? (17°C)" → "17°C"
   const tempMatch = market.question.match(/\((-?\d+\.?\d*)°C\)/)
   const temp = tempMatch ? `${tempMatch[1]}°C` : (market.start_price != null ? `${market.start_price}°C` : null)
 
@@ -939,7 +1043,6 @@ function WeatherMarketCard({ market, onClick }: { market: Market; onClick: () =>
 }
 
 function MarketsGrid({ markets, onOpen, isSoccer }: { markets: Market[]; onOpen: (id: string) => void; isSoccer: boolean }) {
-  // ── Wetter-Märkte: immer als Einzelkarten, nie als Gruppe ─────────────────
   const weatherMarkets = markets.filter(m => m.category === 'weather' || m.category === 'Wetter')
   const nonWeatherMarkets = markets.filter(m => m.category !== 'weather' && m.category !== 'Wetter')
 
@@ -995,7 +1098,6 @@ function MarketsGrid({ markets, onOpen, isSoccer }: { markets: Market[]; onOpen:
 
   return (
     <div>
-      {/* ── Wetter: immer Einzelkarten ── */}
       {weatherMarkets.length > 0 && (
         <div className="markets-grid" style={{ marginBottom: 24 }}>
           {weatherMarkets.map(m => <WeatherMarketCard key={m.id} market={m} onClick={() => onOpen(m.id)} />)}
@@ -1137,7 +1239,7 @@ function SoccerMatchCard({ markets, onOpen }: { markets: Market[]; onOpen: (id: 
   return (
     <div className="market-card" style={{ padding: '14px 18px', cursor: 'pointer' }} onClick={() => onOpen((homeMarket ?? anyMarket).id)}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)' }}>Bundesliga</span>
           {timePart && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>· {timePart} Uhr</span>}
           {totalVolume > 0 && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>· {Math.round(totalVolume).toLocaleString('de')} ₫</span>}
@@ -1196,9 +1298,10 @@ function MarketCard({ market, onClick }: { market: Market; onClick: () => void }
 }
 
 function PortfolioView({ userId, router }: { userId: string; router: ReturnType<typeof useRouter> }) {
-  interface Position { market_id: string; direction: string; amount: number; question: string; q_yes: number; q_no: number; b: number; resolved: boolean; resolution?: string }
+  interface Position { market_id: string; shares_yes: number; shares_no: number; question: string; q_yes: number; q_no: number; b: number; resolved: boolean; resolution?: string }
   const [positions, setPositions] = useState<Position[]>([])
   const [loading, setLoading]     = useState(true)
+
   useEffect(() => {
     dbGet('positions', `user_id=eq.${userId}&select=*`).then(async (posData) => {
       if (!posData || posData.length === 0) { setLoading(false); return }
@@ -1206,32 +1309,108 @@ function PortfolioView({ userId, router }: { userId: string; router: ReturnType<
       const mktData = await dbGet('markets', `id=in.(${ids})&select=id,question,q_yes,q_no,b,resolved,resolution`)
       const mktMap: Record<string, Market> = {}
       mktData?.forEach((m: Market) => { mktMap[m.id] = m })
-      setPositions(posData.map((p: { market_id: string; direction: string; amount: number }) => ({ ...p, ...mktMap[p.market_id] })))
+      setPositions(posData.map((p: { market_id: string; shares_yes: number; shares_no: number }) => ({ ...p, ...mktMap[p.market_id] })))
       setLoading(false)
     })
   }, [userId])
 
   if (loading) return <div style={{ color: 'var(--text-muted)', padding: '24px 0' }}>manifesting results...</div>
-  if (positions.length === 0) return (<div className="card" style={{ textAlign: 'center', padding: 32 }}><div style={{ fontSize: 14, color: 'var(--text-muted)', marginBottom: 8 }}>Noch keine Positionen.</div><div style={{ fontSize: 13, color: 'var(--text-subtle)' }}>Platziere deine erste Wette auf einen Markt.</div></div>)
+
+  const openPositions   = positions.filter(p => !p.resolved)
+  const closedPositions = positions.filter(p => p.resolved)
+  const totalInvested   = positions.reduce((s, p) => s + (p.shares_yes > 0 ? p.shares_yes : 0) + (p.shares_no > 0 ? p.shares_no : 0), 0)
+  const totalPotential  = positions.filter(p => !p.resolved).reduce((s, p) => {
+    const prob = calcProb(p.q_yes, p.q_no, p.b)
+    const shares = p.shares_yes > p.shares_no ? p.shares_yes : p.shares_no
+    return s + shares
+  }, 0)
+
+  if (positions.length === 0) return (
+    <div className="card" style={{ textAlign: 'center', padding: 32 }}>
+      <div style={{ fontSize: 32, marginBottom: 8 }}>📊</div>
+      <div style={{ fontSize: 14, color: 'var(--text-muted)', marginBottom: 8 }}>Noch keine Positionen.</div>
+      <div style={{ fontSize: 13, color: 'var(--text-subtle)' }}>Platziere deine erste Wette auf einen Markt.</div>
+    </div>
+  )
 
   return (
     <div>
-      <div className="section-head"><div className="section-title">Mein Portfolio</div></div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {positions.map((p, i) => {
-          const prob = calcProb(p.q_yes, p.q_no, p.b); const isYes = p.direction === 'yes'; const isWin = p.resolution === p.direction
-          return (
-            <div key={i} className="card" style={{ cursor: 'pointer' }} onClick={() => router.push(`/markets/${p.market_id}`)}>
-              <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 8, color: 'var(--text)' }}>{p.question}</div>
-              <div style={{ display: 'flex', gap: 16, fontSize: 13, flexWrap: 'wrap' }}>
-                <span style={{ color: 'var(--text-muted)' }}>Position: <strong style={{ color: isYes ? 'var(--yes)' : 'var(--no)' }}>{isYes ? 'JA' : 'NEIN'}</strong></span>
-                <span style={{ color: 'var(--text-muted)' }}>Einsatz: <strong>{p.amount} ₫</strong></span>
-                <span style={{ color: 'var(--text-muted)' }}>Aktuell: <strong>{prob}%</strong></span>
-                {p.resolved && (<span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 4, background: isWin ? 'rgba(22,163,74,0.1)' : 'rgba(239,68,68,0.1)', color: isWin ? '#16a34a' : '#ef4444', letterSpacing: 0.5 }}>{isWin ? 'Gewonnen' : 'Verloren'}</span>)}
+      <div className="section-head">
+        <div className="section-title" style={{ fontSize: 22, fontWeight: 800 }}>Mein Portfolio</div>
+      </div>
+
+      {/* Summary Cards */}
+      <div className="mobile-portfolio-summary" style={{ marginBottom: 20 }}>
+        <div className="card" style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Positionen</div>
+          <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--text)' }}>{openPositions.length}</div>
+          <div style={{ fontSize: 11, color: 'var(--text-subtle)' }}>offen</div>
+        </div>
+        <div className="card" style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Max. Auszahlung</div>
+          <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--yes)' }}>{Math.round(totalPotential).toLocaleString('de')} ₫</div>
+          <div style={{ fontSize: 11, color: 'var(--text-subtle)' }}>wenn alle gewinnen</div>
+        </div>
+      </div>
+
+      {/* Offene Positionen */}
+      {openPositions.length > 0 && (
+        <div style={{ marginBottom: 24 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Offen</div>
+          {openPositions.map((p, i) => {
+            const prob = calcProb(p.q_yes, p.q_no, p.b)
+            const isYes = p.shares_yes >= p.shares_no
+            const shares = isYes ? p.shares_yes : p.shares_no
+            return (
+              <div key={i} className="mobile-pos-card" onClick={() => router.push(`/markets/${p.market_id}`)}>
+                <div className="mobile-pos-top">
+                  <div className="mobile-pos-question">{p.question}</div>
+                  <div className="mobile-pos-badge" style={{ background: isYes ? 'var(--yes-light)' : 'var(--no-light)', color: isYes ? 'var(--yes)' : 'var(--no)', border: `0.5px solid ${isYes ? 'var(--yes-border)' : 'var(--no-border)'}` }}>
+                    {isYes ? 'JA' : 'NEIN'}
+                  </div>
+                </div>
+                <div className="mobile-pos-meta">
+                  <span><strong>{Math.round(shares)} Anteile</strong></span>
+                  <span>Kurs <strong>{isYes ? prob : 100 - prob}%</strong></span>
+                  <span>Ausz. <strong style={{ color: 'var(--yes)' }}>{Math.round(shares)} ₫</strong></span>
+                </div>
+                <div className="prob-bar">
+                  <div className={`prob-bar-fill ${prob < 50 ? 'low' : ''}`} style={{ width: `${prob}%` }} />
+                </div>
               </div>
-            </div>
-          )
-        })}
+            )
+          })}
+        </div>
+      )}
+
+      {/* Abgeschlossene Positionen */}
+      {closedPositions.length > 0 && (
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Abgeschlossen</div>
+          {closedPositions.map((p, i) => {
+            const isYes = p.shares_yes >= p.shares_no
+            const won = (p.resolution === 'yes' && isYes) || (p.resolution === 'no' && !isYes)
+            const shares = isYes ? p.shares_yes : p.shares_no
+            return (
+              <div key={i} className="mobile-pos-card" style={{ opacity: 0.75 }} onClick={() => router.push(`/markets/${p.market_id}`)}>
+                <div className="mobile-pos-top">
+                  <div className="mobile-pos-question">{p.question}</div>
+                  <div className="mobile-pos-badge" style={{ background: won ? 'var(--yes-light)' : 'var(--no-light)', color: won ? 'var(--yes)' : 'var(--no)' }}>
+                    {won ? 'GEWONNEN ✓' : 'VERLOREN'}
+                  </div>
+                </div>
+                <div className="mobile-pos-meta">
+                  <span>{isYes ? 'JA' : 'NEIN'}</span>
+                  {won && <span style={{ color: 'var(--yes)', fontWeight: 700 }}>+{Math.round(shares)} ₫</span>}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      <div style={{ fontSize: 11, color: 'var(--text-subtle)', textAlign: 'center', marginTop: 16 }}>
+        Gesamt: {positions.length} Positionen · {Math.round(totalInvested).toLocaleString('de')} ₫ investiert
       </div>
     </div>
   )
