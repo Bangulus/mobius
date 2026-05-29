@@ -785,7 +785,6 @@ export default function MarketPage() {
       canvas.height = 200 * window.devicePixelRatio
       canvas.style.width  = `${w}px`
       canvas.style.height = '200px'
-      ctx => ctx && ctx.scale(window.devicePixelRatio, window.devicePixelRatio)
     }
 
     const marketEndMs      = parseUTC(market.closes_at).getTime()
