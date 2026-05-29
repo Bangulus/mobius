@@ -145,7 +145,7 @@ function drawCryptoChart(
   const ctx = canvas.getContext('2d')
   if (!ctx) return
   const W = canvas.width, H = canvas.height
-  const padL = 72, padR = 96, padT = 20, padB = 28
+  const padL = 58, padR = 80, padT = 16, padB = 24
   const visiblePrices = history.length > 0 ? history.map(p => p.price) : [targetPrice]
   const midPrice = visiblePrices[visiblePrices.length - 1] ?? targetPrice
   const spread   = midPrice * 0.0025
@@ -161,19 +161,19 @@ function drawCryptoChart(
   ctx.fillRect(0, 0, W, H)
 
   ctx.strokeStyle = '#e8eaef'; ctx.lineWidth = 1; ctx.setLineDash([])
-  for (let i = 0; i <= 5; i++) {
-    const y = yScale(minP + (maxP - minP) * (i / 5))
+  for (let i = 0; i <= 4; i++) {
+    const y = yScale(minP + (maxP - minP) * (i / 4))
     ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W - padR, y); ctx.stroke()
   }
 
   const targetY = yScale(targetPrice)
   ctx.beginPath(); ctx.setLineDash([5, 4]); ctx.strokeStyle = '#f59e0b'; ctx.lineWidth = 1.5
   ctx.moveTo(padL, targetY); ctx.lineTo(W - padR, targetY); ctx.stroke(); ctx.setLineDash([])
-  ctx.fillStyle = '#fffbeb'; ctx.beginPath(); ctx.rect(W - padR + 4, targetY - 11, 88, 22); ctx.fill()
-  ctx.fillStyle = '#92400e'; ctx.font = 'bold 10px Inter, sans-serif'; ctx.textAlign = 'left'
-  ctx.fillText('Target', W - padR + 8, targetY - 1)
-  ctx.fillStyle = '#b45309'; ctx.font = '9px Inter, sans-serif'
-  ctx.fillText(`$${targetPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, W - padR + 8, targetY + 10)
+  ctx.fillStyle = '#fffbeb'; ctx.beginPath(); ctx.rect(W - padR + 4, targetY - 10, padR - 6, 20); ctx.fill()
+  ctx.fillStyle = '#92400e'; ctx.font = 'bold 9px Inter, sans-serif'; ctx.textAlign = 'left'
+  ctx.fillText('Target', W - padR + 6, targetY - 1)
+  ctx.fillStyle = '#b45309'; ctx.font = '8px Inter, sans-serif'
+  ctx.fillText(`$${targetPrice.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`, W - padR + 6, targetY + 9)
 
   const filteredHistory = history.filter(p => p.t <= marketEndMs)
   if (filteredHistory.length > 0) {
@@ -188,20 +188,20 @@ function drawCryptoChart(
     filteredHistory.forEach((p, i) => { i === 0 ? ctx.moveTo(xScale(p.t), yScale(p.price)) : ctx.lineTo(xScale(p.t), yScale(p.price)) })
     ctx.strokeStyle = '#f97316'; ctx.lineWidth = 2.5; ctx.lineJoin = 'round'; ctx.stroke()
     const last = filteredHistory[filteredHistory.length - 1]
-    ctx.beginPath(); ctx.arc(xScale(last.t), yScale(last.price), 4.5, 0, Math.PI * 2)
+    ctx.beginPath(); ctx.arc(xScale(last.t), yScale(last.price), 4, 0, Math.PI * 2)
     ctx.fillStyle = '#f97316'; ctx.fill(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.stroke()
   }
 
-  ctx.fillStyle = '#94a3b8'; ctx.font = '10px Inter, sans-serif'; ctx.textAlign = 'right'
-  for (let i = 0; i <= 5; i++) {
-    const val = minP + (maxP - minP) * (1 - i / 5)
-    ctx.fillText(`$${val.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`, padL - 6, yScale(val) + 4)
+  ctx.fillStyle = '#94a3b8'; ctx.font = '9px Inter, sans-serif'; ctx.textAlign = 'right'
+  for (let i = 0; i <= 4; i++) {
+    const val = minP + (maxP - minP) * (1 - i / 4)
+    ctx.fillText(`$${val.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`, padL - 4, yScale(val) + 3)
   }
   ctx.textAlign = 'center'
   for (let i = 0; i <= 3; i++) {
     const ms = marketStartMs + (duration * i / 3)
     const d  = new Date(ms)
-    ctx.fillText(`${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`, xScale(ms), H - padB + 16)
+    ctx.fillText(`${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`, xScale(ms), H - padB + 14)
   }
 }
 
@@ -359,22 +359,22 @@ function CountdownDisplay({ targetMs, redThresholdMs = 30000 }: { targetMs: numb
   if (parts.ended) return (
     <div style={{ display: 'flex', gap: 16 }}>
       <div style={{ textAlign: 'center' }}>
-        <div style={{ fontSize: 32, fontWeight: 900, color: '#dc2626', fontVariantNumeric: 'tabular-nums' }}>00</div>
+        <div style={{ fontSize: 28, fontWeight: 900, color: '#dc2626', fontVariantNumeric: 'tabular-nums' }}>00</div>
         <div style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: 1, marginTop: 2 }}>SEK</div>
       </div>
     </div>
   )
 
   const color = isRed ? '#dc2626' : 'var(--text)'
-  const sep = <div style={{ fontSize: 28, fontWeight: 900, color: 'var(--text-muted)', lineHeight: '36px' }}>:</div>
+  const sep = <div style={{ fontSize: 24, fontWeight: 900, color: 'var(--text-muted)', lineHeight: '32px' }}>:</div>
 
   return (
-    <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start' }}>
+    <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
       {parts.d > 0 && (
         <>
           <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: 32, fontWeight: 900, color, fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>{String(parts.d).padStart(2, '0')}</div>
-            <div style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: 1, marginTop: 4 }}>TAG</div>
+            <div style={{ fontSize: 28, fontWeight: 900, color, fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>{String(parts.d).padStart(2, '0')}</div>
+            <div style={{ fontSize: 9, color: 'var(--text-muted)', letterSpacing: 1, marginTop: 4 }}>TAG</div>
           </div>
           {sep}
         </>
@@ -382,20 +382,20 @@ function CountdownDisplay({ targetMs, redThresholdMs = 30000 }: { targetMs: numb
       {(parts.d > 0 || parts.h > 0) && (
         <>
           <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: 32, fontWeight: 900, color, fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>{String(parts.h).padStart(2, '0')}</div>
-            <div style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: 1, marginTop: 4 }}>STD</div>
+            <div style={{ fontSize: 28, fontWeight: 900, color, fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>{String(parts.h).padStart(2, '0')}</div>
+            <div style={{ fontSize: 9, color: 'var(--text-muted)', letterSpacing: 1, marginTop: 4 }}>STD</div>
           </div>
           {sep}
         </>
       )}
       <div style={{ textAlign: 'center' }}>
-        <div style={{ fontSize: 32, fontWeight: 900, color, fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>{String(parts.m).padStart(2, '0')}</div>
-        <div style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: 1, marginTop: 4 }}>MIN</div>
+        <div style={{ fontSize: 28, fontWeight: 900, color, fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>{String(parts.m).padStart(2, '0')}</div>
+        <div style={{ fontSize: 9, color: 'var(--text-muted)', letterSpacing: 1, marginTop: 4 }}>MIN</div>
       </div>
       {sep}
       <div style={{ textAlign: 'center' }}>
-        <div style={{ fontSize: 32, fontWeight: 900, color, fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>{String(parts.s).padStart(2, '0')}</div>
-        <div style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: 1, marginTop: 4 }}>SEK</div>
+        <div style={{ fontSize: 28, fontWeight: 900, color, fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>{String(parts.s).padStart(2, '0')}</div>
+        <div style={{ fontSize: 9, color: 'var(--text-muted)', letterSpacing: 1, marginTop: 4 }}>SEK</div>
       </div>
     </div>
   )
@@ -405,32 +405,24 @@ function FinanceOutcomeRow({
   label, sublabel, prob, isWinner, isResolved, isActive, color,
   onBuy, onSell, hasPosition, shares,
 }: {
-  label: string
-  sublabel?: string
-  prob: number
-  isWinner?: boolean
-  isResolved: boolean
-  isActive: boolean
-  color: string
-  onBuy: () => void
-  onSell: () => void
-  hasPosition: boolean
-  shares: number
+  label: string; sublabel?: string; prob: number; isWinner?: boolean
+  isResolved: boolean; isActive: boolean; color: string
+  onBuy: () => void; onSell: () => void; hasPosition: boolean; shares: number
 }) {
   return (
     <div style={{
       display: 'grid',
-      gridTemplateColumns: '1fr 120px 180px',
+      gridTemplateColumns: '1fr 80px 160px',
       alignItems: 'center',
-      gap: 16,
-      padding: '14px 20px',
+      gap: 12,
+      padding: '14px 16px',
       borderBottom: '1px solid var(--border)',
       background: isActive ? `${color}08` : 'var(--card)',
       transition: 'background 0.15s',
       opacity: isResolved && !isWinner ? 0.55 : 1,
     }}>
       <div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>{label}</span>
           {sublabel && <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{sublabel}</span>}
           {isWinner && <span style={{ fontSize: 11, fontWeight: 700, color: '#16a34a', padding: '1px 7px', borderRadius: 10, background: 'rgba(22,163,74,0.12)' }}>✓ Gewonnen</span>}
@@ -445,14 +437,14 @@ function FinanceOutcomeRow({
         </div>
       </div>
       <div style={{ textAlign: 'right' }}>
-        <div style={{ fontSize: 24, fontWeight: 800, color, letterSpacing: '-0.5px', fontVariantNumeric: 'tabular-nums' }}>{prob}%</div>
+        <div style={{ fontSize: 22, fontWeight: 800, color, letterSpacing: '-0.5px', fontVariantNumeric: 'tabular-nums' }}>{prob}%</div>
         <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 1 }}>{prob}¢</div>
       </div>
       {!isResolved ? (
         <div style={{ display: 'flex', gap: 6 }}>
           <button onClick={onBuy} style={{
             flex: 1, padding: '9px 0', borderRadius: 8, border: 'none', cursor: 'pointer',
-            fontWeight: 700, fontSize: 13,
+            fontWeight: 700, fontSize: 12,
             background: color === '#16a34a' ? 'rgba(22,163,74,0.15)' : 'rgba(220,38,38,0.12)',
             color, transition: 'background 0.15s',
           }}>
@@ -460,7 +452,7 @@ function FinanceOutcomeRow({
           </button>
           {hasPosition && (
             <button onClick={onSell} style={{
-              padding: '9px 12px', borderRadius: 8, border: '1px solid var(--border)', cursor: 'pointer',
+              padding: '9px 10px', borderRadius: 8, border: '1px solid var(--border)', cursor: 'pointer',
               fontWeight: 600, fontSize: 12, background: 'var(--surface)', color: 'var(--text-muted)',
             }}>
               Sell
@@ -537,7 +529,6 @@ function SpendInput({
   )
 }
 
-// ── Shared Limit-Order Toggle ─────────────────────────────────────────────
 function OrderTypeToggle({ orderType, setOrderType }: { orderType: OrderType; setOrderType: (v: OrderType) => void }) {
   return (
     <div style={{ display: 'flex', gap: 4, marginBottom: 14, background: 'var(--surface)', borderRadius: 8, padding: 4 }}>
@@ -590,6 +581,7 @@ export default function MarketPage() {
   const [livePrice, setLivePrice]       = useState<number | null>(null)
   const [priceHistory, setPriceHistory] = useState<PricePoint[]>([])
   const cryptoCanvasRef                 = useRef<HTMLCanvasElement>(null)
+  const cryptoWrapRef                   = useRef<HTMLDivElement>(null)
   const priceHistoryRef                 = useRef<PricePoint[]>([])
   const lastRealPrice                   = useRef<number | null>(null)
   const marketRef                       = useRef<Market | null>(null)
@@ -598,13 +590,21 @@ export default function MarketPage() {
   const resolveTriggeredRef             = useRef(false)
 
   const [resultToast, setResultToast] = useState<ResultToast | null>(null)
-const [copied, setCopied] = useState(false)
+  const [copied, setCopied]           = useState(false)
   const toastShownRef                 = useRef(false)
 
   const currentIntervalMs = useRef(10000)
   const intervalRef       = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  // ── Kategorie-Flags ───────────────────────────────────────────────────────
+  // Mobile: is screen narrow?
+  const [isMobile, setIsMobile] = useState(false)
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth <= 768)
+    check()
+    window.addEventListener('resize', check)
+    return () => window.removeEventListener('resize', check)
+  }, [])
+
   const isFinance  = !!(market?.category === 'finance' || market?.category === 'Finanzen')
   const isFormula1 = market?.category === 'formula1'
   const isWeather  = market?.category === 'weather' || market?.category === 'Wetter'
@@ -770,11 +770,23 @@ const [copied, setCopied] = useState(false)
     return () => { clearInterval(fetchInterval); clearInterval(interpInterval) }
   }, [market?.is_auto, market?.coin, market?.resolved, market?.closes_at, market?.match_id, market?.category, isFormula1, isWeather])
 
+  // Chart — responsive canvas size
   useEffect(() => {
     if (!market?.is_auto || !cryptoCanvasRef.current || !market?.start_price || !market?.closes_at) return
     if (market?.match_id) return
     if (market?.category === 'finance' || market?.category === 'Finanzen') return
     if (isFormula1 || isWeather) return
+
+    const canvas = cryptoCanvasRef.current
+    const wrap   = cryptoWrapRef.current
+    if (wrap) {
+      const w = wrap.clientWidth || 600
+      canvas.width  = w * window.devicePixelRatio
+      canvas.height = 200 * window.devicePixelRatio
+      canvas.style.width  = `${w}px`
+      canvas.style.height = '200px'
+      ctx => ctx && ctx.scale(window.devicePixelRatio, window.devicePixelRatio)
+    }
 
     const marketEndMs      = parseUTC(market.closes_at).getTime()
     const marketDurationMs = 3 * 60 * 1000
@@ -782,7 +794,7 @@ const [copied, setCopied] = useState(false)
     const anchorPoint: PricePoint = { t: marketStartMs, price: market.start_price }
     const fullHistory = priceHistory.length > 0 ? [anchorPoint, ...priceHistory.filter(p => p.t > marketStartMs)] : [anchorPoint]
     const chartEnd = market.resolved ? marketEndMs : Date.now()
-    drawCryptoChart(cryptoCanvasRef.current, fullHistory, market.start_price, marketStartMs, chartEnd)
+    drawCryptoChart(canvas, fullHistory, market.start_price, marketStartMs, chartEnd)
   }, [priceHistory, market?.is_auto, market?.start_price, market?.closes_at, market?.resolved, market?.match_id, market?.category, isFormula1, isWeather])
 
   useEffect(() => {
@@ -1004,15 +1016,15 @@ const [copied, setCopied] = useState(false)
     : `${market.coin} Up or Down – 3 Minuten`
 
   const backLabel = isSoccer
-    ? '← Zurück zur Bundesliga'
+    ? '← Bundesliga'
     : isFinance
-    ? '← Zurück zu Finanzen'
+    ? '← Finanzen'
     : isFormula1
-    ? '← Zurück zu Formel 1'
+    ? '← Formel 1'
     : isWeather
-    ? '← Zurück zu Wetter'
+    ? '← Wetter'
     : market.category
-    ? `← Zurück zu ${market.category}`
+    ? `← ${market.category}`
     : '← Zurück'
 
   const backTarget = isSoccer
@@ -1038,7 +1050,6 @@ const [copied, setCopied] = useState(false)
   const displayIsUp    = displayDelta !== null ? displayDelta >= 0 : true
   const financeIsEnded = market.resolved || closesAtMs < Date.now()
 
-  // ── Shared Limit-Slider Block ─────────────────────────────────────────────
   const renderLimitSlider = () => (
     <div style={{ marginBottom: 14 }}>
       <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>
@@ -1061,9 +1072,9 @@ const [copied, setCopied] = useState(false)
     </div>
   )
 
-  // Wiederverwendbares Trade-Panel (Soccer, Normal, Weather teilen dieselbe Logik)
+  // Wiederverwendbares Trade-Panel
   const renderTradePanel = (resolvedLabel?: string) => (
-    <div className="card" style={{ position: 'sticky', top: 'calc(var(--nav-height) + 16px)', padding: 0, overflow: 'hidden' }}>
+    <div className="card" style={{ position: isMobile ? 'static' : 'sticky', top: 'calc(var(--nav-height) + 16px)', padding: 0, overflow: 'hidden' }}>
       {(market.resolved || closesAtMs < Date.now()) ? (
         <div style={{ padding: '24px 16px', textAlign: 'center' }}>
           <div style={{ fontSize: 28, marginBottom: 4 }}>{userWon ? '🎉' : hasPosition ? '😔' : '✓'}</div>
@@ -1099,38 +1110,38 @@ const [copied, setCopied] = useState(false)
             </div>
           </div>
           <div style={{ padding: 16 }}>
-           {tradeTab === 'kaufen' && (
-  <>
-    <OrderTypeToggle orderType={orderType} setOrderType={setOrderType} />
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 16 }}>
-      {(['yes', 'no'] as const).map(d => (
-        <button key={d} onClick={() => setDirection(d)} style={{ padding: '10px 0', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 14, background: direction === d ? (d === 'yes' ? 'rgba(22,163,74,0.15)' : 'rgba(220,38,38,0.15)') : 'var(--surface)', color: direction === d ? (d === 'yes' ? 'var(--yes)' : 'var(--no)') : 'var(--text-muted)', outline: direction === d ? `2px solid ${d === 'yes' ? 'var(--yes)' : 'var(--no)'}` : '2px solid transparent' }}>
-          {d === 'yes' ? `Ja · ${prob}¢` : `Nein · ${100 - prob}¢`}
-        </button>
-      ))}
-    </div>
-    <SpendInput spendRaw={spendRaw} setSpendRaw={setSpendRaw} spend={spend} setSpend={setSpend} userBalance={user.balance} />
-    {orderType === 'limit' && renderLimitSlider()}
-    <div style={{ background: 'rgba(22,163,74,0.07)', borderRadius: 10, padding: '14px', marginBottom: 14, textAlign: 'center', border: '1px solid rgba(22,163,74,0.2)' }}>
-      {orderType === 'markt' ? (
-        <>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Auszahlung wenn Ja eintritt</div>
-          <div style={{ fontSize: 32, fontWeight: 800, color: '#16a34a', letterSpacing: '-0.5px' }}>{payout} ₫</div>
-        </>
-      ) : (
-        <>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>
-            {limitPrice < (direction === 'yes' ? prob : 100 - prob) ? 'Wartet auf Ausführung' : 'Wird sofort ausgeführt'}
-          </div>
-          <div style={{ fontSize: 18, fontWeight: 700, color: '#16a34a' }}>
-            {spend} ₫ · max {Math.round(lmsrSharesForSpend(market.q_yes, market.q_no, market.b, direction, spend))} Anteile
-          </div>
-          <div style={{ fontSize: 11, color: 'var(--text-subtle)', marginTop: 2 }}>bei {limitPrice}¢ oder besser</div>
-        </>
-      )}
-    </div>
-  </>
-)}
+            {tradeTab === 'kaufen' && (
+              <>
+                <OrderTypeToggle orderType={orderType} setOrderType={setOrderType} />
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 16 }}>
+                  {(['yes', 'no'] as const).map(d => (
+                    <button key={d} onClick={() => setDirection(d)} style={{ padding: '10px 0', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 14, background: direction === d ? (d === 'yes' ? 'rgba(22,163,74,0.15)' : 'rgba(220,38,38,0.15)') : 'var(--surface)', color: direction === d ? (d === 'yes' ? 'var(--yes)' : 'var(--no)') : 'var(--text-muted)', outline: direction === d ? `2px solid ${d === 'yes' ? 'var(--yes)' : 'var(--no)'}` : '2px solid transparent' }}>
+                      {d === 'yes' ? `Ja · ${prob}¢` : `Nein · ${100 - prob}¢`}
+                    </button>
+                  ))}
+                </div>
+                <SpendInput spendRaw={spendRaw} setSpendRaw={setSpendRaw} spend={spend} setSpend={setSpend} userBalance={user.balance} />
+                {orderType === 'limit' && renderLimitSlider()}
+                <div style={{ background: 'rgba(22,163,74,0.07)', borderRadius: 10, padding: '14px', marginBottom: 14, textAlign: 'center', border: '1px solid rgba(22,163,74,0.2)' }}>
+                  {orderType === 'markt' ? (
+                    <>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Auszahlung wenn Ja eintritt</div>
+                      <div style={{ fontSize: 32, fontWeight: 800, color: '#16a34a', letterSpacing: '-0.5px' }}>{payout} ₫</div>
+                    </>
+                  ) : (
+                    <>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>
+                        {limitPrice < (direction === 'yes' ? prob : 100 - prob) ? 'Wartet auf Ausführung' : 'Wird sofort ausgeführt'}
+                      </div>
+                      <div style={{ fontSize: 18, fontWeight: 700, color: '#16a34a' }}>
+                        {spend} ₫ · max {Math.round(lmsrSharesForSpend(market.q_yes, market.q_no, market.b, direction, spend))} Anteile
+                      </div>
+                      <div style={{ fontSize: 11, color: 'var(--text-subtle)', marginTop: 2 }}>bei {limitPrice}¢ oder besser</div>
+                    </>
+                  )}
+                </div>
+              </>
+            )}
             {tradeTab === 'verkaufen' && (
               <>
                 {!hasPosition ? (
@@ -1169,10 +1180,18 @@ const [copied, setCopied] = useState(false)
     </div>
   )
 
+  // Responsive 2-Spalten-Layout Helper
+  const twoCol = (left: React.ReactNode, right: React.ReactNode) => (
+    <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 300px', gap: 20, alignItems: 'start' }}>
+      <div>{left}</div>
+      <div>{right}</div>
+    </div>
+  )
+
   return (
     <>
       {resultToast && !isSoccer && !isFormula1 && !isWeather && (
-        <div style={{ position: 'fixed', top: 80, right: 16, zIndex: 9999, background: 'var(--bg, #fff)', border: `1px solid ${toastIsUp ? 'rgba(22,163,74,0.3)' : 'rgba(220,38,38,0.3)'}`, borderLeft: `4px solid ${toastColor}`, borderRadius: 14, padding: '16px 18px', minWidth: 280, maxWidth: 340, boxShadow: '0 4px 24px rgba(0,0,0,0.10)', animation: 'slideInRight 0.35s cubic-bezier(.21,1.02,.73,1)' }}>
+        <div style={{ position: 'fixed', top: 80, right: 16, zIndex: 9999, background: 'var(--bg, #fff)', border: `1px solid ${toastIsUp ? 'rgba(22,163,74,0.3)' : 'rgba(220,38,38,0.3)'}`, borderLeft: `4px solid ${toastColor}`, borderRadius: 14, padding: '16px 18px', minWidth: 260, maxWidth: 320, boxShadow: '0 4px 24px rgba(0,0,0,0.10)', animation: 'slideInRight 0.35s cubic-bezier(.21,1.02,.73,1)' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               {resultToast.coin && (<span style={{ width: 28, height: 28, borderRadius: 7, background: COIN_COLORS[resultToast.coin] ?? '#f97316', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, color: '#fff' }}>{resultToast.coin.charAt(0)}</span>)}
@@ -1195,7 +1214,7 @@ const [copied, setCopied] = useState(false)
           <img src="/logo-weiss.png" alt="Möbius" className="nav-logo" onClick={() => router.push('/')} style={{ cursor: 'pointer' }} />
           <button className="nav-pill" onClick={() => router.push(backTarget)} style={{ fontSize: 13 }}>{backLabel}</button>
         </div>
-      <div className="nav-right">
+        <div className="nav-right">
           <button
             onClick={() => {
               navigator.clipboard.writeText(window.location.href)
@@ -1225,7 +1244,7 @@ const [copied, setCopied] = useState(false)
         </div>
       </nav>
 
-      <div style={{ maxWidth: 980, margin: '0 auto', padding: '24px 16px' }}>
+      <div style={{ maxWidth: 980, margin: '0 auto', padding: isMobile ? '16px 12px 80px' : '24px 16px' }}>
 
         {/* ── SOCCER ── */}
         {isSoccer && (
@@ -1240,28 +1259,28 @@ const [copied, setCopied] = useState(false)
             )}
             <div className="card" style={{ marginBottom: 20 }}>
               {!soccerIsInactive && (
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 8 }}>
                   <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-muted)' }}>Schließt in</div>
                   <CountdownDisplay targetMs={closesAtMs} />
                 </div>
               )}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 32, marginBottom: 24 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: isMobile ? 16 : 32, marginBottom: 24 }}>
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, flex: 1 }}>
-                  <TeamIcon name={homeTeam} size={64} />
-                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', textAlign: 'center', maxWidth: 120, lineHeight: 1.3 }}>{homeTeam}</div>
-                  <div style={{ fontSize: 24, fontWeight: 800, color: getTeamColor(homeTeam) }}>{homeNorm}%</div>
+                  <TeamIcon name={homeTeam} size={isMobile ? 48 : 64} />
+                  <div style={{ fontSize: isMobile ? 12 : 13, fontWeight: 700, color: 'var(--text)', textAlign: 'center', maxWidth: 100, lineHeight: 1.3 }}>{homeTeam}</div>
+                  <div style={{ fontSize: isMobile ? 20 : 24, fontWeight: 800, color: getTeamColor(homeTeam) }}>{homeNorm}%</div>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
                   {liveScore ? (
-                    <><div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, letterSpacing: 1, marginBottom: 2 }}>LIVE</div><div style={{ fontSize: 36, fontWeight: 900, color: 'var(--text)', letterSpacing: '-1px', lineHeight: 1 }}>{liveScore.home} : {liveScore.away}</div><div style={{ fontSize: 11, color: '#22c55e', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: '#22c55e', display: 'inline-block' }} />Zwischenstand</div></>
+                    <><div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, letterSpacing: 1, marginBottom: 2 }}>LIVE</div><div style={{ fontSize: isMobile ? 28 : 36, fontWeight: 900, color: 'var(--text)', letterSpacing: '-1px', lineHeight: 1 }}>{liveScore.home} : {liveScore.away}</div><div style={{ fontSize: 11, color: '#22c55e', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: '#22c55e', display: 'inline-block' }} />Zwischenstand</div></>
                   ) : (
                     <><div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, letterSpacing: 1 }}>VS</div><div style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 600 }}>Unentschieden</div><div style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-muted)' }}>{drawNorm}%</div></>
                   )}
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, flex: 1 }}>
-                  <TeamIcon name={awayTeam} size={64} />
-                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', textAlign: 'center', maxWidth: 120, lineHeight: 1.3 }}>{awayTeam}</div>
-                  <div style={{ fontSize: 24, fontWeight: 800, color: getTeamColor(awayTeam) }}>{awayNorm}%</div>
+                  <TeamIcon name={awayTeam} size={isMobile ? 48 : 64} />
+                  <div style={{ fontSize: isMobile ? 12 : 13, fontWeight: 700, color: 'var(--text)', textAlign: 'center', maxWidth: 100, lineHeight: 1.3 }}>{awayTeam}</div>
+                  <div style={{ fontSize: isMobile ? 20 : 24, fontWeight: 800, color: getTeamColor(awayTeam) }}>{awayNorm}%</div>
                 </div>
               </div>
               <div style={{ display: 'flex', height: 6, borderRadius: 3, overflow: 'hidden', gap: 2, marginBottom: 8 }}>
@@ -1275,7 +1294,8 @@ const [copied, setCopied] = useState(false)
                 </div>
               )}
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 20, alignItems: 'start' }}>
+
+            {twoCol(
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 4 }}>Auf welchen Ausgang tippst du?</div>
                 {[
@@ -1286,16 +1306,16 @@ const [copied, setCopied] = useState(false)
                   const isActive = thisOutcome === opt.outcome; const isResolved = opt.market?.resolved; const won = isResolved && opt.market?.resolution === 'yes'
                   return (
                     <div key={opt.outcome} onClick={() => { if (opt.market && opt.market.id !== marketId) router.push(`/markets/${opt.market.id}`) }}
-                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderRadius: 14, cursor: opt.market?.id !== marketId ? 'pointer' : 'default', border: isActive ? `2px solid ${opt.color}` : '2px solid var(--border)', background: isActive ? `${opt.color}10` : 'var(--card)', transition: 'all 0.15s', opacity: isResolved && !won ? 0.6 : 1 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                        {opt.outcome === 'draw' ? (<div style={{ width: 44, height: 44, borderRadius: 11, background: '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 900, color: '#fff', flexShrink: 0 }}>X</div>) : (<TeamIcon name={opt.label} size={44} />)}
+                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', borderRadius: 14, cursor: opt.market?.id !== marketId ? 'pointer' : 'default', border: isActive ? `2px solid ${opt.color}` : '2px solid var(--border)', background: isActive ? `${opt.color}10` : 'var(--card)', transition: 'all 0.15s', opacity: isResolved && !won ? 0.6 : 1 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                        {opt.outcome === 'draw' ? (<div style={{ width: 40, height: 40, borderRadius: 10, background: '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 900, color: '#fff', flexShrink: 0 }}>X</div>) : (<TeamIcon name={opt.label} size={40} />)}
                         <div>
                           <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>{opt.label}</div>
                           <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{isResolved ? (won ? '✓ Gewonnen' : 'Nicht eingetreten') : `${opt.market ? Math.round(opt.market.q_yes + opt.market.q_no).toLocaleString('de') : 0} ₫ Volumen`}</div>
                         </div>
                       </div>
                       <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                        <div style={{ fontSize: 28, fontWeight: 800, color: opt.color, letterSpacing: '-0.5px' }}>{opt.prob}%</div>
+                        <div style={{ fontSize: 26, fontWeight: 800, color: opt.color, letterSpacing: '-0.5px' }}>{opt.prob}%</div>
                         {isActive && !isResolved && <div style={{ fontSize: 11, color: opt.color, fontWeight: 600 }}>← Aktiv</div>}
                         {won && <div style={{ fontSize: 11, color: '#16a34a', fontWeight: 700 }}>Gewonnen ✓</div>}
                       </div>
@@ -1317,8 +1337,8 @@ const [copied, setCopied] = useState(false)
                     </div>
                   </div>
                 )}
-              </div>
-              {soccerIsInactive ? (
+              </div>,
+              soccerIsInactive ? (
                 <div className="card" style={{ padding: '24px 16px', textAlign: 'center' }}>
                   <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 6 }}>{userWon ? 'Gewonnen!' : hasPosition ? 'Verloren' : 'Markt nicht mehr aktiv'}</div>
                   {market.resolved && <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}>{soccerResolutionLabel()}</div>}
@@ -1326,7 +1346,7 @@ const [copied, setCopied] = useState(false)
                   <button onClick={() => router.push('/')} style={{ width: '100%', padding: '12px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 10, cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>Weitere Möbius-Märkte →</button>
                 </div>
               ) : (
-                <div className="card" style={{ position: 'sticky', top: 'calc(var(--nav-height) + 16px)', padding: 0, overflow: 'hidden' }}>
+                <div className="card" style={{ position: isMobile ? 'static' : 'sticky', top: 'calc(var(--nav-height) + 16px)', padding: 0, overflow: 'hidden' }}>
                   {!user ? (
                     <div style={{ textAlign: 'center', padding: '24px 16px' }}>
                       <div style={{ fontSize: 14, color: 'var(--text-muted)', marginBottom: 12 }}>Anmelden um zu tippen</div>
@@ -1397,8 +1417,8 @@ const [copied, setCopied] = useState(false)
                     </>
                   )}
                 </div>
-              )}
-            </div>
+              )
+            )}
           </>
         )}
 
@@ -1415,7 +1435,7 @@ const [copied, setCopied] = useState(false)
                     {market.short_label?.charAt(0) ?? market.coin?.charAt(0) ?? '₿'}
                   </span>
                   <div>
-                    <h1 style={{ fontSize: 20, fontWeight: 800, color: 'var(--text)', lineHeight: 1.2, margin: 0 }}>{autoMarketTitle}</h1>
+                    <h1 style={{ fontSize: isMobile ? 17 : 20, fontWeight: 800, color: 'var(--text)', lineHeight: 1.2, margin: 0 }}>{autoMarketTitle}</h1>
                     <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 3 }}>
                       {market.group_title === 'Aktueller Handelstag' ? 'Tagesschluss' : 'Wochenschluss'} ·{' '}
                       {closesAt.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit', timeZone: 'Europe/Berlin' })}
@@ -1425,15 +1445,15 @@ const [copied, setCopied] = useState(false)
                 {!financeIsEnded && (<div style={{ textAlign: 'right' }}><div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Verbleibend</div><CountdownDisplay targetMs={closesAtMs} redThresholdMs={300000} /></div>)}
               </div>
             </div>
-            <div style={{ display: 'flex', gap: 32, padding: '16px 20px', background: 'var(--surface)', borderRadius: 12, border: '1px solid var(--border)', marginBottom: 20, alignItems: 'center', flexWrap: 'wrap' }}>
-              <div><div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 3 }}>Startpreis</div><div style={{ fontSize: 22, fontWeight: 700, color: 'var(--text)', fontVariantNumeric: 'tabular-nums' }}>${market.start_price?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) ?? '—'}</div></div>
+            <div style={{ display: 'flex', gap: isMobile ? 16 : 32, padding: '14px 16px', background: 'var(--surface)', borderRadius: 12, border: '1px solid var(--border)', marginBottom: 20, alignItems: 'center', flexWrap: 'wrap' }}>
+              <div><div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 3 }}>Startpreis</div><div style={{ fontSize: isMobile ? 18 : 22, fontWeight: 700, color: 'var(--text)', fontVariantNumeric: 'tabular-nums' }}>${market.start_price?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) ?? '—'}</div></div>
               <div style={{ width: 1, height: 40, background: 'var(--border)', flexShrink: 0 }} />
               <div>
                 <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 3, display: 'flex', alignItems: 'center', gap: 6 }}>
                   {market.resolved ? 'Endpreis' : 'Aktueller Preis'}
                   {displayDelta !== null && (<span style={{ color: displayIsUp ? '#16a34a' : '#dc2626', fontWeight: 700, fontSize: 12, padding: '1px 6px', borderRadius: 6, background: displayIsUp ? 'rgba(22,163,74,0.1)' : 'rgba(220,38,38,0.1)' }}>{displayIsUp ? '▲' : '▼'} ${Math.abs(displayDelta).toFixed(2)}</span>)}
                 </div>
-                <div style={{ fontSize: 22, fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: market.resolved ? 'var(--text)' : (displayIsUp ? '#16a34a' : '#dc2626'), transition: 'color 0.3s' }}>
+                <div style={{ fontSize: isMobile ? 18 : 22, fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: market.resolved ? 'var(--text)' : (displayIsUp ? '#16a34a' : '#dc2626'), transition: 'color 0.3s' }}>
                   {displayPrice ? `$${displayPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'Lädt…'}
                 </div>
               </div>
@@ -1451,83 +1471,80 @@ const [copied, setCopied] = useState(false)
                 {nextLiveMarket && (<button onClick={() => router.push(`/markets/${nextLiveMarket.id}`)} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 20px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: 20, cursor: 'pointer', fontSize: 13, fontWeight: 700 }}><span style={{ width: 7, height: 7, borderRadius: '50%', background: '#fff', display: 'inline-block' }} />Zum Live-Markt →</button>)}
               </div>
             )}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 20, alignItems: 'start' }}>
+            {twoCol(
               <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 120px 180px', gap: 16, padding: '10px 20px', background: 'var(--surface)', borderBottom: '1px solid var(--border)' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px 160px', gap: 16, padding: '10px 16px', background: 'var(--surface)', borderBottom: '1px solid var(--border)' }}>
                   <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>Ausgang</div>
                   <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5, textAlign: 'right' }}>Wahrsch.</div>
                   <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>Handeln</div>
                 </div>
                 <FinanceOutcomeRow label="↑ Höher" sublabel={`als $${market.start_price?.toFixed(2)}`} prob={prob} isWinner={market.resolved && market.resolution === 'yes'} isResolved={!!market.resolved} isActive={direction === 'yes'} color="#16a34a" onBuy={() => { setDirection('yes'); setTradeTab('kaufen') }} onSell={() => { setDirection('yes'); setTradeTab('verkaufen') }} hasPosition={sharesYes > 0} shares={sharesYes} />
                 <FinanceOutcomeRow label="↓ Tiefer" sublabel={`als $${market.start_price?.toFixed(2)}`} prob={100 - prob} isWinner={market.resolved && market.resolution === 'no'} isResolved={!!market.resolved} isActive={direction === 'no'} color="#dc2626" onBuy={() => { setDirection('no'); setTradeTab('kaufen') }} onSell={() => { setDirection('no'); setTradeTab('verkaufen') }} hasPosition={sharesNo > 0} shares={sharesNo} />
-                <div style={{ padding: '10px 20px', background: 'var(--surface)', borderTop: '1px solid var(--border)' }}><LivePositionsBar trades={trades} isKrypto={false} /></div>
-              </div>
-              {/* ── Finance Trade Panel ── */}
-              <div className="card" style={{ position: 'sticky', top: 'calc(var(--nav-height) + 16px)', padding: 0, overflow: 'hidden' }}>
-                {financeIsEnded ? (
-                  <div style={{ padding: '24px 16px' }}>
-                    <div style={{ textAlign: 'center', marginBottom: 16 }}>
-                      <div style={{ fontSize: 28, marginBottom: 4 }}>{userWon ? '🎉' : hasPosition ? '😔' : '✓'}</div>
-                      <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', marginBottom: 4 }}>{userWon ? 'Gewonnen!' : hasPosition ? 'Verloren' : 'Markt beendet'}</div>
-                      <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Ergebnis: <strong style={{ color: market.resolution === 'yes' ? '#16a34a' : '#dc2626', fontSize: 15 }}>{market.resolution === 'yes' ? '↑ Höher' : '↓ Tiefer'}</strong></div>
+                <div style={{ padding: '10px 16px', background: 'var(--surface)', borderTop: '1px solid var(--border)' }}><LivePositionsBar trades={trades} isKrypto={false} /></div>
+                {trades.filter(t => t.shares > 0).length > 0 && (
+                  <div style={{ padding: 16 }}>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', marginBottom: 14 }}>Letzte Trades</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      {[...trades].filter(t => t.shares > 0).reverse().slice(0, 10).map(t => (
+                        <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, padding: '6px 0', borderBottom: '1px solid var(--border)' }}>
+                          <span style={{ color: t.type.includes('yes') ? '#16a34a' : '#dc2626', fontWeight: 600 }}>{t.type.includes('yes') ? '↑ Höher' : '↓ Tiefer'}</span>
+                          <span style={{ color: 'var(--text)' }}>{Math.round(Math.abs(t.cost))} ₫</span>
+                          <span style={{ color: 'var(--text-subtle)' }}>{new Date(t.created_at).toLocaleDateString('de', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
+                        </div>
+                      ))}
                     </div>
-                    {hasPosition && (<div style={{ padding: '14px', borderRadius: 10, textAlign: 'center', marginBottom: 14, background: userWon ? 'rgba(22,163,74,0.08)' : 'rgba(220,38,38,0.08)', border: `1px solid ${userWon ? 'rgba(22,163,74,0.2)' : 'rgba(220,38,38,0.2)'}` }}>{userWon ? (<><div style={{ fontSize: 12, color: '#16a34a', marginBottom: 4 }}>Auszahlung erfolgt automatisch</div><div style={{ fontSize: 28, fontWeight: 800, color: '#16a34a' }}>+{Math.round(market.resolution === 'yes' ? sharesYes : sharesNo)} ₫</div></>) : (<div style={{ fontSize: 13, color: '#dc2626' }}>Leider verloren — nächsten Markt versuchen!</div>)}</div>)}
-                    {nextLiveMarket && (<button onClick={() => router.push(`/markets/${nextLiveMarket.id}`)} style={{ width: '100%', padding: '12px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: 10, cursor: 'pointer', fontSize: 14, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: '#fff' }} />Zum Live-Markt →</button>)}
                   </div>
-                ) : !user ? (
-                  <div style={{ textAlign: 'center', padding: '24px 16px' }}><div style={{ fontSize: 14, color: 'var(--text-muted)', marginBottom: 12 }}>Anmelden um zu handeln</div><button className="submit-btn yes" onClick={() => router.push('/')}>Zur Anmeldung</button></div>
-                ) : (
-                  <>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border)', padding: '0 16px' }}>
-                      <div style={{ display: 'flex' }}>
-                        {(['kaufen', 'verkaufen'] as TradeTab[]).map(t => (<button key={t} onClick={() => { setTradeTab(t); setBetError(''); setBetSuccess('') }} style={{ padding: '12px 14px', fontSize: 13, fontWeight: 600, border: 'none', cursor: 'pointer', background: 'transparent', color: tradeTab === t ? 'var(--text)' : 'var(--text-muted)', borderBottom: tradeTab === t ? '2px solid var(--accent)' : '2px solid transparent', marginBottom: -1 }}>{t.charAt(0).toUpperCase() + t.slice(1)}</button>))}
-                      </div>
-                    </div>
-                    <div style={{ padding: 16 }}>
-                      {tradeTab === 'kaufen' && (<>
-                        <OrderTypeToggle orderType={orderType} setOrderType={setOrderType} />
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 16 }}>
-                          {(['yes', 'no'] as const).map(d => (<button key={d} onClick={() => setDirection(d)} style={{ padding: '12px 0', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 14, background: direction === d ? (d === 'yes' ? 'rgba(22,163,74,0.15)' : 'rgba(220,38,38,0.15)') : 'var(--surface)', color: direction === d ? (d === 'yes' ? '#16a34a' : '#dc2626') : 'var(--text-muted)', outline: direction === d ? `2px solid ${d === 'yes' ? '#16a34a' : '#dc2626'}` : '2px solid transparent' }}>{d === 'yes' ? `↑ Höher · ${prob}¢` : `↓ Tiefer · ${100 - prob}¢`}</button>))}
-                        </div>
-                        <SpendInput spendRaw={spendRaw} setSpendRaw={setSpendRaw} spend={spend} setSpend={setSpend} userBalance={user.balance} />
-                        {orderType === 'limit' && renderLimitSlider()}
-                        <div style={{ background: 'rgba(22,163,74,0.07)', borderRadius: 10, padding: '14px', marginBottom: 14, textAlign: 'center', border: '1px solid rgba(22,163,74,0.2)' }}>
-                          {orderType === 'markt' ? (
-                            <><div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Auszahlung wenn {direction === 'yes' ? '↑ Höher' : '↓ Tiefer'} eintritt</div><div style={{ fontSize: 32, fontWeight: 800, color: '#16a34a', letterSpacing: '-0.5px' }}>{payout} ₫</div></>
-                          ) : (
-                            <><div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>{limitPrice < (direction === 'yes' ? prob : 100 - prob) ? 'Wartet auf Ausführung' : 'Wird sofort ausgeführt'}</div><div style={{ fontSize: 18, fontWeight: 700, color: '#16a34a' }}>{spend} ₫ · max {Math.round(lmsrSharesForSpend(market.q_yes, market.q_no, market.b, direction, spend))} Anteile</div><div style={{ fontSize: 11, color: 'var(--text-subtle)', marginTop: 2 }}>bei {limitPrice}¢ oder besser</div></>
-                          )}
-                        </div>
-                      </>)}
-                      {tradeTab === 'verkaufen' && (<>{!hasPosition ? (<div style={{ textAlign: 'center', padding: '24px 0', fontSize: 13, color: 'var(--text-muted)' }}>Du hast keine Anteile in diesem Markt.</div>) : (<><div style={{ background: 'var(--surface)', borderRadius: 8, padding: '12px', marginBottom: 16, fontSize: 13 }}><div style={{ color: 'var(--text-muted)', marginBottom: 4, fontSize: 12 }}>Deine Position</div>{sharesYes > 0 && <div style={{ fontWeight: 700, color: '#16a34a' }}>↑ Höher · {Math.round(sharesYes)} Anteile</div>}{sharesNo > 0 && <div style={{ fontWeight: 700, color: '#dc2626' }}>↓ Tiefer · {Math.round(sharesNo)} Anteile</div>}</div><div style={{ background: 'rgba(22,163,74,0.07)', borderRadius: 10, padding: '14px', marginBottom: 14, textAlign: 'center', border: '1px solid rgba(22,163,74,0.2)' }}><div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Du erhältst jetzt</div><div style={{ fontSize: 32, fontWeight: 800, color: '#16a34a', letterSpacing: '-0.5px' }}>{Math.round(returnOnSell)} ₫</div><div style={{ fontSize: 11, color: 'var(--text-subtle)', marginTop: 4 }}>alle Anteile verkaufen</div></div></>)}</>)}
-                      {betError   && <div className="alert alert-error"   style={{ marginBottom: 10 }}>{betError}</div>}
-                      {betSuccess  && <div className="alert alert-success" style={{ marginBottom: 10 }}>{betSuccess}</div>}
-                      {tradeTab === 'kaufen' ? (
-                        <button className={`submit-btn ${direction === 'yes' ? 'yes' : 'no'}`} onClick={handleKaufen} disabled={betLoading || spend <= 0} style={{ width: '100%' }}>
-                          {betLoading ? 'Wird ausgeführt…' : orderType === 'limit' ? `Limit-Order · ${spend} ₫` : `${direction === 'yes' ? '↑ Höher' : '↓ Tiefer'} kaufen · ${spend} ₫`}
-                        </button>
-                      ) : (
-                        <button className="submit-btn no" onClick={handleVerkaufen} disabled={betLoading || !hasPosition} style={{ width: '100%' }}>{betLoading ? 'Wird verkauft…' : `Verkaufen · ${Math.round(returnOnSell)} ₫`}</button>
-                      )}
-                      <div style={{ fontSize: 11, color: 'var(--text-subtle)', textAlign: 'center', marginTop: 8 }}>Guthaben: {user.balance.toLocaleString('de')} ₫</div>
-                    </div>
-                  </>
                 )}
-              </div>
-            </div>
-            {trades.filter(t => t.shares > 0).length > 0 && (
-              <div className="card" style={{ marginTop: 20 }}>
-                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', marginBottom: 14 }}>Letzte Trades</div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  {[...trades].filter(t => t.shares > 0).reverse().slice(0, 10).map(t => (
-                    <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, padding: '6px 0', borderBottom: '1px solid var(--border)' }}>
-                      <span style={{ color: t.type.includes('yes') ? '#16a34a' : '#dc2626', fontWeight: 600 }}>{t.type.includes('yes') ? '↑ Höher' : '↓ Tiefer'}</span>
-                      <span style={{ color: 'var(--text)' }}>{Math.round(Math.abs(t.cost))} ₫</span>
-                      <span style={{ color: 'var(--text-subtle)' }}>{new Date(t.created_at).toLocaleDateString('de', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
-                    </div>
-                  ))}
+              </div>,
+              financeIsEnded ? (
+                <div className="card" style={{ padding: '24px 16px' }}>
+                  <div style={{ textAlign: 'center', marginBottom: 16 }}>
+                    <div style={{ fontSize: 28, marginBottom: 4 }}>{userWon ? '🎉' : hasPosition ? '😔' : '✓'}</div>
+                    <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', marginBottom: 4 }}>{userWon ? 'Gewonnen!' : hasPosition ? 'Verloren' : 'Markt beendet'}</div>
+                    <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Ergebnis: <strong style={{ color: market.resolution === 'yes' ? '#16a34a' : '#dc2626', fontSize: 15 }}>{market.resolution === 'yes' ? '↑ Höher' : '↓ Tiefer'}</strong></div>
+                  </div>
+                  {hasPosition && (<div style={{ padding: '14px', borderRadius: 10, textAlign: 'center', marginBottom: 14, background: userWon ? 'rgba(22,163,74,0.08)' : 'rgba(220,38,38,0.08)', border: `1px solid ${userWon ? 'rgba(22,163,74,0.2)' : 'rgba(220,38,38,0.2)'}` }}>{userWon ? (<><div style={{ fontSize: 12, color: '#16a34a', marginBottom: 4 }}>Auszahlung erfolgt automatisch</div><div style={{ fontSize: 28, fontWeight: 800, color: '#16a34a' }}>+{Math.round(market.resolution === 'yes' ? sharesYes : sharesNo)} ₫</div></>) : (<div style={{ fontSize: 13, color: '#dc2626' }}>Leider verloren — nächsten Markt versuchen!</div>)}</div>)}
+                  {nextLiveMarket && (<button onClick={() => router.push(`/markets/${nextLiveMarket.id}`)} style={{ width: '100%', padding: '12px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: 10, cursor: 'pointer', fontSize: 14, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: '#fff' }} />Zum Live-Markt →</button>)}
                 </div>
-              </div>
+              ) : !user ? (
+                <div className="card" style={{ textAlign: 'center', padding: '24px 16px' }}><div style={{ fontSize: 14, color: 'var(--text-muted)', marginBottom: 12 }}>Anmelden um zu handeln</div><button className="submit-btn yes" onClick={() => router.push('/')}>Zur Anmeldung</button></div>
+              ) : (
+                <div className="card" style={{ position: isMobile ? 'static' : 'sticky', top: 'calc(var(--nav-height) + 16px)', padding: 0, overflow: 'hidden' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border)', padding: '0 16px' }}>
+                    <div style={{ display: 'flex' }}>
+                      {(['kaufen', 'verkaufen'] as TradeTab[]).map(t => (<button key={t} onClick={() => { setTradeTab(t); setBetError(''); setBetSuccess('') }} style={{ padding: '12px 14px', fontSize: 13, fontWeight: 600, border: 'none', cursor: 'pointer', background: 'transparent', color: tradeTab === t ? 'var(--text)' : 'var(--text-muted)', borderBottom: tradeTab === t ? '2px solid var(--accent)' : '2px solid transparent', marginBottom: -1 }}>{t.charAt(0).toUpperCase() + t.slice(1)}</button>))}
+                    </div>
+                  </div>
+                  <div style={{ padding: 16 }}>
+                    {tradeTab === 'kaufen' && (<>
+                      <OrderTypeToggle orderType={orderType} setOrderType={setOrderType} />
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 16 }}>
+                        {(['yes', 'no'] as const).map(d => (<button key={d} onClick={() => setDirection(d)} style={{ padding: '12px 0', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 14, background: direction === d ? (d === 'yes' ? 'rgba(22,163,74,0.15)' : 'rgba(220,38,38,0.15)') : 'var(--surface)', color: direction === d ? (d === 'yes' ? '#16a34a' : '#dc2626') : 'var(--text-muted)', outline: direction === d ? `2px solid ${d === 'yes' ? '#16a34a' : '#dc2626'}` : '2px solid transparent' }}>{d === 'yes' ? `↑ Höher · ${prob}¢` : `↓ Tiefer · ${100 - prob}¢`}</button>))}
+                      </div>
+                      <SpendInput spendRaw={spendRaw} setSpendRaw={setSpendRaw} spend={spend} setSpend={setSpend} userBalance={user.balance} />
+                      {orderType === 'limit' && renderLimitSlider()}
+                      <div style={{ background: 'rgba(22,163,74,0.07)', borderRadius: 10, padding: '14px', marginBottom: 14, textAlign: 'center', border: '1px solid rgba(22,163,74,0.2)' }}>
+                        {orderType === 'markt' ? (
+                          <><div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Auszahlung wenn {direction === 'yes' ? '↑ Höher' : '↓ Tiefer'} eintritt</div><div style={{ fontSize: 32, fontWeight: 800, color: '#16a34a', letterSpacing: '-0.5px' }}>{payout} ₫</div></>
+                        ) : (
+                          <><div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>{limitPrice < (direction === 'yes' ? prob : 100 - prob) ? 'Wartet auf Ausführung' : 'Wird sofort ausgeführt'}</div><div style={{ fontSize: 18, fontWeight: 700, color: '#16a34a' }}>{spend} ₫ · max {Math.round(lmsrSharesForSpend(market.q_yes, market.q_no, market.b, direction, spend))} Anteile</div><div style={{ fontSize: 11, color: 'var(--text-subtle)', marginTop: 2 }}>bei {limitPrice}¢ oder besser</div></>
+                        )}
+                      </div>
+                    </>)}
+                    {tradeTab === 'verkaufen' && (<>{!hasPosition ? (<div style={{ textAlign: 'center', padding: '24px 0', fontSize: 13, color: 'var(--text-muted)' }}>Du hast keine Anteile in diesem Markt.</div>) : (<><div style={{ background: 'var(--surface)', borderRadius: 8, padding: '12px', marginBottom: 16, fontSize: 13 }}><div style={{ color: 'var(--text-muted)', marginBottom: 4, fontSize: 12 }}>Deine Position</div>{sharesYes > 0 && <div style={{ fontWeight: 700, color: '#16a34a' }}>↑ Höher · {Math.round(sharesYes)} Anteile</div>}{sharesNo > 0 && <div style={{ fontWeight: 700, color: '#dc2626' }}>↓ Tiefer · {Math.round(sharesNo)} Anteile</div>}</div><div style={{ background: 'rgba(22,163,74,0.07)', borderRadius: 10, padding: '14px', marginBottom: 14, textAlign: 'center', border: '1px solid rgba(22,163,74,0.2)' }}><div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Du erhältst jetzt</div><div style={{ fontSize: 32, fontWeight: 800, color: '#16a34a', letterSpacing: '-0.5px' }}>{Math.round(returnOnSell)} ₫</div><div style={{ fontSize: 11, color: 'var(--text-subtle)', marginTop: 4 }}>alle Anteile verkaufen</div></div></>)}</>)}
+                    {betError   && <div className="alert alert-error"   style={{ marginBottom: 10 }}>{betError}</div>}
+                    {betSuccess  && <div className="alert alert-success" style={{ marginBottom: 10 }}>{betSuccess}</div>}
+                    {tradeTab === 'kaufen' ? (
+                      <button className={`submit-btn ${direction === 'yes' ? 'yes' : 'no'}`} onClick={handleKaufen} disabled={betLoading || spend <= 0} style={{ width: '100%' }}>
+                        {betLoading ? 'Wird ausgeführt…' : orderType === 'limit' ? `Limit-Order · ${spend} ₫` : `${direction === 'yes' ? '↑ Höher' : '↓ Tiefer'} kaufen · ${spend} ₫`}
+                      </button>
+                    ) : (
+                      <button className="submit-btn no" onClick={handleVerkaufen} disabled={betLoading || !hasPosition} style={{ width: '100%' }}>{betLoading ? 'Wird verkauft…' : `Verkaufen · ${Math.round(returnOnSell)} ₫`}</button>
+                    )}
+                    <div style={{ fontSize: 11, color: 'var(--text-subtle)', textAlign: 'center', marginTop: 8 }}>Guthaben: {user.balance.toLocaleString('de')} ₫</div>
+                  </div>
+                </div>
+              )
             )}
           </>
         )}
@@ -1545,123 +1562,120 @@ const [copied, setCopied] = useState(false)
             {nextLiveMarket && (<button onClick={() => router.push(`/markets/${nextLiveMarket.id}`)} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 20px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: 20, cursor: 'pointer', fontSize: 14, fontWeight: 700, whiteSpace: 'nowrap' }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: '#fff', display: 'inline-block' }} />Zum Live-Markt →</button>)}
           </div>
         )}
-        {isKrypto && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 20, alignItems: 'start' }}>
-            <div className="card" style={{ marginBottom: 0 }}>
-              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 16 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span style={{ width: 40, height: 40, borderRadius: 10, background: COIN_COLORS[market.coin ?? ''] ?? '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 800, color: '#fff', flexShrink: 0 }}>{market.short_label?.charAt(0) ?? market.coin?.charAt(0) ?? '₿'}</span>
-                  <div><div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>{autoMarketTitle}</div><div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{market.resolved ? 'Markt beendet' : market.group_title ?? ''}</div></div>
-                </div>
-                {!market.resolved && (<div style={{ textAlign: 'right', flexShrink: 0 }}><div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>Verbleibend</div><CountdownDisplay targetMs={closesAtMs} redThresholdMs={30000} /></div>)}
+        {isKrypto && twoCol(
+          <div className="card" style={{ marginBottom: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ width: 40, height: 40, borderRadius: 10, background: COIN_COLORS[market.coin ?? ''] ?? '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 800, color: '#fff', flexShrink: 0 }}>{market.short_label?.charAt(0) ?? market.coin?.charAt(0) ?? '₿'}</span>
+                <div><div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>{autoMarketTitle}</div><div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{market.resolved ? 'Markt beendet' : market.group_title ?? ''}</div></div>
               </div>
-              <div style={{ display: 'flex', gap: 40, marginBottom: 16 }}>
-                <div><div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>Startpreis</div><div style={{ fontSize: 22, fontWeight: 700, color: 'var(--text)' }}>${market.start_price?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) ?? '—'}</div></div>
-                <div>
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2, display: 'flex', alignItems: 'center', gap: 6 }}>
-                    {market.resolved ? 'Endpreis' : 'Aktueller Preis'}
-                    {market.resolved && endDelta !== null && (<span style={{ color: endDelta >= 0 ? '#16a34a' : '#dc2626', fontWeight: 700, fontSize: 12 }}>{endDelta >= 0 ? '▲' : '▼'} ${Math.abs(endDelta).toFixed(2)}</span>)}
-                    {!market.resolved && delta !== null && (<span style={{ color: isUp ? '#16a34a' : '#dc2626', fontWeight: 700, fontSize: 12 }}>{isUp ? '▲' : '▼'} ${Math.abs(delta).toFixed(2)}</span>)}
-                  </div>
-                  <div style={{ fontSize: 22, fontWeight: 700, color: market.resolved ? 'var(--text)' : '#f97316' }}>{market.resolved ? `$${market.end_price?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) ?? '—'}` : livePrice ? `$${livePrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'Lädt…'}</div>
+              {!market.resolved && (<div style={{ textAlign: 'right', flexShrink: 0 }}><div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>Verbleibend</div><CountdownDisplay targetMs={closesAtMs} redThresholdMs={30000} /></div>)}
+            </div>
+            <div style={{ display: 'flex', gap: isMobile ? 20 : 40, marginBottom: 16, flexWrap: 'wrap' }}>
+              <div><div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>Startpreis</div><div style={{ fontSize: isMobile ? 18 : 22, fontWeight: 700, color: 'var(--text)' }}>${market.start_price?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) ?? '—'}</div></div>
+              <div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  {market.resolved ? 'Endpreis' : 'Aktueller Preis'}
+                  {market.resolved && endDelta !== null && (<span style={{ color: endDelta >= 0 ? '#16a34a' : '#dc2626', fontWeight: 700, fontSize: 12 }}>{endDelta >= 0 ? '▲' : '▼'} ${Math.abs(endDelta).toFixed(2)}</span>)}
+                  {!market.resolved && delta !== null && (<span style={{ color: isUp ? '#16a34a' : '#dc2626', fontWeight: 700, fontSize: 12 }}>{isUp ? '▲' : '▼'} ${Math.abs(delta).toFixed(2)}</span>)}
                 </div>
-              </div>
-              {!market.resolved && <LivePositionsBar trades={trades} isKrypto={true} />}
-              <div style={{ position: 'relative', width: '100%', height: 240 }}>
-                <canvas ref={cryptoCanvasRef} width={860} height={240} style={{ width: '100%', height: '100%', display: 'block' }} />
-                {priceHistory.length < 1 && !market.resolved && (<div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: 13 }}>Chart wird aufgebaut…</div>)}
+                <div style={{ fontSize: isMobile ? 18 : 22, fontWeight: 700, color: market.resolved ? 'var(--text)' : '#f97316' }}>{market.resolved ? `$${market.end_price?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) ?? '—'}` : livePrice ? `$${livePrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'Lädt…'}</div>
               </div>
             </div>
-
-            {/* ── Krypto Trade Panel ── */}
-            <div className="card" style={{ position: 'sticky', top: 'calc(var(--nav-height) + 16px)', padding: 0, overflow: 'hidden' }}>
-              {(market.resolved || closesAtMs < Date.now()) ? (
-                <div style={{ padding: '24px 16px', textAlign: 'center' }}>
-                  <div style={{ fontSize: 28, marginBottom: 4 }}>{userWon ? '🎉' : hasPosition ? '😔' : '✓'}</div>
-                  <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', marginBottom: 4 }}>{userWon ? 'Gewonnen!' : hasPosition ? 'Verloren' : 'Markt beendet'}</div>
-                  <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Ergebnis: <strong style={{ color: market.resolution === 'yes' ? '#16a34a' : '#dc2626', fontSize: 15 }}>{market.resolution === 'yes' ? 'Up ↑' : 'Down ↓'}</strong></div>
-                  {hasPosition && (
-                    <div style={{ padding: '14px', borderRadius: 10, textAlign: 'center', marginTop: 12, marginBottom: 14, background: userWon ? 'rgba(22,163,74,0.08)' : 'rgba(220,38,38,0.08)', border: `1px solid ${userWon ? 'rgba(22,163,74,0.2)' : 'rgba(220,38,38,0.2)'}` }}>
-                      {userWon ? (<><div style={{ fontSize: 12, color: '#16a34a', marginBottom: 4 }}>Auszahlung erfolgt automatisch</div><div style={{ fontSize: 28, fontWeight: 800, color: '#16a34a' }}>+{Math.round(market.resolution === 'yes' ? sharesYes : sharesNo)} ₫</div></>) : (<div style={{ fontSize: 13, color: '#dc2626' }}>Leider verloren — nächsten Markt versuchen!</div>)}
-                    </div>
-                  )}
-                  {nextLiveMarket && (<button onClick={() => router.push(`/markets/${nextLiveMarket.id}`)} style={{ width: '100%', padding: '12px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: 10, cursor: 'pointer', fontSize: 14, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: '#fff' }} />Zum Live-Markt →</button>)}
-                </div>
-              ) : !user ? (
-                <div style={{ textAlign: 'center', padding: '24px 16px' }}>
-                  <div style={{ fontSize: 14, color: 'var(--text-muted)', marginBottom: 12 }}>Anmelden um zu handeln</div>
-                  <button className="submit-btn yes" onClick={() => router.push('/')}>Zur Anmeldung</button>
-                </div>
-              ) : (
-                <>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border)', padding: '0 16px' }}>
-                    <div style={{ display: 'flex' }}>
-                      {(['kaufen', 'verkaufen'] as TradeTab[]).map(t => (
-                        <button key={t} onClick={() => { setTradeTab(t); setBetError(''); setBetSuccess('') }}
-                          style={{ padding: '12px 14px', fontSize: 13, fontWeight: 600, border: 'none', cursor: 'pointer', background: 'transparent', color: tradeTab === t ? 'var(--text)' : 'var(--text-muted)', borderBottom: tradeTab === t ? '2px solid var(--accent)' : '2px solid transparent', marginBottom: -1 }}>
-                          {t.charAt(0).toUpperCase() + t.slice(1)}
-                        </button>
-                      ))}
-                    </div>
+            {!market.resolved && <LivePositionsBar trades={trades} isKrypto={true} />}
+            {/* Responsive Canvas */}
+            <div ref={cryptoWrapRef} style={{ position: 'relative', width: '100%', height: 200 }}>
+              <canvas ref={cryptoCanvasRef} style={{ width: '100%', height: '100%', display: 'block' }} />
+              {priceHistory.length < 1 && !market.resolved && (<div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: 13 }}>Chart wird aufgebaut…</div>)}
+            </div>
+          </div>,
+          <div className="card" style={{ position: isMobile ? 'static' : 'sticky', top: 'calc(var(--nav-height) + 16px)', padding: 0, overflow: 'hidden' }}>
+            {(market.resolved || closesAtMs < Date.now()) ? (
+              <div style={{ padding: '24px 16px', textAlign: 'center' }}>
+                <div style={{ fontSize: 28, marginBottom: 4 }}>{userWon ? '🎉' : hasPosition ? '😔' : '✓'}</div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', marginBottom: 4 }}>{userWon ? 'Gewonnen!' : hasPosition ? 'Verloren' : 'Markt beendet'}</div>
+                <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Ergebnis: <strong style={{ color: market.resolution === 'yes' ? '#16a34a' : '#dc2626', fontSize: 15 }}>{market.resolution === 'yes' ? 'Up ↑' : 'Down ↓'}</strong></div>
+                {hasPosition && (
+                  <div style={{ padding: '14px', borderRadius: 10, textAlign: 'center', marginTop: 12, marginBottom: 14, background: userWon ? 'rgba(22,163,74,0.08)' : 'rgba(220,38,38,0.08)', border: `1px solid ${userWon ? 'rgba(22,163,74,0.2)' : 'rgba(220,38,38,0.2)'}` }}>
+                    {userWon ? (<><div style={{ fontSize: 12, color: '#16a34a', marginBottom: 4 }}>Auszahlung erfolgt automatisch</div><div style={{ fontSize: 28, fontWeight: 800, color: '#16a34a' }}>+{Math.round(market.resolution === 'yes' ? sharesYes : sharesNo)} ₫</div></>) : (<div style={{ fontSize: 13, color: '#dc2626' }}>Leider verloren — nächsten Markt versuchen!</div>)}
                   </div>
-                  <div style={{ padding: 16 }}>
-                    {tradeTab === 'kaufen' && (
-                      <>
-                        <OrderTypeToggle orderType={orderType} setOrderType={setOrderType} />
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 16 }}>
-                          {(['yes', 'no'] as const).map(d => (
-                            <button key={d} onClick={() => setDirection(d)} style={{ padding: '10px 0', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 14, background: direction === d ? (d === 'yes' ? 'rgba(22,163,74,0.15)' : 'rgba(220,38,38,0.15)') : 'var(--surface)', color: direction === d ? (d === 'yes' ? 'var(--yes)' : 'var(--no)') : 'var(--text-muted)', outline: direction === d ? `2px solid ${d === 'yes' ? 'var(--yes)' : 'var(--no)'}` : '2px solid transparent' }}>
-                              {d === 'yes' ? `↑ Höher · ${prob}¢` : `↓ Tiefer · ${100 - prob}¢`}
-                            </button>
-                          ))}
-                        </div>
-                        <SpendInput spendRaw={spendRaw} setSpendRaw={setSpendRaw} spend={spend} setSpend={setSpend} userBalance={user.balance} />
-                        {orderType === 'limit' && renderLimitSlider()}
-                        <div style={{ background: 'rgba(22,163,74,0.07)', borderRadius: 10, padding: '14px', marginBottom: 14, textAlign: 'center', border: '1px solid rgba(22,163,74,0.2)' }}>
-                          {orderType === 'markt' ? (
-                            <><div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Auszahlung wenn {direction === 'yes' ? '↑ Höher' : '↓ Tiefer'} eintritt</div><div style={{ fontSize: 32, fontWeight: 800, color: '#16a34a', letterSpacing: '-0.5px' }}>{payout} ₫</div></>
-                          ) : (
-                            <><div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>{limitPrice < (direction === 'yes' ? prob : 100 - prob) ? 'Wartet auf Ausführung' : 'Wird sofort ausgeführt'}</div><div style={{ fontSize: 18, fontWeight: 700, color: '#16a34a' }}>{spend} ₫ · max {Math.round(lmsrSharesForSpend(market.q_yes, market.q_no, market.b, direction, spend))} Anteile</div><div style={{ fontSize: 11, color: 'var(--text-subtle)', marginTop: 2 }}>bei {limitPrice}¢ oder besser</div></>
-                          )}
-                        </div>
-                      </>
-                    )}
-                    {tradeTab === 'verkaufen' && (
-                      <>
-                        {!hasPosition ? (
-                          <div style={{ textAlign: 'center', padding: '24px 0', fontSize: 13, color: 'var(--text-muted)' }}>Du hast keine Anteile in diesem Markt.</div>
+                )}
+                {nextLiveMarket && (<button onClick={() => router.push(`/markets/${nextLiveMarket.id}`)} style={{ width: '100%', padding: '12px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: 10, cursor: 'pointer', fontSize: 14, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: '#fff' }} />Zum Live-Markt →</button>)}
+              </div>
+            ) : !user ? (
+              <div style={{ textAlign: 'center', padding: '24px 16px' }}>
+                <div style={{ fontSize: 14, color: 'var(--text-muted)', marginBottom: 12 }}>Anmelden um zu handeln</div>
+                <button className="submit-btn yes" onClick={() => router.push('/')}>Zur Anmeldung</button>
+              </div>
+            ) : (
+              <>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border)', padding: '0 16px' }}>
+                  <div style={{ display: 'flex' }}>
+                    {(['kaufen', 'verkaufen'] as TradeTab[]).map(t => (
+                      <button key={t} onClick={() => { setTradeTab(t); setBetError(''); setBetSuccess('') }}
+                        style={{ padding: '12px 14px', fontSize: 13, fontWeight: 600, border: 'none', cursor: 'pointer', background: 'transparent', color: tradeTab === t ? 'var(--text)' : 'var(--text-muted)', borderBottom: tradeTab === t ? '2px solid var(--accent)' : '2px solid transparent', marginBottom: -1 }}>
+                        {t.charAt(0).toUpperCase() + t.slice(1)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div style={{ padding: 16 }}>
+                  {tradeTab === 'kaufen' && (
+                    <>
+                      <OrderTypeToggle orderType={orderType} setOrderType={setOrderType} />
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 16 }}>
+                        {(['yes', 'no'] as const).map(d => (
+                          <button key={d} onClick={() => setDirection(d)} style={{ padding: '10px 0', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 14, background: direction === d ? (d === 'yes' ? 'rgba(22,163,74,0.15)' : 'rgba(220,38,38,0.15)') : 'var(--surface)', color: direction === d ? (d === 'yes' ? 'var(--yes)' : 'var(--no)') : 'var(--text-muted)', outline: direction === d ? `2px solid ${d === 'yes' ? 'var(--yes)' : 'var(--no)'}` : '2px solid transparent' }}>
+                            {d === 'yes' ? `↑ Höher · ${prob}¢` : `↓ Tiefer · ${100 - prob}¢`}
+                          </button>
+                        ))}
+                      </div>
+                      <SpendInput spendRaw={spendRaw} setSpendRaw={setSpendRaw} spend={spend} setSpend={setSpend} userBalance={user.balance} />
+                      {orderType === 'limit' && renderLimitSlider()}
+                      <div style={{ background: 'rgba(22,163,74,0.07)', borderRadius: 10, padding: '14px', marginBottom: 14, textAlign: 'center', border: '1px solid rgba(22,163,74,0.2)' }}>
+                        {orderType === 'markt' ? (
+                          <><div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Auszahlung wenn {direction === 'yes' ? '↑ Höher' : '↓ Tiefer'} eintritt</div><div style={{ fontSize: 32, fontWeight: 800, color: '#16a34a', letterSpacing: '-0.5px' }}>{payout} ₫</div></>
                         ) : (
-                          <>
-                            <div style={{ background: 'var(--surface)', borderRadius: 8, padding: '12px', marginBottom: 16, fontSize: 13 }}>
-                              <div style={{ color: 'var(--text-muted)', marginBottom: 4, fontSize: 12 }}>Deine Position</div>
-                              {sharesYes > 0 && <div style={{ fontWeight: 700, color: 'var(--yes)' }}>↑ Höher · {Math.round(sharesYes)} Anteile</div>}
-                              {sharesNo  > 0 && <div style={{ fontWeight: 700, color: 'var(--no)'  }}>↓ Tiefer · {Math.round(sharesNo)} Anteile</div>}
-                            </div>
-                            <div style={{ background: 'rgba(22,163,74,0.07)', borderRadius: 10, padding: '14px', marginBottom: 14, textAlign: 'center', border: '1px solid rgba(22,163,74,0.2)' }}>
-                              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Du erhältst jetzt</div>
-                              <div style={{ fontSize: 32, fontWeight: 800, color: '#16a34a', letterSpacing: '-0.5px' }}>{Math.round(returnOnSell)} ₫</div>
-                              <div style={{ fontSize: 11, color: 'var(--text-subtle)', marginTop: 4 }}>alle Anteile verkaufen</div>
-                            </div>
-                          </>
+                          <><div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>{limitPrice < (direction === 'yes' ? prob : 100 - prob) ? 'Wartet auf Ausführung' : 'Wird sofort ausgeführt'}</div><div style={{ fontSize: 18, fontWeight: 700, color: '#16a34a' }}>{spend} ₫ · max {Math.round(lmsrSharesForSpend(market.q_yes, market.q_no, market.b, direction, spend))} Anteile</div><div style={{ fontSize: 11, color: 'var(--text-subtle)', marginTop: 2 }}>bei {limitPrice}¢ oder besser</div></>
                         )}
-                      </>
-                    )}
-                    {betError   && <div className="alert alert-error"   style={{ marginBottom: 10 }}>{betError}</div>}
-                    {betSuccess  && <div className="alert alert-success" style={{ marginBottom: 10 }}>{betSuccess}</div>}
-                    {tradeTab === 'kaufen' ? (
-                      <button className={`submit-btn ${direction === 'yes' ? 'yes' : 'no'}`} onClick={handleKaufen} disabled={betLoading || spend <= 0} style={{ width: '100%' }}>
-                        {betLoading ? 'Wird ausgeführt…' : orderType === 'limit' ? `Limit-Order · ${spend} ₫` : `${direction === 'yes' ? '↑ Höher' : '↓ Tiefer'} kaufen · ${spend} ₫`}
-                      </button>
-                    ) : (
-                      <button className="submit-btn no" onClick={handleVerkaufen} disabled={betLoading || !hasPosition} style={{ width: '100%' }}>
-                        {betLoading ? 'Wird verkauft…' : `Verkaufen · ${Math.round(returnOnSell)} ₫`}
-                      </button>
-                    )}
-                    <div style={{ fontSize: 11, color: 'var(--text-subtle)', textAlign: 'center', marginTop: 8 }}>Guthaben: {user.balance.toLocaleString('de')} ₫</div>
-                  </div>
-                </>
-              )}
-            </div>
+                      </div>
+                    </>
+                  )}
+                  {tradeTab === 'verkaufen' && (
+                    <>
+                      {!hasPosition ? (
+                        <div style={{ textAlign: 'center', padding: '24px 0', fontSize: 13, color: 'var(--text-muted)' }}>Du hast keine Anteile in diesem Markt.</div>
+                      ) : (
+                        <>
+                          <div style={{ background: 'var(--surface)', borderRadius: 8, padding: '12px', marginBottom: 16, fontSize: 13 }}>
+                            <div style={{ color: 'var(--text-muted)', marginBottom: 4, fontSize: 12 }}>Deine Position</div>
+                            {sharesYes > 0 && <div style={{ fontWeight: 700, color: 'var(--yes)' }}>↑ Höher · {Math.round(sharesYes)} Anteile</div>}
+                            {sharesNo  > 0 && <div style={{ fontWeight: 700, color: 'var(--no)'  }}>↓ Tiefer · {Math.round(sharesNo)} Anteile</div>}
+                          </div>
+                          <div style={{ background: 'rgba(22,163,74,0.07)', borderRadius: 10, padding: '14px', marginBottom: 14, textAlign: 'center', border: '1px solid rgba(22,163,74,0.2)' }}>
+                            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Du erhältst jetzt</div>
+                            <div style={{ fontSize: 32, fontWeight: 800, color: '#16a34a', letterSpacing: '-0.5px' }}>{Math.round(returnOnSell)} ₫</div>
+                            <div style={{ fontSize: 11, color: 'var(--text-subtle)', marginTop: 4 }}>alle Anteile verkaufen</div>
+                          </div>
+                        </>
+                      )}
+                    </>
+                  )}
+                  {betError   && <div className="alert alert-error"   style={{ marginBottom: 10 }}>{betError}</div>}
+                  {betSuccess  && <div className="alert alert-success" style={{ marginBottom: 10 }}>{betSuccess}</div>}
+                  {tradeTab === 'kaufen' ? (
+                    <button className={`submit-btn ${direction === 'yes' ? 'yes' : 'no'}`} onClick={handleKaufen} disabled={betLoading || spend <= 0} style={{ width: '100%' }}>
+                      {betLoading ? 'Wird ausgeführt…' : orderType === 'limit' ? `Limit-Order · ${spend} ₫` : `${direction === 'yes' ? '↑ Höher' : '↓ Tiefer'} kaufen · ${spend} ₫`}
+                    </button>
+                  ) : (
+                    <button className="submit-btn no" onClick={handleVerkaufen} disabled={betLoading || !hasPosition} style={{ width: '100%' }}>
+                      {betLoading ? 'Wird verkauft…' : `Verkaufen · ${Math.round(returnOnSell)} ₫`}
+                    </button>
+                  )}
+                  <div style={{ fontSize: 11, color: 'var(--text-subtle)', textAlign: 'center', marginTop: 8 }}>Guthaben: {user.balance.toLocaleString('de')} ₫</div>
+                </div>
+              </>
+            )}
           </div>
         )}
 
@@ -1669,7 +1683,7 @@ const [copied, setCopied] = useState(false)
         {!isKrypto && !isSoccer && !isFinance && (
           <>
             <div style={{ marginBottom: 20 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
                 {isFormula1 && (<span style={{ fontSize: 12, fontWeight: 700, padding: '2px 10px', borderRadius: 20, background: 'rgba(220,38,38,0.1)', color: '#dc2626' }}>🏎 Formel 1</span>)}
                 {isWeather && (<span style={{ fontSize: 12, fontWeight: 700, padding: '2px 10px', borderRadius: 20, background: 'rgba(14,165,233,0.1)', color: '#0ea5e9' }}>🌤 Wetter</span>)}
                 {!isFormula1 && !isWeather && market.category && <span className={`cat-badge ${catClass}`}>{market.category}</span>}
@@ -1680,7 +1694,7 @@ const [copied, setCopied] = useState(false)
                   </span>
                 )}
               </div>
-              <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text)', lineHeight: 1.35, marginBottom: 8 }}>{market.question}</h1>
+              <h1 style={{ fontSize: isMobile ? 18 : 22, fontWeight: 700, color: 'var(--text)', lineHeight: 1.35, marginBottom: 8 }}>{market.question}</h1>
               {isWeather && market.start_price !== null && market.start_price !== undefined && (
                 <div style={{ display: 'flex', gap: 24, padding: '12px 16px', background: 'var(--surface)', borderRadius: 10, border: '1px solid var(--border)', marginTop: 12, flexWrap: 'wrap' }}>
                   <div><div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>Heutiges Maximum</div><div style={{ fontSize: 20, fontWeight: 700, color: 'var(--text)' }}>{market.start_price}°C</div></div>
@@ -1694,26 +1708,26 @@ const [copied, setCopied] = useState(false)
 
             <div className="card" style={{ marginBottom: 20 }}>
               {!market.resolved && (
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
                   <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-muted)' }}>{isFormula1 || isWeather ? 'Markt schließt' : 'Schließt in'}</div>
-                  <CountdownDisplay targetMs={closesAtMs} redThresholdMs={isWeather ? 3600000 : 3600000} />
+                  <CountdownDisplay targetMs={closesAtMs} redThresholdMs={3600000} />
                 </div>
               )}
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 10 }}>
-                <span style={{ fontSize: 36, fontWeight: 700, color: isLow ? 'var(--no)' : 'var(--yes)' }}>{prob}%</span>
+                <span style={{ fontSize: isMobile ? 30 : 36, fontWeight: 700, color: isLow ? 'var(--no)' : 'var(--yes)' }}>{prob}%</span>
                 <span style={{ fontSize: 14, color: 'var(--text-muted)' }}>Wahrscheinlichkeit Ja</span>
               </div>
               <div className="prob-bar" style={{ height: 8, marginBottom: 12 }}>
                 <div className={`prob-bar-fill ${isLow ? 'low' : ''}`} style={{ width: `${prob}%` }} />
               </div>
-              <div style={{ display: 'flex', gap: 20, fontSize: 13, color: 'var(--text-muted)' }}>
+              <div style={{ display: 'flex', gap: 20, fontSize: 13, color: 'var(--text-muted)', flexWrap: 'wrap' }}>
                 <span>Volumen: <strong style={{ color: 'var(--text)' }}>{Math.round(market.q_yes + market.q_no).toLocaleString('de')} ₫</strong></span>
                 <span>Trades: <strong style={{ color: 'var(--text)' }}>{trades.filter(t => t.shares > 0).length}</strong></span>
               </div>
               {!market.resolved && <LivePositionsBar trades={trades} isKrypto={false} />}
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 20, alignItems: 'start' }}>
+            {twoCol(
               <div className="card">
                 {!isFormula1 && !isWeather && (
                   <>
@@ -1723,7 +1737,7 @@ const [copied, setCopied] = useState(false)
                         {(['7T', '1M', 'Gesamt'] as Tab[]).map(t => (<button key={t} onClick={() => setActiveTab(t)} style={{ fontSize: 12, padding: '3px 10px', borderRadius: 6, border: 'none', cursor: 'pointer', background: activeTab === t ? 'var(--accent)' : 'var(--surface)', color: activeTab === t ? '#fff' : 'var(--text-muted)', fontWeight: activeTab === t ? 600 : 400 }}>{t}</button>))}
                       </div>
                     </div>
-                    {tradeHistory.length === 0 ? <div style={{ height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-subtle)', fontSize: 13 }}>Chart erscheint nach der ersten Wette.</div> : <div style={{ height: 200, position: 'relative' }}><canvas ref={chartRef} /></div>}
+                    {tradeHistory.length === 0 ? <div style={{ height: 180, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-subtle)', fontSize: 13 }}>Chart erscheint nach der ersten Wette.</div> : <div style={{ height: 180, position: 'relative' }}><canvas ref={chartRef} /></div>}
                     <div style={{ marginTop: 12, fontSize: 12, color: 'var(--text-subtle)' }}>Volumen: {Math.round(market.q_yes + market.q_no).toLocaleString('de')} ₫ · {trades.filter(t => t.shares > 0).length} Trades</div>
                   </>
                 )}
@@ -1742,25 +1756,10 @@ const [copied, setCopied] = useState(false)
                     </div>
                   </div>
                 )}
-              </div>
-              {renderTradePanel()}
-            </div>
+              </div>,
+              renderTradePanel()
+            )}
           </>
-        )}
-
-        {!isSoccer && !isFinance && !isFormula1 && !isWeather && trades.filter(t => t.shares > 0).length > 0 && (
-          <div className="card" style={{ marginTop: 20 }}>
-            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', marginBottom: 14 }}>Letzte Trades</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {[...trades].filter(t => t.shares > 0).reverse().slice(0, 10).map(t => (
-                <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, padding: '6px 0', borderBottom: '1px solid var(--border)' }}>
-                  <span style={{ color: t.type.includes('yes') ? 'var(--yes)' : 'var(--no)', fontWeight: 600 }}>{t.type.includes('yes') ? 'Up' : 'Down'}</span>
-                  <span style={{ color: 'var(--text)' }}>{Math.round(Math.abs(t.cost))} ₫</span>
-                  <span style={{ color: 'var(--text-subtle)' }}>{new Date(t.created_at).toLocaleDateString('de', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
-                </div>
-              ))}
-            </div>
-          </div>
         )}
 
         {!isFormula1 && !isWeather && market.description && <MarketRules description={market.description} />}
