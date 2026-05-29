@@ -53,8 +53,9 @@
   --line-height: 1.6;
   --tracking:    -0.015em;
 
-  --nav-height:  80px;
-  --cat-height:  48px;
+  --nav-height:     80px;
+  --cat-height:     48px;
+  --tab-bar-height: 0px;
 }
 
 /* ─── Dark Mode ──────────────────────────────────────────────── */
@@ -302,6 +303,7 @@ input:focus, textarea:focus, select:focus {
   align-items: center;
   justify-content: center;
   z-index: 200;
+  padding: 16px;
 }
 
 .modal {
@@ -503,18 +505,204 @@ input:focus, textarea:focus, select:focus {
 /* ─── Divider ─────────────────────────────────────────────────── */
 .divider { border: none; border-top: 0.5px solid var(--border); margin: 14px 0; }
 
+/* ─── Mobile Bottom Tab Bar ───────────────────────────────────── */
+.mobile-tab-bar {
+  display: none;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 60px;
+  background: var(--primary);
+  border-top: 0.5px solid rgba(255,255,255,0.1);
+  z-index: 200;
+  justify-content: space-around;
+  align-items: center;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.mobile-tab-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  color: rgba(255,255,255,0.35);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 6px 16px;
+  font-family: var(--font);
+  transition: color 0.15s;
+  flex: 1;
+}
+.mobile-tab-item.active { color: var(--accent); }
+.mobile-tab-item span:first-child { font-size: 20px; line-height: 1; }
+
+/* ─── Mobile Category Pills ───────────────────────────────────── */
+.mobile-cat-scroll {
+  display: none;
+  background: var(--primary);
+  padding: 0 12px 10px;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.mobile-cat-scroll::-webkit-scrollbar { display: none; }
+
+.mobile-cat-pill {
+  background: rgba(255,255,255,0.08);
+  border: 0.5px solid rgba(255,255,255,0.15);
+  color: rgba(255,255,255,0.6);
+  border-radius: var(--radius-full);
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  flex-shrink: 0;
+  cursor: pointer;
+  font-family: var(--font);
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.mobile-cat-pill.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  font-weight: 700;
+}
+
+/* ─── Mobile Portfolio Cards ──────────────────────────────────── */
+.mobile-portfolio-summary {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.mobile-pos-card {
+  background: var(--surface);
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 13px 14px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+.mobile-pos-card:hover { border-color: var(--accent); }
+
+.mobile-pos-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.mobile-pos-question {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.4;
+  flex: 1;
+}
+
+.mobile-pos-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+
+.mobile-pos-meta {
+  display: flex;
+  gap: 10px;
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+.mobile-pos-meta strong { color: var(--text); font-weight: 700; }
+
 /* ─── Responsive ──────────────────────────────────────────────── */
 @media (max-width: 768px) {
-  :root { --nav-height: 64px; }
-  .nav { padding: 0 16px; gap: 12px; }
-  .nav-logo { height: 32px; }
+  :root {
+    --nav-height: 56px;
+    --tab-bar-height: 60px;
+  }
+
+  /* Nav vereinfachen */
+  .nav { padding: 0 14px; gap: 10px; height: var(--nav-height); }
+  .nav-logo { height: 34px; }
+  .nav-search-wrap { max-width: 100%; }
   .nav-stat { display: none; }
   .nav-divider { display: none; }
-  .nav-search-wrap { max-width: 100%; }
-  .cat-bar { padding: 0 16px; }
-  .page-container, .page-container-narrow { padding: 16px 16px 32px; }
+  .nav-icon-btn { display: none; }
+
+  /* Desktop-Sidebar verstecken */
+  aside { display: none !important; }
+
+  /* Desktop-Nav-Pills auf Mobile verstecken */
+  .nav-right .nav-pill { display: none; }
+  /* Guthaben + Avatar bleiben sichtbar */
+  .nav-right .nav-stat { display: block !important; }
+  .nav-right .nav-avatar { display: flex !important; }
+
+  /* Mobile Category Pills einblenden */
+  .mobile-cat-scroll { display: flex; }
+
+  /* Mobile Tab Bar einblenden */
+  .mobile-tab-bar { display: flex; }
+
+  /* Content-Bereich: Abstand für Tab Bar */
+  main {
+    padding: 16px 12px !important;
+    padding-bottom: calc(var(--tab-bar-height) + 16px) !important;
+  }
+
+  /* Markt-Grid: 1 Spalte */
+  .markets-grid { grid-template-columns: 1fr; gap: 8px; }
+
+  /* Section Head */
+  .section-head { margin-bottom: 10px; }
+  .section-title { font-size: 16px; font-weight: 800; }
+
+  /* Cards etwas kompakter */
+  .market-card { padding: 13px 14px; }
+  .market-prob { font-size: 18px; }
+
+  /* Stats Grid: 2 Spalten */
+  .stats-grid { grid-template-columns: repeat(2, 1fr); }
+
+  /* Modal: volle Breite am unteren Rand */
+  .modal-backdrop { align-items: flex-end; padding: 0; }
+  .modal {
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+    max-width: 100%;
+    padding: 24px 20px;
+    padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* Detailseite: kein 2-Spalten-Layout */
   .detail-layout { grid-template-columns: 1fr; }
   .trading-panel { position: static; }
-  .stats-grid { grid-template-columns: repeat(2, 1fr); }
-  .markets-grid { grid-template-columns: 1fr; }
+
+  /* Page-Container */
+  .page-container, .page-container-narrow { padding: 16px 12px 32px; }
+}
+
+@media (max-width: 480px) {
+  .nav-logo { height: 30px; }
+  .market-card-question { font-size: 13px; }
+  .mobile-cat-pill { font-size: 12px; padding: 5px 12px; }
+}
+
+/* iPad */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .nav { padding: 0 20px; }
+  .markets-grid { grid-template-columns: repeat(2, 1fr); }
+  main { padding: 20px 20px !important; }
+  aside { width: 180px !important; }
 }
