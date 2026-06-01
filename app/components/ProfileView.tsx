@@ -108,6 +108,17 @@ function formatDateTime(iso: string): { date: string; time: string } {
 type TabType = 'positionen' | 'aktivitaet';
 type SubTabType = 'offen' | 'geschlossen';
 
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth <= 768);
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
+  return isMobile;
+}
+
 export default function ProfileView({ userId, displayName, avatarUrl, balance, onUsernameChange, onAvatarChange }: Props) {
   const [newUsername, setNewUsername]           = useState(displayName);
   const [uploadingAvatar, setUploadingAvatar]   = useState(false);
@@ -119,6 +130,7 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, o
   const [allRows, setAllRows]                   = useState<PortfolioEntry[]>([]);
   const [allTrades, setAllTrades]               = useState<TradeRow[]>([]);
   const [portfolioLoading, setPortfolioLoading] = useState(true);
+  const isMobile                                = useIsMobile();
 
   const totalEinsatz     = allRows.reduce((s, r) => s + r.einsatz, 0);
   const totalAusbe       = allRows.filter(r => r.auszahlung !== null && r.auszahlung > 0).reduce((s, r) => s + (r.auszahlung ?? 0), 0);
@@ -228,122 +240,119 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, o
     <div style={{ maxWidth: 900, margin: '0 auto' }}>
 
       {/* ── HEADER ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 16, marginBottom: 24 }}>
+      {isMobile ? (
+        /* ── MOBILE HEADER ── */
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 20 }}>
 
-        {/* Links: Avatar + Stats */}
-        <div className="card" style={{ padding: '28px 28px 24px' }}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 20, marginBottom: 24 }}>
-            <div style={{ flexShrink: 0 }}>
-              {avatarUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={avatarUrl} alt="Avatar" style={{ width: 80, height: 80, borderRadius: '50%', objectFit: 'cover' }} />
-              ) : (
-                <div style={{ width: 80, height: 80, borderRadius: '50%', background: av.bg, color: av.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28, fontWeight: 700, border: '2px solid var(--border)' }}>
-                  {displayName.slice(0, 2).toUpperCase()}
-                </div>
-              )}
-            </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
-                {editingUsername ? (
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                    <input type="text" value={newUsername} onChange={e => setNewUsername(e.target.value)} autoFocus
-                      onKeyDown={e => { if (e.key === 'Enter') saveUsername(); if (e.key === 'Escape') setEditingUsername(false); }}
-                      style={{ fontSize: 20, fontWeight: 700, padding: '4px 10px', borderRadius: 8, border: '1.5px solid var(--accent)', background: 'var(--surface)', color: 'var(--text)', width: 200 }} />
-                    <button onClick={saveUsername} disabled={savingUsername}
-                      style={{ padding: '4px 14px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
-                      {savingUsername ? '…' : 'Speichern'}
-                    </button>
-                    <button onClick={() => setEditingUsername(false)}
-                      style={{ padding: '4px 10px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', fontSize: 13, color: 'var(--text-muted)' }}>✕</button>
-                  </div>
+          {/* Avatar + Name + Bild-ändern */}
+          <div className="card" style={{ padding: '20px 16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16 }}>
+              <div style={{ flexShrink: 0 }}>
+                {avatarUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={avatarUrl} alt="Avatar" style={{ width: 64, height: 64, borderRadius: '50%', objectFit: 'cover' }} />
                 ) : (
-                  <>
-                    <span style={{ fontSize: 22, fontWeight: 700, color: 'var(--text)' }}>{displayName}</span>
-                    <button onClick={() => setEditingUsername(true)} title="Name ändern"
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: '2px 4px', fontSize: 14, lineHeight: 1, borderRadius: 4 }}>✎</button>
-                  </>
+                  <div style={{ width: 64, height: 64, borderRadius: '50%', background: av.bg, color: av.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, fontWeight: 700, border: '2px solid var(--border)' }}>
+                    {displayName.slice(0, 2).toUpperCase()}
+                  </div>
                 )}
               </div>
-              <div style={{ fontSize: 12, color: 'var(--text-muted)', display: 'flex', gap: 12 }}>
-                <span>Guthaben: <strong style={{ color: 'var(--yes)' }}>{(balance ?? 0).toLocaleString('de')} ₫</strong></span>
-                <span>·</span>
-                <span>{allRows.length} Prognosen</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
+                  {editingUsername ? (
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'center', width: '100%' }}>
+                      <input type="text" value={newUsername} onChange={e => setNewUsername(e.target.value)} autoFocus
+                        onKeyDown={e => { if (e.key === 'Enter') saveUsername(); if (e.key === 'Escape') setEditingUsername(false); }}
+                        style={{ fontSize: 16, fontWeight: 700, padding: '4px 10px', borderRadius: 8, border: '1.5px solid var(--accent)', background: 'var(--surface)', color: 'var(--text)', flex: 1, minWidth: 0 }} />
+                      <button onClick={saveUsername} disabled={savingUsername}
+                        style={{ padding: '4px 12px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600, flexShrink: 0 }}>
+                        {savingUsername ? '…' : 'OK'}
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <span style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)' }}>{displayName}</span>
+                      <button onClick={() => setEditingUsername(true)}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: '2px 4px', fontSize: 14, lineHeight: 1 }}>✎</button>
+                    </>
+                  )}
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                  <span style={{ color: 'var(--yes)', fontWeight: 700 }}>{(balance ?? 0).toLocaleString('de')} ₫</span>
+                  <span style={{ margin: '0 6px' }}>·</span>
+                  <span>{allRows.length} Prognosen</span>
+                </div>
+                {profileMessage && (
+                  <div style={{ marginTop: 6, fontSize: 12, color: profileMessage.startsWith('Fehler') ? 'var(--no)' : 'var(--yes)' }}>{profileMessage}</div>
+                )}
               </div>
-              {profileMessage && (
-                <div style={{ marginTop: 8, fontSize: 12, color: profileMessage.startsWith('Fehler') ? 'var(--no)' : 'var(--yes)' }}>{profileMessage}</div>
-              )}
+              <label style={{ fontSize: 12, padding: '6px 12px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 20, cursor: 'pointer', color: 'var(--text)', fontWeight: 600, flexShrink: 0, whiteSpace: 'nowrap' }}>
+                {uploadingAvatar ? 'Lädt…' : 'Bild ändern'}
+                <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => { if (e.target.files?.[0]) uploadAvatar(e.target.files[0]); }} />
+              </label>
             </div>
-            <label style={{ fontSize: 12, padding: '6px 14px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 20, cursor: 'pointer', color: 'var(--text)', fontWeight: 600, flexShrink: 0, whiteSpace: 'nowrap' }}>
-              {uploadingAvatar ? 'Lädt…' : 'Bild ändern'}
-              <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => { if (e.target.files?.[0]) uploadAvatar(e.target.files[0]); }} />
-            </label>
+
+            {/* Stats-Zeile: 3 Spalten */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', borderTop: '1px solid var(--border)', paddingTop: 16, gap: 8 }}>
+              {[
+                { label: 'Portfoliowert',  value: `${Math.round(balance ?? 0).toLocaleString('de')} ₫`, color: 'var(--text)' },
+                { label: 'Größter Gewinn', value: groessterGewinn > 0 ? `+${Math.round(groessterGewinn).toLocaleString('de')} ₫` : '—', color: groessterGewinn > 0 ? 'var(--yes)' : 'var(--text-muted)' },
+                { label: 'Prognosen',      value: String(allRows.length), color: 'var(--text)' },
+              ].map((s, i) => (
+                <div key={s.label} style={{ paddingLeft: i > 0 ? 12 : 0, borderLeft: i > 0 ? '1px solid var(--border)' : 'none' }}>
+                  <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 4, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.04em', lineHeight: 1.3 }}>{s.label}</div>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: s.color, letterSpacing: '-0.5px', lineHeight: 1.2 }}>{s.value}</div>
+                </div>
+              ))}
+            </div>
           </div>
 
-          {/* Stats-Zeile */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', borderTop: '1px solid var(--border)', paddingTop: 20 }}>
-            {[
-              { label: 'Portfoliowert',  value: `${Math.round(balance ?? 0).toLocaleString('de')} ₫`, color: 'var(--text)' },
-              { label: 'Größter Gewinn', value: groessterGewinn > 0 ? `+${Math.round(groessterGewinn).toLocaleString('de')} ₫` : '—', color: groessterGewinn > 0 ? 'var(--yes)' : 'var(--text-muted)' },
-              { label: 'Prognosen',      value: String(allRows.length), color: 'var(--text)' },
-            ].map((s, i) => (
-              <div key={s.label} style={{ paddingLeft: i > 0 ? 20 : 0, borderLeft: i > 0 ? '1px solid var(--border)' : 'none' }}>
-                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{s.label}</div>
-                <div style={{ fontSize: 22, fontWeight: 700, color: s.color, letterSpacing: '-0.5px' }}>{s.value}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Rechts: Gewinn/Verlust + Streak + Trefferquote */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-
-          {/* Gewinn/Verlust */}
-          <div className="card" style={{ padding: '24px 24px 20px', flex: 1 }}>
+          {/* Gewinn/Verlust Card */}
+          <div className="card" style={{ padding: '18px 16px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-              <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--yes)' }} />
-              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Gewinn / Verlust</span>
+              <div style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--yes)' }} />
+              <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Gewinn / Verlust</span>
             </div>
-            <div style={{ fontSize: 32, fontWeight: 800, color: totalAusbe - totalEinsatz >= 0 ? 'var(--yes)' : 'var(--no)', letterSpacing: '-1px', marginBottom: 4 }}>
+            <div style={{ fontSize: 28, fontWeight: 800, color: totalAusbe - totalEinsatz >= 0 ? 'var(--yes)' : 'var(--no)', letterSpacing: '-1px', marginBottom: 2 }}>
               {totalAusbe - totalEinsatz >= 0 ? '+' : ''}{Math.round(totalAusbe - totalEinsatz).toLocaleString('de')} ₫
             </div>
-            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 16 }}>Gesamt</div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              <div style={{ background: 'rgba(22,163,74,0.06)', borderRadius: 10, padding: '10px 14px' }}>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 14 }}>Gesamt</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
+              <div style={{ background: 'rgba(22,163,74,0.06)', borderRadius: 10, padding: '10px 12px' }}>
                 <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Eingesetzt</div>
-                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>{Math.round(totalEinsatz).toLocaleString('de')} ₫</div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>{Math.round(totalEinsatz).toLocaleString('de')} ₫</div>
               </div>
-              <div style={{ background: 'rgba(22,163,74,0.06)', borderRadius: 10, padding: '10px 14px' }}>
+              <div style={{ background: 'rgba(22,163,74,0.06)', borderRadius: 10, padding: '10px 12px' }}>
                 <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Gewonnen</div>
-                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--yes)' }}>+{Math.round(totalAusbe).toLocaleString('de')} ₫</div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--yes)' }}>+{Math.round(totalAusbe).toLocaleString('de')} ₫</div>
               </div>
             </div>
-            <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 12, borderTop: '1px solid var(--border)' }}>
               <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Offene Positionen</span>
               <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>{offeneCount}</span>
             </div>
           </div>
 
-          {/* Streak & Trefferquote */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <div className="card" style={{ padding: '16px 18px' }}>
+          {/* Streak + Trefferquote */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <div className="card" style={{ padding: '14px 16px' }}>
               <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>Streak</div>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-                <span style={{ fontSize: 28, fontWeight: 900, color: streak >= 3 ? '#f59e0b' : 'var(--text)', letterSpacing: '-1px', lineHeight: 1 }}>{streak}</span>
+                <span style={{ fontSize: 26, fontWeight: 900, color: streak >= 3 ? '#f59e0b' : 'var(--text)', letterSpacing: '-1px', lineHeight: 1 }}>{streak}</span>
                 <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 500 }}>{streak === 1 ? 'Tag' : 'Tage'}</span>
               </div>
               <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6, lineHeight: 1.4 }}>
                 {streak === 0 ? 'Heute noch nicht aktiv' : streak >= 7 ? 'Serie läuft' : streak >= 3 ? 'Konstant aktiv' : 'Starte heute'}
               </div>
             </div>
-            <div className="card" style={{ padding: '16px 18px' }}>
+            <div className="card" style={{ padding: '14px 16px' }}>
               <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>Trefferquote</div>
               {trefferquote === null ? (
-                <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>Noch keine Daten</div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>Noch keine Daten</div>
               ) : (
                 <>
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
-                    <span style={{ fontSize: 28, fontWeight: 900, letterSpacing: '-1px', lineHeight: 1, color: trefferquote >= 60 ? 'var(--yes)' : trefferquote >= 40 ? 'var(--text)' : 'var(--no)' }}>{trefferquote}</span>
+                    <span style={{ fontSize: 26, fontWeight: 900, letterSpacing: '-1px', lineHeight: 1, color: trefferquote >= 60 ? 'var(--yes)' : trefferquote >= 40 ? 'var(--text)' : 'var(--no)' }}>{trefferquote}</span>
                     <span style={{ fontSize: 14, color: 'var(--text-muted)', fontWeight: 600 }}>%</span>
                   </div>
                   <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6, lineHeight: 1.4 }}>
@@ -354,7 +363,126 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, o
             </div>
           </div>
         </div>
-      </div>
+      ) : (
+        /* ── DESKTOP HEADER ── */
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 16, marginBottom: 24 }}>
+          <div className="card" style={{ padding: '28px 28px 24px' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 20, marginBottom: 24 }}>
+              <div style={{ flexShrink: 0 }}>
+                {avatarUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={avatarUrl} alt="Avatar" style={{ width: 80, height: 80, borderRadius: '50%', objectFit: 'cover' }} />
+                ) : (
+                  <div style={{ width: 80, height: 80, borderRadius: '50%', background: av.bg, color: av.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28, fontWeight: 700, border: '2px solid var(--border)' }}>
+                    {displayName.slice(0, 2).toUpperCase()}
+                  </div>
+                )}
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+                  {editingUsername ? (
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                      <input type="text" value={newUsername} onChange={e => setNewUsername(e.target.value)} autoFocus
+                        onKeyDown={e => { if (e.key === 'Enter') saveUsername(); if (e.key === 'Escape') setEditingUsername(false); }}
+                        style={{ fontSize: 20, fontWeight: 700, padding: '4px 10px', borderRadius: 8, border: '1.5px solid var(--accent)', background: 'var(--surface)', color: 'var(--text)', width: 200 }} />
+                      <button onClick={saveUsername} disabled={savingUsername}
+                        style={{ padding: '4px 14px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
+                        {savingUsername ? '…' : 'Speichern'}
+                      </button>
+                      <button onClick={() => setEditingUsername(false)}
+                        style={{ padding: '4px 10px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', fontSize: 13, color: 'var(--text-muted)' }}>✕</button>
+                    </div>
+                  ) : (
+                    <>
+                      <span style={{ fontSize: 22, fontWeight: 700, color: 'var(--text)' }}>{displayName}</span>
+                      <button onClick={() => setEditingUsername(true)}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: '2px 4px', fontSize: 14, lineHeight: 1, borderRadius: 4 }}>✎</button>
+                    </>
+                  )}
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', display: 'flex', gap: 12 }}>
+                  <span>Guthaben: <strong style={{ color: 'var(--yes)' }}>{(balance ?? 0).toLocaleString('de')} ₫</strong></span>
+                  <span>·</span>
+                  <span>{allRows.length} Prognosen</span>
+                </div>
+                {profileMessage && (
+                  <div style={{ marginTop: 8, fontSize: 12, color: profileMessage.startsWith('Fehler') ? 'var(--no)' : 'var(--yes)' }}>{profileMessage}</div>
+                )}
+              </div>
+              <label style={{ fontSize: 12, padding: '6px 14px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 20, cursor: 'pointer', color: 'var(--text)', fontWeight: 600, flexShrink: 0, whiteSpace: 'nowrap' }}>
+                {uploadingAvatar ? 'Lädt…' : 'Bild ändern'}
+                <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => { if (e.target.files?.[0]) uploadAvatar(e.target.files[0]); }} />
+              </label>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', borderTop: '1px solid var(--border)', paddingTop: 20 }}>
+              {[
+                { label: 'Portfoliowert',  value: `${Math.round(balance ?? 0).toLocaleString('de')} ₫`, color: 'var(--text)' },
+                { label: 'Größter Gewinn', value: groessterGewinn > 0 ? `+${Math.round(groessterGewinn).toLocaleString('de')} ₫` : '—', color: groessterGewinn > 0 ? 'var(--yes)' : 'var(--text-muted)' },
+                { label: 'Prognosen',      value: String(allRows.length), color: 'var(--text)' },
+              ].map((s, i) => (
+                <div key={s.label} style={{ paddingLeft: i > 0 ? 20 : 0, borderLeft: i > 0 ? '1px solid var(--border)' : 'none' }}>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{s.label}</div>
+                  <div style={{ fontSize: 22, fontWeight: 700, color: s.color, letterSpacing: '-0.5px' }}>{s.value}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div className="card" style={{ padding: '24px 24px 20px', flex: 1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--yes)' }} />
+                <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Gewinn / Verlust</span>
+              </div>
+              <div style={{ fontSize: 32, fontWeight: 800, color: totalAusbe - totalEinsatz >= 0 ? 'var(--yes)' : 'var(--no)', letterSpacing: '-1px', marginBottom: 4 }}>
+                {totalAusbe - totalEinsatz >= 0 ? '+' : ''}{Math.round(totalAusbe - totalEinsatz).toLocaleString('de')} ₫
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 16 }}>Gesamt</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <div style={{ background: 'rgba(22,163,74,0.06)', borderRadius: 10, padding: '10px 14px' }}>
+                  <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Eingesetzt</div>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>{Math.round(totalEinsatz).toLocaleString('de')} ₫</div>
+                </div>
+                <div style={{ background: 'rgba(22,163,74,0.06)', borderRadius: 10, padding: '10px 14px' }}>
+                  <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Gewonnen</div>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--yes)' }}>+{Math.round(totalAusbe).toLocaleString('de')} ₫</div>
+                </div>
+              </div>
+              <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Offene Positionen</span>
+                <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>{offeneCount}</span>
+              </div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div className="card" style={{ padding: '16px 18px' }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>Streak</div>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                  <span style={{ fontSize: 28, fontWeight: 900, color: streak >= 3 ? '#f59e0b' : 'var(--text)', letterSpacing: '-1px', lineHeight: 1 }}>{streak}</span>
+                  <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 500 }}>{streak === 1 ? 'Tag' : 'Tage'}</span>
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6, lineHeight: 1.4 }}>
+                  {streak === 0 ? 'Heute noch nicht aktiv' : streak >= 7 ? 'Serie läuft' : streak >= 3 ? 'Konstant aktiv' : 'Starte heute'}
+                </div>
+              </div>
+              <div className="card" style={{ padding: '16px 18px' }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>Trefferquote</div>
+                {trefferquote === null ? (
+                  <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>Noch keine Daten</div>
+                ) : (
+                  <>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
+                      <span style={{ fontSize: 28, fontWeight: 900, letterSpacing: '-1px', lineHeight: 1, color: trefferquote >= 60 ? 'var(--yes)' : trefferquote >= 40 ? 'var(--text)' : 'var(--no)' }}>{trefferquote}</span>
+                      <span style={{ fontSize: 14, color: 'var(--text-muted)', fontWeight: 600 }}>%</span>
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6, lineHeight: 1.4 }}>
+                      {trefferquote >= 60 ? 'Überdurchschnittlich' : trefferquote >= 40 ? 'Solide' : 'Noch Luft nach oben'}
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── TABS ── */}
       <div style={{ borderBottom: '1px solid var(--border)', marginBottom: 20, display: 'flex' }}>
@@ -395,7 +523,50 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, o
             <div className="card" style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)', fontSize: 13 }}>
               {subTab === 'offen' ? 'Keine offenen Positionen.' : 'Noch keine abgeschlossenen Positionen.'}
             </div>
+          ) : isMobile ? (
+            /* ── MOBILE POSITIONS: Cards statt Tabelle ── */
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {displayRows.map((entry) => {
+                const m = entry.market;
+                const isYes = entry.direction === 'yes';
+                const resolved = m.resolved;
+                const won  = resolved && entry.auszahlung !== null && entry.auszahlung > 0;
+                const lost = resolved && entry.auszahlung === 0;
+                const isSport = m.category === 'sport';
+                const marktName = isSport ? m.question : m.is_auto && m.coin ? `${m.coin} · 3-Min-Markt` : m.question;
+                const richtungLabel = isSport ? (isYes ? 'Ja' : 'Nein') : m.is_auto ? (isYes ? 'Up ↑' : 'Down ↓') : (isYes ? 'Ja' : 'Nein');
+                const dateSource = subTab === 'geschlossen' && entry.marketClosedAt ? entry.marketClosedAt : entry.tradeCreatedAt;
+                const { date } = formatDateTime(dateSource);
+
+                return (
+                  <div key={entry.market.id} className="card" style={{ padding: '13px 14px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, marginBottom: 10 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', lineHeight: 1.4, flex: 1 }}>
+                        {marktName.length > 60 ? marktName.slice(0, 60) + '…' : marktName}
+                      </div>
+                      <span style={{ fontSize: 11, padding: '3px 9px', borderRadius: 20, fontWeight: 600, flexShrink: 0, background: isYes ? 'rgba(22,163,74,0.12)' : 'rgba(220,38,38,0.12)', color: isYes ? '#15803d' : '#b91c1c' }}>
+                        {richtungLabel}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12 }}>
+                      <span style={{ color: 'var(--text-muted)' }}>Einsatz: <strong style={{ color: 'var(--text)' }}>{Math.round(entry.einsatz).toLocaleString('de')} ₫</strong></span>
+                      {!resolved ? (
+                        <span style={{ padding: '2px 8px', borderRadius: 12, background: 'rgba(245,158,11,0.12)', color: '#b45309', fontWeight: 600, fontSize: 11 }}>Läuft</span>
+                      ) : won ? (
+                        <span style={{ color: 'var(--yes)', fontWeight: 700 }}>+{Math.round(entry.auszahlung ?? 0).toLocaleString('de')} ₫</span>
+                      ) : lost ? (
+                        <span style={{ color: 'var(--no)', fontWeight: 700 }}>–{Math.round(entry.einsatz).toLocaleString('de')} ₫</span>
+                      ) : (
+                        <span style={{ color: 'var(--text-muted)' }}>—</span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--text-subtle)', marginTop: 6 }}>{date}</div>
+                  </div>
+                );
+              })}
+            </div>
           ) : (
+            /* ── DESKTOP: Tabelle ── */
             <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
@@ -415,74 +586,43 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, o
                     const m = entry.market;
                     const isSport = m.category === 'sport';
                     const isYes = entry.direction === 'yes';
-
-                    const richtungLabel = isSport
-                      ? (isYes ? 'Ja' : 'Nein')
-                      : m.is_auto
-                        ? (isYes ? '↑ Up' : '↓ Down')
-                        : (isYes ? 'Ja' : 'Nein');
-
-                    const marktName = isSport
-                      ? m.question
-                      : m.is_auto && m.coin
-                        ? `${m.coin} · 3-Minuten-Markt`
-                        : m.question;
-
+                    const richtungLabel = isSport ? (isYes ? 'Ja' : 'Nein') : m.is_auto ? (isYes ? '↑ Up' : '↓ Down') : (isYes ? 'Ja' : 'Nein');
+                    const marktName = isSport ? m.question : m.is_auto && m.coin ? `${m.coin} · 3-Minuten-Markt` : m.question;
                     const iconEl = isSport ? (
-                      <span style={{ width: 28, height: 28, borderRadius: 8, background: '#16a34a22', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, flexShrink: 0 }}>
-                        ⚽
-                      </span>
+                      <span style={{ width: 28, height: 28, borderRadius: 8, background: '#16a34a22', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, flexShrink: 0 }}>⚽</span>
                     ) : m.is_auto && m.coin ? (
-                      <span style={{ width: 28, height: 28, borderRadius: 8, background: COIN_COLORS[m.coin] ?? '#f97316', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, color: '#fff', flexShrink: 0 }}>
-                        {m.coin.charAt(0)}
-                      </span>
+                      <span style={{ width: 28, height: 28, borderRadius: 8, background: COIN_COLORS[m.coin] ?? '#f97316', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, color: '#fff', flexShrink: 0 }}>{m.coin.charAt(0)}</span>
                     ) : null;
-
                     const resolved = m.resolved;
                     const won  = resolved && entry.auszahlung !== null && entry.auszahlung > 0;
                     const lost = resolved && entry.auszahlung === 0;
-
-                    const dateSource = subTab === 'geschlossen' && entry.marketClosedAt
-                      ? entry.marketClosedAt
-                      : entry.tradeCreatedAt;
+                    const dateSource = subTab === 'geschlossen' && entry.marketClosedAt ? entry.marketClosedAt : entry.tradeCreatedAt;
                     const { date, time } = formatDateTime(dateSource);
-
                     let ergebnisLabel = '';
                     if (resolved) {
-                      if (isSport) {
-                        ergebnisLabel = m.resolution === 'yes' ? 'Ja ✓' : m.resolution === 'no' ? 'Nein ✗' : 'Unentschieden';
-                      } else {
-                        ergebnisLabel = m.is_auto
+                      ergebnisLabel = isSport
+                        ? (m.resolution === 'yes' ? 'Ja ✓' : m.resolution === 'no' ? 'Nein ✗' : 'Unentschieden')
+                        : m.is_auto
                           ? (m.resolution === 'yes' ? 'UP ↑' : 'DOWN ↓')
                           : (m.resolution === 'yes' ? 'Ja' : 'Nein');
-                      }
                     }
-
                     return (
                       <tr key={entry.market.id} style={{ borderBottom: '1px solid var(--border)' }}>
                         <td style={{ padding: '14px 20px', fontSize: 13, color: 'var(--text)', maxWidth: 280 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                             {iconEl}
-                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block', maxWidth: 240 }}>
-                              {marktName}
-                            </span>
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block', maxWidth: 240 }}>{marktName}</span>
                           </div>
                         </td>
                         <td style={{ padding: '14px 20px', textAlign: 'right' }}>
-                          <span style={{ fontSize: 12, padding: '3px 10px', borderRadius: 20, fontWeight: 600, background: isYes ? 'rgba(22,163,74,0.12)' : 'rgba(220,38,38,0.12)', color: isYes ? '#15803d' : '#b91c1c' }}>
-                            {richtungLabel}
-                          </span>
+                          <span style={{ fontSize: 12, padding: '3px 10px', borderRadius: 20, fontWeight: 600, background: isYes ? 'rgba(22,163,74,0.12)' : 'rgba(220,38,38,0.12)', color: isYes ? '#15803d' : '#b91c1c' }}>{richtungLabel}</span>
                         </td>
-                        <td style={{ padding: '14px 20px', textAlign: 'right', fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>
-                          {Math.round(entry.einsatz).toLocaleString('de')} ₫
-                        </td>
+                        <td style={{ padding: '14px 20px', textAlign: 'right', fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{Math.round(entry.einsatz).toLocaleString('de')} ₫</td>
                         <td style={{ padding: '14px 20px', textAlign: 'right' }}>
                           {!resolved ? (
                             <span style={{ fontSize: 12, padding: '3px 10px', borderRadius: 20, background: 'rgba(245,158,11,0.12)', color: '#b45309', fontWeight: 600 }}>Läuft</span>
                           ) : (
-                            <span style={{ fontSize: 12, padding: '3px 10px', borderRadius: 20, fontWeight: 600, background: won ? 'rgba(22,163,74,0.12)' : 'rgba(220,38,38,0.12)', color: won ? '#15803d' : '#b91c1c' }}>
-                              {ergebnisLabel}
-                            </span>
+                            <span style={{ fontSize: 12, padding: '3px 10px', borderRadius: 20, fontWeight: 600, background: won ? 'rgba(22,163,74,0.12)' : 'rgba(220,38,38,0.12)', color: won ? '#15803d' : '#b91c1c' }}>{ergebnisLabel}</span>
                           )}
                         </td>
                         <td style={{ padding: '14px 20px', textAlign: 'right', fontSize: 13, fontWeight: 700 }}>
@@ -569,36 +709,19 @@ function AktivitaetsFeed({ userId }: { userId: string }) {
       for (const t of withMarkets) {
         const m = t.market;
         if (!m?.resolved || processedWins.has(t.market_id)) continue;
-
-        const myBuys = withMarkets.filter(
-          x => x.market_id === t.market_id && (x.type === 'buy_yes' || x.type === 'buy_no')
-        );
+        const myBuys = withMarkets.filter(x => x.market_id === t.market_id && (x.type === 'buy_yes' || x.type === 'buy_no'));
         if (myBuys.length === 0) { processedWins.add(t.market_id); continue; }
-
         const direction = myBuys[0].type.includes('yes') ? 'yes' : 'no';
         const won = m.resolution === direction;
         processedWins.add(t.market_id);
         if (!won) continue;
-
         const totalShares = myBuys.reduce((s, x) => s + (x.shares ?? 0), 0);
         if (totalShares <= 0) continue;
-
         const firstBuyTime = new Date(myBuys[myBuys.length - 1].created_at).getTime();
-        winItems.push({
-          id: `win_${t.market_id}`,
-          market_id: t.market_id,
-          type: 'win',
-          shares: totalShares,
-          cost: totalShares,
-          created_at: new Date(firstBuyTime + 3 * 60 * 1000).toISOString(),
-          market: m,
-        });
+        winItems.push({ id: `win_${t.market_id}`, market_id: t.market_id, type: 'win', shares: totalShares, cost: totalShares, created_at: new Date(firstBuyTime + 3 * 60 * 1000).toISOString(), market: m });
       }
 
-      const combined = [...withMarkets, ...winItems].sort(
-        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-      );
-
+      const combined = [...withMarkets, ...winItems].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
       setItems(combined);
       setLoading(false);
     }
@@ -618,14 +741,8 @@ function AktivitaetsFeed({ userId }: { userId: string }) {
     return d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' });
   }
 
-  if (loading) return (
-    <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--text-muted)', fontSize: 13 }}>Let the AI cook...</div>
-  );
-  if (items.length === 0) return (
-    <div className="card" style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)', fontSize: 13 }}>
-      Noch keine Aktivität.
-    </div>
-  );
+  if (loading) return <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--text-muted)', fontSize: 13 }}>Let the AI cook...</div>;
+  if (items.length === 0) return <div className="card" style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)', fontSize: 13 }}>Noch keine Aktivität.</div>;
 
   return (
     <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
@@ -636,78 +753,32 @@ function AktivitaetsFeed({ userId }: { userId: string }) {
         const isSell  = item.type.startsWith('sell');
         const isWin   = item.type === 'win';
         const isYes   = item.type.includes('yes');
-
-        const coinColor = !isWin && !isSport && m?.is_auto && m.coin
-          ? COIN_COLORS_FEED[m.coin] ?? '#f97316'
-          : null;
-
-        const marketLabel = m
-          ? isSport
-            ? (m.question.length > 52 ? m.question.slice(0, 52) + '…' : m.question)
-            : m.is_auto
-              ? `${m.coin} · 3-Min-Markt`
-              : (m.question.length > 52 ? m.question.slice(0, 52) + '…' : m.question)
-          : 'Unbekannter Markt';
-
-        const dirLabel = isSport
-          ? (isYes ? 'Ja' : 'Nein')
-          : m?.is_auto
-            ? (isYes ? 'Up ↑' : 'Down ↓')
-            : (isYes ? 'Ja' : 'Nein');
-
-        let iconBg      = 'rgba(99,102,241,0.12)';
-        let iconContent = '⇄';
+        const coinColor = !isWin && !isSport && m?.is_auto && m.coin ? COIN_COLORS_FEED[m.coin] ?? '#f97316' : null;
+        const marketLabel = m ? isSport ? (m.question.length > 52 ? m.question.slice(0, 52) + '…' : m.question) : m.is_auto ? `${m.coin} · 3-Min-Markt` : (m.question.length > 52 ? m.question.slice(0, 52) + '…' : m.question) : 'Unbekannter Markt';
+        const dirLabel = isSport ? (isYes ? 'Ja' : 'Nein') : m?.is_auto ? (isYes ? 'Up ↑' : 'Down ↓') : (isYes ? 'Ja' : 'Nein');
+        let iconBg = 'rgba(99,102,241,0.12)'; let iconContent = '⇄';
         if (isWin)        { iconBg = 'rgba(22,163,74,0.15)'; iconContent = '🏆'; }
         else if (isSport) { iconBg = 'rgba(22,163,74,0.10)'; iconContent = '⚽'; }
         else if (isBuy)   { iconBg = isYes ? 'rgba(22,163,74,0.12)' : 'rgba(220,38,38,0.12)'; iconContent = isYes ? '↑' : '↓'; }
-
-        let subText     = '';
-        let amountLabel = '';
-        let amountColor = 'var(--text)';
-
+        let subText = ''; let amountLabel = ''; let amountColor = 'var(--text)';
         if (isWin) {
-          const resLabel = isSport
-            ? (m?.resolution === 'yes' ? 'Ja ✓' : 'Nein ✗')
-            : m?.is_auto
-              ? (m.resolution === 'yes' ? 'Up ↑' : 'Down ↓')
-              : (m?.resolution === 'yes' ? 'Ja' : 'Nein');
-          subText     = `Gewonnen · ${resLabel}`;
-          amountLabel = `+${Math.round(item.cost).toLocaleString('de')} ₫`;
-          amountColor = 'var(--yes)';
+          const resLabel = isSport ? (m?.resolution === 'yes' ? 'Ja ✓' : 'Nein ✗') : m?.is_auto ? (m.resolution === 'yes' ? 'Up ↑' : 'Down ↓') : (m?.resolution === 'yes' ? 'Ja' : 'Nein');
+          subText = `Gewonnen · ${resLabel}`; amountLabel = `+${Math.round(item.cost).toLocaleString('de')} ₫`; amountColor = 'var(--yes)';
         } else if (isBuy) {
-          subText     = `Einsatz auf ${dirLabel}`;
-          amountLabel = `Einsatz: ${Math.round(Math.abs(item.cost)).toLocaleString('de')} ₫`;
-          amountColor = 'var(--text-muted)';
+          subText = `Einsatz auf ${dirLabel}`; amountLabel = `Einsatz: ${Math.round(Math.abs(item.cost)).toLocaleString('de')} ₫`; amountColor = 'var(--text-muted)';
         } else if (isSell) {
-          subText     = `Verkauft · ${dirLabel}`;
-          amountLabel = `+${Math.round(Math.abs(item.cost)).toLocaleString('de')} ₫`;
-          amountColor = 'var(--yes)';
+          subText = `Verkauft · ${dirLabel}`; amountLabel = `+${Math.round(Math.abs(item.cost)).toLocaleString('de')} ₫`; amountColor = 'var(--yes)';
         }
-
         return (
-          <div key={item.id} style={{
-            display: 'flex', alignItems: 'center', gap: 14,
-            padding: '14px 20px',
-            borderBottom: idx < items.length - 1 ? '1px solid var(--border)' : 'none',
-          }}>
+          <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 20px', borderBottom: idx < items.length - 1 ? '1px solid var(--border)' : 'none' }}>
             {coinColor ? (
-              <div style={{ width: 36, height: 36, borderRadius: 10, flexShrink: 0, background: coinColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, color: '#fff' }}>
-                {m?.coin?.charAt(0)}
-              </div>
+              <div style={{ width: 36, height: 36, borderRadius: 10, flexShrink: 0, background: coinColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, color: '#fff' }}>{m?.coin?.charAt(0)}</div>
             ) : (
-              <div style={{ width: 36, height: 36, borderRadius: 10, flexShrink: 0, background: iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: isWin ? 18 : 16 }}>
-                {iconContent}
-              </div>
+              <div style={{ width: 36, height: 36, borderRadius: 10, flexShrink: 0, background: iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: isWin ? 18 : 16 }}>{iconContent}</div>
             )}
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 13, fontWeight: isWin ? 600 : 500, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {marketLabel}
-              </div>
-              {subText && (
-                <div style={{ fontSize: 12, color: isWin ? '#15803d' : 'var(--text-muted)', marginTop: 2, fontWeight: isWin ? 600 : 400 }}>
-                  {subText}
-                </div>
-              )}
+              <div style={{ fontSize: 13, fontWeight: isWin ? 600 : 500, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{marketLabel}</div>
+              {subText && <div style={{ fontSize: 12, color: isWin ? '#15803d' : 'var(--text-muted)', marginTop: 2, fontWeight: isWin ? 600 : 400 }}>{subText}</div>}
             </div>
             <div style={{ textAlign: 'right', flexShrink: 0 }}>
               <div style={{ fontSize: 13, fontWeight: 700, color: amountColor }}>{amountLabel}</div>
