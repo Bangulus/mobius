@@ -39,11 +39,8 @@ async function dbPost(table: string, body: Record<string, unknown>) {
 }
 
 async function marketExistsForCity(cityId: string): Promise<boolean> {
-  const todayStart = new Date()
-  todayStart.setUTCHours(0, 0, 0, 0)
-  const since = todayStart.toISOString()
   const res = await fetch(
-    `${SUPABASE_URL}/rest/v1/markets?category=eq.weather&coin=eq.${cityId}&created_at=gte.${since}&select=id&limit=1`,
+    `${SUPABASE_URL}/rest/v1/markets?category=eq.weather&coin=eq.${cityId}&status=eq.open&resolved=eq.false&select=id&limit=1`,
     { headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` }, cache: 'no-store' }
   )
   const data = await res.json()
