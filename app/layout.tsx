@@ -9,6 +9,12 @@ export const metadata: Metadata = {
   description: 'Prediction Markets auf Deutsch',
 };
 
+export const viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
+};
+
 export default function RootLayout({
   children,
 }: {
@@ -16,7 +22,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="de">
-      <body className={inter.className} style={{ margin: 0, padding: 0 }}>{children}</body>
+      <body className={inter.className} style={{ margin: 0, padding: 0 }}>
+        {children}
+      </body>
     </html>
   );
 }
