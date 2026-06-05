@@ -138,7 +138,7 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
 
   async function loadAllMarkets() {
     const res = await fetch(
-      `${supabaseUrl}/rest/v1/markets?select=id,question,short_label,category,description,closes_at,group_title,is_auto,resolved&order=created_at.desc`,
+      `${supabaseUrl}/rest/v1/markets?select=id,question,short_label,category,description,closes_at,group_title,is_auto,resolved&order=created_at.desc&limit=2000`,
       { headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` } }
     );
     setAllMarkets(await res.json());
