@@ -53,7 +53,7 @@
   --line-height: 1.6;
   --tracking:    -0.015em;
 
-  --nav-height:     80px;
+  --nav-height:     104px;
   --cat-height:     48px;
   --tab-bar-height: 0px;
   --mobile-cat-height: 0px;
@@ -644,7 +644,7 @@ input:focus, textarea:focus, select:focus {
 /* ─── Responsive ──────────────────────────────────────────────── */
 @media (max-width: 768px) {
   :root {
-    --nav-height: 56px;
+    --nav-height: 80px;
     --mobile-cat-height: 46px;
     --tab-bar-height: calc(60px + env(safe-area-inset-bottom, 0px));
   }
@@ -655,7 +655,7 @@ input:focus, textarea:focus, select:focus {
     gap: 10px;
     height: var(--nav-height);
   }
-  .nav-logo { height: 32px; }
+  .nav-logo { height: 48px; }
   .nav-search-wrap { max-width: 100%; }
   .nav-left { gap: 10px; }
 
