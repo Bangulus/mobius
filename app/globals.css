@@ -655,7 +655,7 @@ input:focus, textarea:focus, select:focus {
     gap: 10px;
     height: var(--nav-height);
   }
-  .nav-logo { height: 48px; }
+  .nav-logo { height: 96px; }
   .nav-search-wrap { max-width: 100%; }
   .nav-left { gap: 10px; }
 
