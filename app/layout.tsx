@@ -7,12 +7,19 @@ const inter = Inter({ subsets: ['latin'] });
 export const metadata: Metadata = {
   title: 'Möbius',
   description: 'Prediction Markets auf Deutsch',
+  manifest: '/manifest.json',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'Möbius',
+  },
 };
 
 export const viewport = {
   width: 'device-width',
   initialScale: 1,
   viewportFit: 'cover',
+  themeColor: '#1a1f3c',
 };
 
 export default function RootLayout({
