@@ -1025,7 +1025,7 @@ function WeatherMarketCard({ market, onClick }: { market: Market; onClick: () =>
         )}
       </div>
       <div className="market-card-question" style={{ fontSize: 13, marginBottom: 10 }}>
-        Wird es heute wärmer?
+        Wird es heute wärmer als gestern?
       </div>
       <div className="prob-bar">
         <div className={`prob-bar-fill ${isLow ? 'low' : ''}`} style={{ width: `${prob}%` }} />
