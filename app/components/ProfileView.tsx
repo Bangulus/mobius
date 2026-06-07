@@ -637,7 +637,7 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, o
       {tab === 'einstellungen' && (
         <div>
           <div style={{ fontSize: 14, color: 'var(--text-muted)', marginBottom: 20, lineHeight: 1.6 }}>
-            Wähle welche Stats auf deinem öffentlichen Profil sichtbar sind. Trefferquote, Streak, Anzahl Prognosen und "Zuletzt online" sind immer öffentlich.
+            Wähle welche Stats auf deinem öffentlichen Profil sichtbar sind. Trefferquote, Streak, Anzahl Prognosen und &quot;Zuletzt online&quot; sind immer öffentlich.
           </div>
 
           <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
