@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 
 interface Comment {
   id: string
@@ -68,12 +69,13 @@ function Avatar({ username, avatarUrl, size = 36 }: { username: string; avatarUr
 }
 
 export default function CommentsSection({ marketId }: { marketId: string }) {
-  const [comments, setComments]       = useState<Comment[]>([])
-  const [loading, setLoading]         = useState(true)
-  const [text, setText]               = useState('')
-  const [submitting, setSubmitting]   = useState(false)
-  const [error, setError]             = useState('')
-  const [likedIds, setLikedIds]       = useState<Set<string>>(new Set())
+  const router = useRouter()
+  const [comments, setComments]           = useState<Comment[]>([])
+  const [loading, setLoading]             = useState(true)
+  const [text, setText]                   = useState('')
+  const [submitting, setSubmitting]       = useState(false)
+  const [error, setError]                 = useState('')
+  const [likedIds, setLikedIds]           = useState<Set<string>>(new Set())
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
 
   useEffect(() => {
@@ -111,7 +113,6 @@ export default function CommentsSection({ marketId }: { marketId: string }) {
   async function handleLike(commentId: string) {
     const token = getToken()
     if (!token) return
-    // Optimistisch
     const alreadyLiked = likedIds.has(commentId)
     setLikedIds(prev => {
       const next = new Set(prev)
@@ -121,14 +122,12 @@ export default function CommentsSection({ marketId }: { marketId: string }) {
     setComments(prev => prev.map(c =>
       c.id === commentId ? { ...c, likes: alreadyLiked ? c.likes - 1 : c.likes + 1 } : c
     ))
-
     const res = await fetch('/api/comments/like', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify({ comment_id: commentId }),
     })
     if (!res.ok) {
-      // Rückgängig
       setLikedIds(prev => {
         const next = new Set(prev)
         alreadyLiked ? next.add(commentId) : next.delete(commentId)
@@ -162,8 +161,7 @@ export default function CommentsSection({ marketId }: { marketId: string }) {
               width: '100%', padding: '12px 14px', borderRadius: 10,
               border: '1px solid var(--border)', background: 'var(--surface)',
               color: 'var(--text)', fontSize: 14, resize: 'none',
-              fontFamily: 'inherit', outline: 'none',
-              boxSizing: 'border-box',
+              fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box',
             }}
           />
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -175,7 +173,7 @@ export default function CommentsSection({ marketId }: { marketId: string }) {
                 padding: '8px 20px', borderRadius: 8, border: 'none', cursor: 'pointer',
                 background: text.trim() ? 'var(--accent)' : 'var(--border)',
                 color: text.trim() ? '#fff' : 'var(--text-muted)',
-                fontSize: 13, fontWeight: 700, transition: 'background 0.15s',
+                fontSize: 13, fontWeight: 700, transition: 'background 0.15s', fontFamily: 'inherit',
               }}
             >
               {submitting ? 'Wird gesendet…' : 'Absenden'}
@@ -199,18 +197,36 @@ export default function CommentsSection({ marketId }: { marketId: string }) {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
           {comments.map((c, i) => {
-            const isOwn    = c.user_id === currentUserId
-            const liked    = likedIds.has(c.id)
-            const isLast   = i === comments.length - 1
+            const isOwn  = c.user_id === currentUserId
+            const liked  = likedIds.has(c.id)
+            const isLast = i === comments.length - 1
             return (
               <div key={c.id} style={{
                 display: 'flex', gap: 12, padding: '16px 0',
                 borderBottom: isLast ? 'none' : '1px solid var(--border)',
               }}>
-                <Avatar username={c.username} avatarUrl={c.avatar_url} size={36} />
+                {/* Avatar — klickbar */}
+                <div
+                  onClick={() => router.push(`/profil/${encodeURIComponent(c.username)}`)}
+                  style={{ cursor: 'pointer', flexShrink: 0 }}
+                >
+                  <Avatar username={c.username} avatarUrl={c.avatar_url} size={36} />
+                </div>
+
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 4 }}>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{c.username}</span>
+                    {/* Username — klickbar */}
+                    <span
+                      onClick={() => router.push(`/profil/${encodeURIComponent(c.username)}`)}
+                      style={{
+                        fontSize: 13, fontWeight: 700, color: 'var(--text)',
+                        cursor: 'pointer', transition: 'color 0.15s',
+                      }}
+                      onMouseEnter={e => (e.currentTarget.style.color = 'var(--accent)')}
+                      onMouseLeave={e => (e.currentTarget.style.color = 'var(--text)')}
+                    >
+                      {c.username}
+                    </span>
                     <span style={{ fontSize: 12, color: 'var(--text-subtle)' }}>{timeAgo(c.created_at)}</span>
                   </div>
                   <div style={{ fontSize: 14, color: 'var(--text)', lineHeight: 1.55, wordBreak: 'break-word' }}>{c.content}</div>
@@ -227,7 +243,7 @@ export default function CommentsSection({ marketId }: { marketId: string }) {
                           background: 'none', border: 'none', cursor: 'pointer',
                           fontSize: 13, color: liked ? 'var(--no)' : 'var(--text-muted)',
                           padding: '2px 0', fontWeight: liked ? 700 : 400,
-                          transition: 'color 0.15s',
+                          transition: 'color 0.15s', fontFamily: 'inherit',
                         }}
                       >
                         {liked ? '♥' : '♡'} {c.likes > 0 ? c.likes : ''}
