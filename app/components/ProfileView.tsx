@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -11,6 +12,19 @@ async function dbGet(table: string, params: string) {
     cache: 'no-store',
   });
   return res.json();
+}
+
+async function dbPatch(table: string, params: string, body: object) {
+  await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}`, {
+    method: 'PATCH',
+    headers: {
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${SUPABASE_KEY}`,
+      'Content-Type': 'application/json',
+      Prefer: 'return=minimal',
+    },
+    body: JSON.stringify(body),
+  });
 }
 
 interface Props {
@@ -53,6 +67,41 @@ interface PortfolioEntry {
   tradeCreatedAt: string;
   marketClosedAt: string | null;
 }
+
+interface PrivacySettings {
+  guthaben: boolean;
+  gewinn_verlust: boolean;
+  groesster_gewinn: boolean;
+  eingesetzt_gewonnen: boolean;
+  streak: boolean;
+  offene_positionen: boolean;
+  aktivitaet: boolean;
+  lieblingskategorie: boolean;
+  durchschnittlicher_einsatz: boolean;
+}
+
+const DEFAULT_PRIVACY: PrivacySettings = {
+  guthaben: true,
+  gewinn_verlust: true,
+  groesster_gewinn: true,
+  eingesetzt_gewonnen: true,
+  streak: true,
+  offene_positionen: true,
+  aktivitaet: true,
+  lieblingskategorie: true,
+  durchschnittlicher_einsatz: true,
+};
+
+const PRIVACY_LABELS: { key: keyof PrivacySettings; label: string; desc: string }[] = [
+  { key: 'guthaben',               label: 'Guthaben',               desc: 'Dein aktuelles Guthaben in ₫' },
+  { key: 'gewinn_verlust',         label: 'Gewinn / Verlust',        desc: 'Gesamte Bilanz aller Prognosen' },
+  { key: 'groesster_gewinn',       label: 'Größter Gewinn',          desc: 'Deine beste Einzelauszahlung' },
+  { key: 'eingesetzt_gewonnen',    label: 'Eingesetzt & Gewonnen',   desc: 'Gesamtvolumen deiner Trades' },
+  { key: 'offene_positionen',      label: 'Offene Positionen',       desc: 'Anzahl aktiver Wetten' },
+  { key: 'lieblingskategorie',     label: 'Lieblingskategorie',      desc: 'In welcher Kategorie du am meisten handelst' },
+  { key: 'durchschnittlicher_einsatz', label: 'Ø Einsatz',          desc: 'Durchschnittlicher Einsatz pro Prognose' },
+  { key: 'aktivitaet',             label: 'Aktivitäts-Feed',         desc: 'Deine letzten Trades öffentlich sichtbar' },
+];
 
 const COIN_COLORS: Record<string, string> = {
   BTC: '#f59e0b', ETH: '#6366f1', SOL: '#9945ff', XRP: '#00aae4',
@@ -105,7 +154,7 @@ function formatDateTime(iso: string): { date: string; time: string } {
   return { date, time };
 }
 
-type TabType = 'positionen' | 'aktivitaet';
+type TabType = 'positionen' | 'aktivitaet' | 'einstellungen';
 type SubTabType = 'offen' | 'geschlossen';
 
 function useIsMobile() {
@@ -119,7 +168,31 @@ function useIsMobile() {
   return isMobile;
 }
 
+// Toggle Switch Komponente
+function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <button
+      onClick={() => onChange(!checked)}
+      style={{
+        width: 44, height: 24, borderRadius: 12, border: 'none', cursor: 'pointer',
+        background: checked ? 'var(--accent)' : 'var(--border-md)',
+        position: 'relative', flexShrink: 0, transition: 'background 0.2s',
+        padding: 0,
+      }}
+    >
+      <div style={{
+        width: 18, height: 18, borderRadius: '50%', background: '#fff',
+        position: 'absolute', top: 3,
+        left: checked ? 23 : 3,
+        transition: 'left 0.2s',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+      }} />
+    </button>
+  );
+}
+
 export default function ProfileView({ userId, displayName, avatarUrl, balance, onUsernameChange, onAvatarChange }: Props) {
+  const router = useRouter();
   const [newUsername, setNewUsername]           = useState(displayName);
   const [uploadingAvatar, setUploadingAvatar]   = useState(false);
   const [savingUsername, setSavingUsername]     = useState(false);
@@ -130,6 +203,8 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, o
   const [allRows, setAllRows]                   = useState<PortfolioEntry[]>([]);
   const [allTrades, setAllTrades]               = useState<TradeRow[]>([]);
   const [portfolioLoading, setPortfolioLoading] = useState(true);
+  const [privacy, setPrivacy]                   = useState<PrivacySettings>(DEFAULT_PRIVACY);
+  const [savingPrivacy, setSavingPrivacy]       = useState(false);
   const isMobile                                = useIsMobile();
 
   const totalEinsatz     = allRows.reduce((s, r) => s + r.einsatz, 0);
@@ -140,9 +215,37 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, o
   const offeneRows       = allRows.filter(r => !r.market.resolved);
   const geschlosseneRows = allRows.filter(r => r.market.resolved);
   const displayRows      = subTab === 'offen' ? offeneRows : geschlosseneRows;
+  const streak           = calcStreak(allTrades);
+  const trefferquote     = calcTrefferquote(allRows);
+  const avgEinsatz       = allRows.length > 0 ? Math.round(totalEinsatz / allRows.length) : 0;
 
-  const streak       = calcStreak(allTrades);
-  const trefferquote = calcTrefferquote(allRows);
+  // last_seen_at updaten
+  useEffect(() => {
+    if (!userId) return;
+    dbPatch('users', `id=eq.${userId}`, { last_seen_at: new Date().toISOString() });
+  }, [userId]);
+
+  // Privacy Settings laden
+  useEffect(() => {
+    if (!userId) return;
+    dbGet('users', `id=eq.${userId}&select=privacy_settings`).then(data => {
+      if (data?.[0]?.privacy_settings) {
+        setPrivacy({ ...DEFAULT_PRIVACY, ...data[0].privacy_settings });
+      }
+    });
+  }, [userId]);
+
+  const savePrivacy = async (newPrivacy: PrivacySettings) => {
+    setSavingPrivacy(true);
+    await dbPatch('users', `id=eq.${userId}`, { privacy_settings: newPrivacy });
+    setSavingPrivacy(false);
+  };
+
+  const togglePrivacy = (key: keyof PrivacySettings) => {
+    const updated = { ...privacy, [key]: !privacy[key] };
+    setPrivacy(updated);
+    savePrivacy(updated);
+  };
 
   const loadPortfolio = useCallback(async () => {
     setPortfolioLoading(true);
@@ -156,7 +259,7 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, o
 
     const markets: MarketRow[] = await dbGet('markets', `id=in.(${marketIds.join(',')})&select=*`);
     const marketMap: Record<string, MarketRow> = {};
-    markets.forEach(m => { marketMap[m.id] = m; });
+    markets?.forEach(m => { marketMap[m.id] = m; });
 
     const entryMap: Record<string, PortfolioEntry> = {};
     for (const trade of trades) {
@@ -167,14 +270,7 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, o
       const dir: 'yes' | 'no' = trade.type.includes('yes') ? 'yes' : 'no';
       if (!entryMap[trade.market_id]) {
         const closedAt = (market as any).resolved_at ?? market.closes_at ?? null;
-        entryMap[trade.market_id] = {
-          market,
-          einsatz: 0,
-          direction: dir,
-          auszahlung: null,
-          tradeCreatedAt: trade.created_at,
-          marketClosedAt: closedAt,
-        };
+        entryMap[trade.market_id] = { market, einsatz: 0, direction: dir, auszahlung: null, tradeCreatedAt: trade.created_at, marketClosedAt: closedAt };
       }
       const entry = entryMap[trade.market_id];
       if (isBuy)  { entry.einsatz += Math.abs(trade.cost); entry.direction = dir; }
@@ -183,8 +279,7 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, o
     for (const entry of Object.values(entryMap)) {
       const m = entry.market;
       if (!m.resolved || entry.auszahlung !== null) continue;
-      const won = (m.resolution === 'yes' && entry.direction === 'yes') ||
-                  (m.resolution === 'no'  && entry.direction === 'no');
+      const won = (m.resolution === 'yes' && entry.direction === 'yes') || (m.resolution === 'no' && entry.direction === 'no');
       if (won) {
         const mTrades = trades.filter(t => t.market_id === m.id && (t.type === 'buy_yes' || t.type === 'buy_no'));
         entry.auszahlung = Math.round(mTrades.reduce((s, t) => s + (t.shares ?? 0), 0));
@@ -236,266 +331,168 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, o
 
   const av = avatarColor(displayName);
 
+  const headerCard = (
+    <div className="card" style={{ padding: isMobile ? '20px 16px' : '28px 28px 24px', marginBottom: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: isMobile ? 14 : 20, marginBottom: 20 }}>
+        <div style={{ flexShrink: 0 }}>
+          {avatarUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={avatarUrl} alt="Avatar" style={{ width: isMobile ? 64 : 80, height: isMobile ? 64 : 80, borderRadius: '50%', objectFit: 'cover' }} />
+          ) : (
+            <div style={{ width: isMobile ? 64 : 80, height: isMobile ? 64 : 80, borderRadius: '50%', background: av.bg, color: av.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: isMobile ? 22 : 28, fontWeight: 700, border: '2px solid var(--border)' }}>
+              {displayName.slice(0, 2).toUpperCase()}
+            </div>
+          )}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
+            {editingUsername ? (
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center', width: '100%' }}>
+                <input type="text" value={newUsername} onChange={e => setNewUsername(e.target.value)} autoFocus
+                  onKeyDown={e => { if (e.key === 'Enter') saveUsername(); if (e.key === 'Escape') setEditingUsername(false); }}
+                  style={{ fontSize: isMobile ? 16 : 20, fontWeight: 700, padding: '4px 10px', borderRadius: 8, border: '1.5px solid var(--accent)', background: 'var(--surface)', color: 'var(--text)', flex: 1, minWidth: 0 }} />
+                <button onClick={saveUsername} disabled={savingUsername}
+                  style={{ padding: '4px 12px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600, flexShrink: 0 }}>
+                  {savingUsername ? '…' : 'OK'}
+                </button>
+                <button onClick={() => setEditingUsername(false)}
+                  style={{ padding: '4px 8px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', fontSize: 13, color: 'var(--text-muted)', flexShrink: 0 }}>✕</button>
+              </div>
+            ) : (
+              <>
+                <span style={{ fontSize: isMobile ? 18 : 22, fontWeight: 700, color: 'var(--text)' }}>{displayName}</span>
+                <button onClick={() => setEditingUsername(true)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: '2px 4px', fontSize: 14, lineHeight: 1 }}>✎</button>
+              </>
+            )}
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <span>Guthaben: <strong style={{ color: 'var(--yes)' }}>{(balance ?? 0).toLocaleString('de')} ₫</strong></span>
+            <span>·</span>
+            <span>{allRows.length} Prognosen</span>
+          </div>
+          {profileMessage && (
+            <div style={{ marginTop: 6, fontSize: 12, color: profileMessage.startsWith('Fehler') ? 'var(--no)' : 'var(--yes)' }}>{profileMessage}</div>
+          )}
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flexShrink: 0, alignItems: 'flex-end' }}>
+          <label style={{ fontSize: 12, padding: '6px 14px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 20, cursor: 'pointer', color: 'var(--text)', fontWeight: 600, whiteSpace: 'nowrap' }}>
+            {uploadingAvatar ? 'Lädt…' : 'Bild ändern'}
+            <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => { if (e.target.files?.[0]) uploadAvatar(e.target.files[0]); }} />
+          </label>
+          <button
+            onClick={() => router.push(`/profil/${encodeURIComponent(displayName)}`)}
+            style={{ fontSize: 12, padding: '6px 14px', background: 'var(--accent-light)', border: '1px solid rgba(99,102,241,0.2)', borderRadius: 20, cursor: 'pointer', color: 'var(--accent)', fontWeight: 600, whiteSpace: 'nowrap' }}
+          >
+            Öffentliches Profil →
+          </button>
+        </div>
+      </div>
+
+      {/* Stats-Grid */}
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(3, 1fr)' : 'repeat(3, 1fr)', borderTop: '1px solid var(--border)', paddingTop: isMobile ? 16 : 20, gap: 8 }}>
+        {[
+          { label: 'Portfoliowert',  value: `${Math.round(balance ?? 0).toLocaleString('de')} ₫`, color: 'var(--text)' },
+          { label: 'Größter Gewinn', value: groessterGewinn > 0 ? `+${Math.round(groessterGewinn).toLocaleString('de')} ₫` : '—', color: groessterGewinn > 0 ? 'var(--yes)' : 'var(--text-muted)' },
+          { label: 'Prognosen',      value: String(allRows.length), color: 'var(--text)' },
+        ].map((s, i) => (
+          <div key={s.label} style={{ paddingLeft: i > 0 ? (isMobile ? 12 : 20) : 0, borderLeft: i > 0 ? '1px solid var(--border)' : 'none' }}>
+            <div style={{ fontSize: isMobile ? 10 : 11, color: 'var(--text-muted)', marginBottom: 4, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.04em', lineHeight: 1.3 }}>{s.label}</div>
+            <div style={{ fontSize: isMobile ? 16 : 22, fontWeight: 700, color: s.color, letterSpacing: '-0.5px' }}>{s.value}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  const rightCards = (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {/* Gewinn/Verlust */}
+      <div className="card" style={{ padding: isMobile ? '18px 16px' : '24px 24px 20px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+          <div style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--yes)' }} />
+          <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Gewinn / Verlust</span>
+        </div>
+        <div style={{ fontSize: isMobile ? 28 : 32, fontWeight: 800, color: totalAusbe - totalEinsatz >= 0 ? 'var(--yes)' : 'var(--no)', letterSpacing: '-1px', marginBottom: 4 }}>
+          {totalAusbe - totalEinsatz >= 0 ? '+' : ''}{Math.round(totalAusbe - totalEinsatz).toLocaleString('de')} ₫
+        </div>
+        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 14 }}>Gesamt</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          <div style={{ background: 'rgba(22,163,74,0.06)', borderRadius: 10, padding: '10px 14px' }}>
+            <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Eingesetzt</div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>{Math.round(totalEinsatz).toLocaleString('de')} ₫</div>
+          </div>
+          <div style={{ background: 'rgba(22,163,74,0.06)', borderRadius: 10, padding: '10px 14px' }}>
+            <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Gewonnen</div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--yes)' }}>+{Math.round(totalAusbe).toLocaleString('de')} ₫</div>
+          </div>
+        </div>
+        <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Offene Positionen</span>
+          <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>{offeneCount}</span>
+        </div>
+      </div>
+
+      {/* Streak + Trefferquote */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+        <div className="card" style={{ padding: '16px 18px' }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>Streak</div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+            <span style={{ fontSize: 28, fontWeight: 900, color: streak >= 3 ? '#f59e0b' : 'var(--text)', letterSpacing: '-1px', lineHeight: 1 }}>{streak}</span>
+            <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 500 }}>{streak === 1 ? 'Tag' : 'Tage'}</span>
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6, lineHeight: 1.4 }}>
+            {streak === 0 ? 'Heute noch nicht aktiv' : streak >= 7 ? 'Serie läuft 🔥' : streak >= 3 ? 'Konstant aktiv' : 'Starte heute'}
+          </div>
+        </div>
+        <div className="card" style={{ padding: '16px 18px' }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>Trefferquote</div>
+          {trefferquote === null ? (
+            <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>Noch keine Daten</div>
+          ) : (
+            <>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
+                <span style={{ fontSize: 28, fontWeight: 900, letterSpacing: '-1px', lineHeight: 1, color: trefferquote >= 60 ? 'var(--yes)' : trefferquote >= 40 ? 'var(--text)' : 'var(--no)' }}>{trefferquote}</span>
+                <span style={{ fontSize: 14, color: 'var(--text-muted)', fontWeight: 600 }}>%</span>
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6 }}>
+                {trefferquote >= 60 ? 'Überdurchschnittlich' : trefferquote >= 40 ? 'Solide' : 'Noch Luft nach oben'}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div style={{ maxWidth: 900, margin: '0 auto' }}>
 
       {/* ── HEADER ── */}
       {isMobile ? (
-        /* ── MOBILE HEADER ── */
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 20 }}>
-
-          {/* Avatar + Name + Bild-ändern */}
-          <div className="card" style={{ padding: '20px 16px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16 }}>
-              <div style={{ flexShrink: 0 }}>
-                {avatarUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={avatarUrl} alt="Avatar" style={{ width: 64, height: 64, borderRadius: '50%', objectFit: 'cover' }} />
-                ) : (
-                  <div style={{ width: 64, height: 64, borderRadius: '50%', background: av.bg, color: av.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, fontWeight: 700, border: '2px solid var(--border)' }}>
-                    {displayName.slice(0, 2).toUpperCase()}
-                  </div>
-                )}
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
-                  {editingUsername ? (
-                    <div style={{ display: 'flex', gap: 6, alignItems: 'center', width: '100%' }}>
-                      <input type="text" value={newUsername} onChange={e => setNewUsername(e.target.value)} autoFocus
-                        onKeyDown={e => { if (e.key === 'Enter') saveUsername(); if (e.key === 'Escape') setEditingUsername(false); }}
-                        style={{ fontSize: 16, fontWeight: 700, padding: '4px 10px', borderRadius: 8, border: '1.5px solid var(--accent)', background: 'var(--surface)', color: 'var(--text)', flex: 1, minWidth: 0 }} />
-                      <button onClick={saveUsername} disabled={savingUsername}
-                        style={{ padding: '4px 12px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600, flexShrink: 0 }}>
-                        {savingUsername ? '…' : 'OK'}
-                      </button>
-                    </div>
-                  ) : (
-                    <>
-                      <span style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)' }}>{displayName}</span>
-                      <button onClick={() => setEditingUsername(true)}
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: '2px 4px', fontSize: 14, lineHeight: 1 }}>✎</button>
-                    </>
-                  )}
-                </div>
-                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                  <span style={{ color: 'var(--yes)', fontWeight: 700 }}>{(balance ?? 0).toLocaleString('de')} ₫</span>
-                  <span style={{ margin: '0 6px' }}>·</span>
-                  <span>{allRows.length} Prognosen</span>
-                </div>
-                {profileMessage && (
-                  <div style={{ marginTop: 6, fontSize: 12, color: profileMessage.startsWith('Fehler') ? 'var(--no)' : 'var(--yes)' }}>{profileMessage}</div>
-                )}
-              </div>
-              <label style={{ fontSize: 12, padding: '6px 12px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 20, cursor: 'pointer', color: 'var(--text)', fontWeight: 600, flexShrink: 0, whiteSpace: 'nowrap' }}>
-                {uploadingAvatar ? 'Lädt…' : 'Bild ändern'}
-                <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => { if (e.target.files?.[0]) uploadAvatar(e.target.files[0]); }} />
-              </label>
-            </div>
-
-            {/* Stats-Zeile: 3 Spalten */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', borderTop: '1px solid var(--border)', paddingTop: 16, gap: 8 }}>
-              {[
-                { label: 'Portfoliowert',  value: `${Math.round(balance ?? 0).toLocaleString('de')} ₫`, color: 'var(--text)' },
-                { label: 'Größter Gewinn', value: groessterGewinn > 0 ? `+${Math.round(groessterGewinn).toLocaleString('de')} ₫` : '—', color: groessterGewinn > 0 ? 'var(--yes)' : 'var(--text-muted)' },
-                { label: 'Prognosen',      value: String(allRows.length), color: 'var(--text)' },
-              ].map((s, i) => (
-                <div key={s.label} style={{ paddingLeft: i > 0 ? 12 : 0, borderLeft: i > 0 ? '1px solid var(--border)' : 'none' }}>
-                  <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 4, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.04em', lineHeight: 1.3 }}>{s.label}</div>
-                  <div style={{ fontSize: 16, fontWeight: 700, color: s.color, letterSpacing: '-0.5px', lineHeight: 1.2 }}>{s.value}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Gewinn/Verlust Card */}
-          <div className="card" style={{ padding: '18px 16px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-              <div style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--yes)' }} />
-              <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Gewinn / Verlust</span>
-            </div>
-            <div style={{ fontSize: 28, fontWeight: 800, color: totalAusbe - totalEinsatz >= 0 ? 'var(--yes)' : 'var(--no)', letterSpacing: '-1px', marginBottom: 2 }}>
-              {totalAusbe - totalEinsatz >= 0 ? '+' : ''}{Math.round(totalAusbe - totalEinsatz).toLocaleString('de')} ₫
-            </div>
-            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 14 }}>Gesamt</div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
-              <div style={{ background: 'rgba(22,163,74,0.06)', borderRadius: 10, padding: '10px 12px' }}>
-                <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Eingesetzt</div>
-                <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>{Math.round(totalEinsatz).toLocaleString('de')} ₫</div>
-              </div>
-              <div style={{ background: 'rgba(22,163,74,0.06)', borderRadius: 10, padding: '10px 12px' }}>
-                <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Gewonnen</div>
-                <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--yes)' }}>+{Math.round(totalAusbe).toLocaleString('de')} ₫</div>
-              </div>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 12, borderTop: '1px solid var(--border)' }}>
-              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Offene Positionen</span>
-              <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>{offeneCount}</span>
-            </div>
-          </div>
-
-          {/* Streak + Trefferquote */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            <div className="card" style={{ padding: '14px 16px' }}>
-              <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>Streak</div>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-                <span style={{ fontSize: 26, fontWeight: 900, color: streak >= 3 ? '#f59e0b' : 'var(--text)', letterSpacing: '-1px', lineHeight: 1 }}>{streak}</span>
-                <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 500 }}>{streak === 1 ? 'Tag' : 'Tage'}</span>
-              </div>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6, lineHeight: 1.4 }}>
-                {streak === 0 ? 'Heute noch nicht aktiv' : streak >= 7 ? 'Serie läuft' : streak >= 3 ? 'Konstant aktiv' : 'Starte heute'}
-              </div>
-            </div>
-            <div className="card" style={{ padding: '14px 16px' }}>
-              <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>Trefferquote</div>
-              {trefferquote === null ? (
-                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>Noch keine Daten</div>
-              ) : (
-                <>
-                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
-                    <span style={{ fontSize: 26, fontWeight: 900, letterSpacing: '-1px', lineHeight: 1, color: trefferquote >= 60 ? 'var(--yes)' : trefferquote >= 40 ? 'var(--text)' : 'var(--no)' }}>{trefferquote}</span>
-                    <span style={{ fontSize: 14, color: 'var(--text-muted)', fontWeight: 600 }}>%</span>
-                  </div>
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6, lineHeight: 1.4 }}>
-                    {trefferquote >= 60 ? 'Überdurchschnittlich' : trefferquote >= 40 ? 'Solide' : 'Noch Luft nach oben'}
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
+          {headerCard}
+          {rightCards}
         </div>
       ) : (
-        /* ── DESKTOP HEADER ── */
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 16, marginBottom: 24 }}>
-          <div className="card" style={{ padding: '28px 28px 24px' }}>
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 20, marginBottom: 24 }}>
-              <div style={{ flexShrink: 0 }}>
-                {avatarUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={avatarUrl} alt="Avatar" style={{ width: 80, height: 80, borderRadius: '50%', objectFit: 'cover' }} />
-                ) : (
-                  <div style={{ width: 80, height: 80, borderRadius: '50%', background: av.bg, color: av.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28, fontWeight: 700, border: '2px solid var(--border)' }}>
-                    {displayName.slice(0, 2).toUpperCase()}
-                  </div>
-                )}
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
-                  {editingUsername ? (
-                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                      <input type="text" value={newUsername} onChange={e => setNewUsername(e.target.value)} autoFocus
-                        onKeyDown={e => { if (e.key === 'Enter') saveUsername(); if (e.key === 'Escape') setEditingUsername(false); }}
-                        style={{ fontSize: 20, fontWeight: 700, padding: '4px 10px', borderRadius: 8, border: '1.5px solid var(--accent)', background: 'var(--surface)', color: 'var(--text)', width: 200 }} />
-                      <button onClick={saveUsername} disabled={savingUsername}
-                        style={{ padding: '4px 14px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
-                        {savingUsername ? '…' : 'Speichern'}
-                      </button>
-                      <button onClick={() => setEditingUsername(false)}
-                        style={{ padding: '4px 10px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', fontSize: 13, color: 'var(--text-muted)' }}>✕</button>
-                    </div>
-                  ) : (
-                    <>
-                      <span style={{ fontSize: 22, fontWeight: 700, color: 'var(--text)' }}>{displayName}</span>
-                      <button onClick={() => setEditingUsername(true)}
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: '2px 4px', fontSize: 14, lineHeight: 1, borderRadius: 4 }}>✎</button>
-                    </>
-                  )}
-                </div>
-                <div style={{ fontSize: 12, color: 'var(--text-muted)', display: 'flex', gap: 12 }}>
-                  <span>Guthaben: <strong style={{ color: 'var(--yes)' }}>{(balance ?? 0).toLocaleString('de')} ₫</strong></span>
-                  <span>·</span>
-                  <span>{allRows.length} Prognosen</span>
-                </div>
-                {profileMessage && (
-                  <div style={{ marginTop: 8, fontSize: 12, color: profileMessage.startsWith('Fehler') ? 'var(--no)' : 'var(--yes)' }}>{profileMessage}</div>
-                )}
-              </div>
-              <label style={{ fontSize: 12, padding: '6px 14px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 20, cursor: 'pointer', color: 'var(--text)', fontWeight: 600, flexShrink: 0, whiteSpace: 'nowrap' }}>
-                {uploadingAvatar ? 'Lädt…' : 'Bild ändern'}
-                <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => { if (e.target.files?.[0]) uploadAvatar(e.target.files[0]); }} />
-              </label>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', borderTop: '1px solid var(--border)', paddingTop: 20 }}>
-              {[
-                { label: 'Portfoliowert',  value: `${Math.round(balance ?? 0).toLocaleString('de')} ₫`, color: 'var(--text)' },
-                { label: 'Größter Gewinn', value: groessterGewinn > 0 ? `+${Math.round(groessterGewinn).toLocaleString('de')} ₫` : '—', color: groessterGewinn > 0 ? 'var(--yes)' : 'var(--text-muted)' },
-                { label: 'Prognosen',      value: String(allRows.length), color: 'var(--text)' },
-              ].map((s, i) => (
-                <div key={s.label} style={{ paddingLeft: i > 0 ? 20 : 0, borderLeft: i > 0 ? '1px solid var(--border)' : 'none' }}>
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{s.label}</div>
-                  <div style={{ fontSize: 22, fontWeight: 700, color: s.color, letterSpacing: '-0.5px' }}>{s.value}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <div className="card" style={{ padding: '24px 24px 20px', flex: 1 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--yes)' }} />
-                <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Gewinn / Verlust</span>
-              </div>
-              <div style={{ fontSize: 32, fontWeight: 800, color: totalAusbe - totalEinsatz >= 0 ? 'var(--yes)' : 'var(--no)', letterSpacing: '-1px', marginBottom: 4 }}>
-                {totalAusbe - totalEinsatz >= 0 ? '+' : ''}{Math.round(totalAusbe - totalEinsatz).toLocaleString('de')} ₫
-              </div>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 16 }}>Gesamt</div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                <div style={{ background: 'rgba(22,163,74,0.06)', borderRadius: 10, padding: '10px 14px' }}>
-                  <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Eingesetzt</div>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>{Math.round(totalEinsatz).toLocaleString('de')} ₫</div>
-                </div>
-                <div style={{ background: 'rgba(22,163,74,0.06)', borderRadius: 10, padding: '10px 14px' }}>
-                  <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Gewonnen</div>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--yes)' }}>+{Math.round(totalAusbe).toLocaleString('de')} ₫</div>
-                </div>
-              </div>
-              <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Offene Positionen</span>
-                <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>{offeneCount}</span>
-              </div>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              <div className="card" style={{ padding: '16px 18px' }}>
-                <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>Streak</div>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-                  <span style={{ fontSize: 28, fontWeight: 900, color: streak >= 3 ? '#f59e0b' : 'var(--text)', letterSpacing: '-1px', lineHeight: 1 }}>{streak}</span>
-                  <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 500 }}>{streak === 1 ? 'Tag' : 'Tage'}</span>
-                </div>
-                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6, lineHeight: 1.4 }}>
-                  {streak === 0 ? 'Heute noch nicht aktiv' : streak >= 7 ? 'Serie läuft' : streak >= 3 ? 'Konstant aktiv' : 'Starte heute'}
-                </div>
-              </div>
-              <div className="card" style={{ padding: '16px 18px' }}>
-                <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>Trefferquote</div>
-                {trefferquote === null ? (
-                  <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>Noch keine Daten</div>
-                ) : (
-                  <>
-                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
-                      <span style={{ fontSize: 28, fontWeight: 900, letterSpacing: '-1px', lineHeight: 1, color: trefferquote >= 60 ? 'var(--yes)' : trefferquote >= 40 ? 'var(--text)' : 'var(--no)' }}>{trefferquote}</span>
-                      <span style={{ fontSize: 14, color: 'var(--text-muted)', fontWeight: 600 }}>%</span>
-                    </div>
-                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6, lineHeight: 1.4 }}>
-                      {trefferquote >= 60 ? 'Überdurchschnittlich' : trefferquote >= 40 ? 'Solide' : 'Noch Luft nach oben'}
-                    </div>
-                  </>
-                )}
-              </div>
-            </div>
-          </div>
+          {headerCard}
+          {rightCards}
         </div>
       )}
 
       {/* ── TABS ── */}
-      <div style={{ borderBottom: '1px solid var(--border)', marginBottom: 20, display: 'flex' }}>
-        {(['positionen', 'aktivitaet'] as TabType[]).map(t => (
+      <div style={{ borderBottom: '1px solid var(--border)', marginBottom: 20, display: 'flex', overflowX: 'auto' }}>
+        {(['positionen', 'aktivitaet', 'einstellungen'] as TabType[]).map(t => (
           <button key={t} onClick={() => setTab(t)} style={{
             background: 'none', border: 'none', cursor: 'pointer',
-            padding: '10px 20px', fontSize: 14,
+            padding: '10px 20px', fontSize: 14, whiteSpace: 'nowrap',
             fontWeight: tab === t ? 700 : 500,
             color: tab === t ? 'var(--text)' : 'var(--text-muted)',
             borderBottom: tab === t ? '2px solid var(--accent)' : '2px solid transparent',
-            marginBottom: -1, transition: 'color 0.15s',
+            marginBottom: -1, transition: 'color 0.15s', fontFamily: 'var(--font)',
           }}>
-            {t === 'positionen' ? 'Positionen' : 'Aktivität'}
+            {t === 'positionen' ? 'Positionen' : t === 'aktivitaet' ? 'Aktivität' : '🔒 Datenschutz'}
           </button>
         ))}
       </div>
@@ -510,7 +507,7 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, o
                 border: '1px solid var(--border)',
                 background: subTab === s ? 'var(--text)' : 'var(--surface)',
                 color: subTab === s ? 'var(--bg)' : 'var(--text-muted)',
-                transition: 'all 0.15s',
+                transition: 'all 0.15s', fontFamily: 'var(--font)',
               }}>
                 {s === 'offen' ? `Offen (${offeneRows.length})` : `Geschlossen (${geschlosseneRows.length})`}
               </button>
@@ -518,13 +515,12 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, o
           </div>
 
           {portfolioLoading ? (
-            <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--text-muted)', fontSize: 13 }}>Let the AI cook...</div>
+            <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--text-muted)', fontSize: 13 }}>Wird geladen…</div>
           ) : displayRows.length === 0 ? (
             <div className="card" style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)', fontSize: 13 }}>
               {subTab === 'offen' ? 'Keine offenen Positionen.' : 'Noch keine abgeschlossenen Positionen.'}
             </div>
           ) : isMobile ? (
-            /* ── MOBILE POSITIONS: Cards statt Tabelle ── */
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {displayRows.map((entry) => {
                 const m = entry.market;
@@ -532,12 +528,10 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, o
                 const resolved = m.resolved;
                 const won  = resolved && entry.auszahlung !== null && entry.auszahlung > 0;
                 const lost = resolved && entry.auszahlung === 0;
-                const isSport = m.category === 'sport';
-                const marktName = isSport ? m.question : m.is_auto && m.coin ? `${m.coin} · 3-Min-Markt` : m.question;
-                const richtungLabel = isSport ? (isYes ? 'Ja' : 'Nein') : m.is_auto ? (isYes ? 'Up ↑' : 'Down ↓') : (isYes ? 'Ja' : 'Nein');
+                const marktName = m.is_auto && m.coin ? `${m.coin} · 3-Min-Markt` : m.question;
+                const richtungLabel = m.is_auto ? (isYes ? 'Up ↑' : 'Down ↓') : (isYes ? 'Ja' : 'Nein');
                 const dateSource = subTab === 'geschlossen' && entry.marketClosedAt ? entry.marketClosedAt : entry.tradeCreatedAt;
                 const { date } = formatDateTime(dateSource);
-
                 return (
                   <div key={entry.market.id} className="card" style={{ padding: '13px 14px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, marginBottom: 10 }}>
@@ -566,31 +560,22 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, o
               })}
             </div>
           ) : (
-            /* ── DESKTOP: Tabelle ── */
             <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ background: 'var(--surface)' }}>
                     {['Markt', 'Tipp', 'Eingesetzt', 'Ergebnis', 'Auszahlung', subTab === 'offen' ? 'Gesetzt am' : 'Geschlossen am'].map((h, i) => (
-                      <th key={h} style={{
-                        textAlign: i === 0 ? 'left' : 'right', fontSize: 11, fontWeight: 600,
-                        color: 'var(--text-muted)', padding: '12px 20px',
-                        borderBottom: '1px solid var(--border)',
-                        textTransform: 'uppercase', letterSpacing: '0.04em',
-                      }}>{h}</th>
+                      <th key={h} style={{ textAlign: i === 0 ? 'left' : 'right', fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', padding: '12px 20px', borderBottom: '1px solid var(--border)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {displayRows.map((entry) => {
                     const m = entry.market;
-                    const isSport = m.category === 'sport';
                     const isYes = entry.direction === 'yes';
-                    const richtungLabel = isSport ? (isYes ? 'Ja' : 'Nein') : m.is_auto ? (isYes ? '↑ Up' : '↓ Down') : (isYes ? 'Ja' : 'Nein');
-                    const marktName = isSport ? m.question : m.is_auto && m.coin ? `${m.coin} · 3-Minuten-Markt` : m.question;
-                    const iconEl = isSport ? (
-                      <span style={{ width: 28, height: 28, borderRadius: 8, background: '#16a34a22', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, flexShrink: 0 }}>⚽</span>
-                    ) : m.is_auto && m.coin ? (
+                    const richtungLabel = m.is_auto ? (isYes ? '↑ Up' : '↓ Down') : (isYes ? 'Ja' : 'Nein');
+                    const marktName = m.is_auto && m.coin ? `${m.coin} · 3-Minuten-Markt` : m.question;
+                    const iconEl = m.is_auto && m.coin ? (
                       <span style={{ width: 28, height: 28, borderRadius: 8, background: COIN_COLORS[m.coin] ?? '#f97316', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, color: '#fff', flexShrink: 0 }}>{m.coin.charAt(0)}</span>
                     ) : null;
                     const resolved = m.resolved;
@@ -598,14 +583,7 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, o
                     const lost = resolved && entry.auszahlung === 0;
                     const dateSource = subTab === 'geschlossen' && entry.marketClosedAt ? entry.marketClosedAt : entry.tradeCreatedAt;
                     const { date, time } = formatDateTime(dateSource);
-                    let ergebnisLabel = '';
-                    if (resolved) {
-                      ergebnisLabel = isSport
-                        ? (m.resolution === 'yes' ? 'Ja ✓' : m.resolution === 'no' ? 'Nein ✗' : 'Unentschieden')
-                        : m.is_auto
-                          ? (m.resolution === 'yes' ? 'UP ↑' : 'DOWN ↓')
-                          : (m.resolution === 'yes' ? 'Ja' : 'Nein');
-                    }
+                    const ergebnisLabel = resolved ? (m.is_auto ? (m.resolution === 'yes' ? 'UP ↑' : 'DOWN ↓') : (m.resolution === 'yes' ? 'Ja' : 'Nein')) : '';
                     return (
                       <tr key={entry.market.id} style={{ borderBottom: '1px solid var(--border)' }}>
                         <td style={{ padding: '14px 20px', fontSize: 13, color: 'var(--text)', maxWidth: 280 }}>
@@ -654,15 +632,49 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, o
       {tab === 'aktivitaet' && (
         <AktivitaetsFeed userId={userId} />
       )}
+
+      {/* ── DATENSCHUTZ / EINSTELLUNGEN ── */}
+      {tab === 'einstellungen' && (
+        <div>
+          <div style={{ fontSize: 14, color: 'var(--text-muted)', marginBottom: 20, lineHeight: 1.6 }}>
+            Wähle welche Stats auf deinem öffentlichen Profil sichtbar sind. Trefferquote, Streak, Anzahl Prognosen und "Zuletzt online" sind immer öffentlich.
+          </div>
+
+          <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+            {PRIVACY_LABELS.map(({ key, label, desc }, i) => (
+              <div key={key} style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16,
+                padding: '16px 20px',
+                borderBottom: i < PRIVACY_LABELS.length - 1 ? '1px solid var(--border)' : 'none',
+              }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', marginBottom: 2 }}>{label}</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{desc}</div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+                  <span style={{ fontSize: 12, color: privacy[key] ? 'var(--yes)' : 'var(--text-muted)', fontWeight: 600 }}>
+                    {privacy[key] ? 'Öffentlich' : 'Privat'}
+                  </span>
+                  <Toggle checked={privacy[key]} onChange={() => togglePrivacy(key)} />
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {savingPrivacy && (
+            <div style={{ textAlign: 'center', marginTop: 12, fontSize: 12, color: 'var(--text-muted)' }}>Wird gespeichert…</div>
+          )}
+
+          <div style={{ marginTop: 12, padding: '12px 16px', borderRadius: 10, background: 'var(--accent-light)', border: '1px solid rgba(99,102,241,0.15)', fontSize: 12, color: 'var(--accent)' }}>
+            💡 Änderungen werden sofort gespeichert und sind direkt auf deinem öffentlichen Profil sichtbar.
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-// ── FEED ────────────────────────────────────────────────────
-
-const COIN_COLORS_FEED: Record<string, string> = {
-  BTC: '#f59e0b', ETH: '#6366f1', SOL: '#9945ff', XRP: '#00aae4',
-};
+// ── AKTIVITÄTS-FEED ──────────────────────────────────────────
 
 interface FeedMarket {
   question: string;
@@ -705,7 +717,6 @@ function AktivitaetsFeed({ userId }: { userId: string }) {
 
       const winItems: FeedItem[] = [];
       const processedWins = new Set<string>();
-
       for (const t of withMarkets) {
         const m = t.market;
         if (!m?.resolved || processedWins.has(t.market_id)) continue;
@@ -741,34 +752,27 @@ function AktivitaetsFeed({ userId }: { userId: string }) {
     return d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' });
   }
 
-  if (loading) return <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--text-muted)', fontSize: 13 }}>Let the AI cook...</div>;
+  if (loading) return <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--text-muted)', fontSize: 13 }}>Wird geladen…</div>;
   if (items.length === 0) return <div className="card" style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)', fontSize: 13 }}>Noch keine Aktivität.</div>;
 
   return (
     <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
       {items.map((item, idx) => {
         const m       = item.market;
-        const isSport = m?.category === 'sport';
         const isBuy   = item.type.startsWith('buy');
         const isSell  = item.type.startsWith('sell');
         const isWin   = item.type === 'win';
         const isYes   = item.type.includes('yes');
-        const coinColor = !isWin && !isSport && m?.is_auto && m.coin ? COIN_COLORS_FEED[m.coin] ?? '#f97316' : null;
-        const marketLabel = m ? isSport ? (m.question.length > 52 ? m.question.slice(0, 52) + '…' : m.question) : m.is_auto ? `${m.coin} · 3-Min-Markt` : (m.question.length > 52 ? m.question.slice(0, 52) + '…' : m.question) : 'Unbekannter Markt';
-        const dirLabel = isSport ? (isYes ? 'Ja' : 'Nein') : m?.is_auto ? (isYes ? 'Up ↑' : 'Down ↓') : (isYes ? 'Ja' : 'Nein');
+        const coinColor = !isWin && m?.is_auto && m.coin ? COIN_COLORS[m.coin] ?? '#f97316' : null;
+        const marketLabel = m ? m.is_auto ? `${m.coin} · 3-Min-Markt` : (m.question.length > 52 ? m.question.slice(0, 52) + '…' : m.question) : 'Unbekannter Markt';
+        const dirLabel = m?.is_auto ? (isYes ? 'Up ↑' : 'Down ↓') : (isYes ? 'Ja' : 'Nein');
         let iconBg = 'rgba(99,102,241,0.12)'; let iconContent = '⇄';
-        if (isWin)        { iconBg = 'rgba(22,163,74,0.15)'; iconContent = '🏆'; }
-        else if (isSport) { iconBg = 'rgba(22,163,74,0.10)'; iconContent = '⚽'; }
-        else if (isBuy)   { iconBg = isYes ? 'rgba(22,163,74,0.12)' : 'rgba(220,38,38,0.12)'; iconContent = isYes ? '↑' : '↓'; }
+        if (isWin)      { iconBg = 'rgba(22,163,74,0.15)'; iconContent = '🏆'; }
+        else if (isBuy) { iconBg = isYes ? 'rgba(22,163,74,0.12)' : 'rgba(220,38,38,0.12)'; iconContent = isYes ? '↑' : '↓'; }
         let subText = ''; let amountLabel = ''; let amountColor = 'var(--text)';
-        if (isWin) {
-          const resLabel = isSport ? (m?.resolution === 'yes' ? 'Ja ✓' : 'Nein ✗') : m?.is_auto ? (m.resolution === 'yes' ? 'Up ↑' : 'Down ↓') : (m?.resolution === 'yes' ? 'Ja' : 'Nein');
-          subText = `Gewonnen · ${resLabel}`; amountLabel = `+${Math.round(item.cost).toLocaleString('de')} ₫`; amountColor = 'var(--yes)';
-        } else if (isBuy) {
-          subText = `Einsatz auf ${dirLabel}`; amountLabel = `Einsatz: ${Math.round(Math.abs(item.cost)).toLocaleString('de')} ₫`; amountColor = 'var(--text-muted)';
-        } else if (isSell) {
-          subText = `Verkauft · ${dirLabel}`; amountLabel = `+${Math.round(Math.abs(item.cost)).toLocaleString('de')} ₫`; amountColor = 'var(--yes)';
-        }
+        if (isWin)       { const resLabel = m?.is_auto ? (m.resolution === 'yes' ? 'Up ↑' : 'Down ↓') : (m?.resolution === 'yes' ? 'Ja' : 'Nein'); subText = `Gewonnen · ${resLabel}`; amountLabel = `+${Math.round(item.cost).toLocaleString('de')} ₫`; amountColor = 'var(--yes)'; }
+        else if (isBuy)  { subText = `Einsatz auf ${dirLabel}`; amountLabel = `${Math.round(Math.abs(item.cost)).toLocaleString('de')} ₫`; amountColor = 'var(--text-muted)'; }
+        else if (isSell) { subText = `Verkauft · ${dirLabel}`; amountLabel = `+${Math.round(Math.abs(item.cost)).toLocaleString('de')} ₫`; amountColor = 'var(--yes)'; }
         return (
           <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 20px', borderBottom: idx < items.length - 1 ? '1px solid var(--border)' : 'none' }}>
             {coinColor ? (
