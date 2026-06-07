@@ -17,13 +17,29 @@ async function getNextRace() {
   const data = await res.json()
   const races: any[] = data?.MRData?.RaceTable?.Races ?? []
   const now  = new Date()
-  const next = races.find(r => new Date(r.date + 'T' + (r.time ?? '12:00:00Z')) > now)
+  // Nächstes Rennen = erstes Rennen dessen Ende (Start + 2h) noch in der Zukunft liegt
+  const next = races.find(r => {
+    const start = new Date(r.date + 'T' + (r.time ?? '12:00:00Z'))
+    const end   = new Date(start.getTime() + 2 * 60 * 60 * 1000)
+    return end > now
+  })
   return next ?? null
 }
 
 async function marketsAlreadyExist(displayGroup: string): Promise<boolean> {
   const res = await fetch(
     `${SUPABASE_URL}/rest/v1/markets?display_group=eq.${encodeURIComponent(displayGroup)}&limit=1`,
+    { headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` } }
+  )
+  const data = await res.json()
+  return Array.isArray(data) && data.length > 0
+}
+
+async function hasUnresolvedF1RaceMarkets(): Promise<boolean> {
+  // Prüft ob es noch offene Rennen-Märkte gibt (nicht Saison-Märkte)
+  const now = new Date().toISOString()
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/markets?category=eq.formula1&resolved=eq.false&status=eq.open&closes_at=lt.${now}&display_group=not.in.(F1%20WM%202026,F1%20Saison%202026)&limit=1`,
     { headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` } }
   )
   const data = await res.json()
@@ -50,21 +66,37 @@ export async function POST() {
     if (!race) return NextResponse.json({ skipped: 'Kein nächstes Rennen gefunden' })
 
     const raceStart  = new Date(race.date + 'T' + (race.time ?? '12:00:00Z'))
+    // Rennende = Start + 2 Stunden
+    const raceEnd    = new Date(raceStart.getTime() + 2 * 60 * 60 * 1000)
     const now        = new Date()
     const hoursUntil = (raceStart.getTime() - now.getTime()) / 1000 / 60 / 60
 
-    if (hoursUntil > 700 || hoursUntil < 1) {
-      return NextResponse.json({ skipped: `Rennen in ${Math.round(hoursUntil)}h — außerhalb Fenster` })
+    // Zu weit weg
+    if (hoursUntil > 700) {
+      return NextResponse.json({ skipped: `Rennen in ${Math.round(hoursUntil)}h — zu früh` })
+    }
+
+    // Rennen bereits beendet
+    if (raceEnd <= now) {
+      return NextResponse.json({ skipped: 'Rennen bereits beendet' })
     }
 
     const raceName     = race.raceName as string
     const round        = race.round    as string
     const displayGroup = `F1 ${raceName} 2026`
 
+    // Märkte für dieses Rennen bereits vorhanden?
     const exists = await marketsAlreadyExist(displayGroup)
     if (exists) return NextResponse.json({ skipped: `Märkte für ${raceName} bereits vorhanden` })
 
-    const closesAt         = raceStart.toISOString()
+    // Noch unaufgelöste Märkte vom letzten Rennen? → Warten
+    const pendingOld = await hasUnresolvedF1RaceMarkets()
+    if (pendingOld) {
+      return NextResponse.json({ skipped: 'Alte F1-Märkte noch nicht aufgelöst — warte auf Resolver' })
+    }
+
+    // closes_at = Rennende (Start + 2h), Qualifying = Start - 24h
+    const closesAt         = raceEnd.toISOString()
     const qualifyingCloses = new Date(raceStart.getTime() - 24 * 60 * 60 * 1000).toISOString()
     const { q_yes, q_no }  = lmsrInitial()
 
@@ -83,6 +115,7 @@ export async function POST() {
         display_group: displayGroup,
         resolved:      false,
         is_auto:       true,
+        coin:          null,
       },
       {
         question:      `Landet Leclerc beim ${raceName} in den Top 5?`,
@@ -98,6 +131,7 @@ export async function POST() {
         display_group: displayGroup,
         resolved:      false,
         is_auto:       true,
+        coin:          null,
       },
       {
         question:      `Schafft es Bearman beim ${raceName} in die Punkte (Top 10)?`,
@@ -113,6 +147,7 @@ export async function POST() {
         display_group: displayGroup,
         resolved:      false,
         is_auto:       true,
+        coin:          null,
       },
       {
         question:      `Wird Stroll beim ${raceName} Letzter der Gewerteten?`,
@@ -128,6 +163,7 @@ export async function POST() {
         display_group: displayGroup,
         resolved:      false,
         is_auto:       true,
+        coin:          null,
       },
       {
         question:      `Schlägt Russell seinen Teamkollegen Antonelli beim ${raceName}?`,
@@ -143,6 +179,7 @@ export async function POST() {
         display_group: displayGroup,
         resolved:      false,
         is_auto:       true,
+        coin:          null,
       },
       {
         question:      `Startet beim ${raceName} ein Ferrari aus der ersten Startreihe?`,
@@ -158,6 +195,7 @@ export async function POST() {
         display_group: displayGroup,
         resolved:      false,
         is_auto:       true,
+        coin:          null,
       },
       {
         question:      'Gewinnt Kimi Antonelli die Fahrerweltmeisterschaft 2026?',
@@ -173,6 +211,7 @@ export async function POST() {
         display_group: 'F1 WM 2026',
         resolved:      false,
         is_auto:       true,
+        coin:          null,
       },
       {
         question:      'Verlässt ein Fahrer sein Team noch während der Saison 2026?',
@@ -188,6 +227,7 @@ export async function POST() {
         display_group: 'F1 Saison 2026',
         resolved:      false,
         is_auto:       true,
+        coin:          null,
       },
     ]
 
