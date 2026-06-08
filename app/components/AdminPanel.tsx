@@ -13,24 +13,10 @@ const COINS = [
 ];
 
 const CATEGORIES = [
-  'Politik',
-  'Politik-Deutschland',
-  'Politik-USA',
-  'Sport',
-  'Sport-Fußball-Bundesliga',
-  'Sport-Fußball-CL',
-  'Sport-Fußball-WM 2026',
-  'Krypto',
-  'Entertainment',
-  'Wirtschaft',
-  'Geopolitik',
-  'Finanzen',
-  'Tech',
-  'Wetter',
-  'Kultur',
-  'formula1',
-  'finance',
-  'weather',
+  'Politik', 'Politik-Deutschland', 'Politik-USA',
+  'Sport', 'Sport-Fußball-Bundesliga', 'Sport-Fußball-CL', 'Sport-Fußball-WM 2026',
+  'Krypto', 'Entertainment', 'Wirtschaft', 'Geopolitik',
+  'Finanzen', 'Tech', 'Wetter', 'Kultur', 'formula1', 'finance', 'weather',
 ];
 
 interface Props {
@@ -42,11 +28,7 @@ interface Props {
 async function fetchCount(path: string): Promise<number> {
   const res = await fetch(`${supabaseUrl}/rest/v1/${path}`, {
     method: 'HEAD',
-    headers: {
-      apikey: supabaseKey,
-      Authorization: `Bearer ${supabaseKey}`,
-      Prefer: 'count=exact',
-    },
+    headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}`, Prefer: 'count=exact' },
   });
   const range = res.headers.get('content-range');
   if (!range) return 0;
@@ -89,26 +71,22 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
   const [createLoading, setCreateLoading]   = useState(false);
   const [createMessage, setCreateMessage]   = useState('');
 
-  const [users, setUsers] = useState<any[]>([]);
-  const [usersLoading, setUsersLoading] = useState(false);
-  const [editingUser, setEditingUser] = useState<string | null>(null);
-  const [newBalance, setNewBalance] = useState('');
-  const [userMessage, setUserMessage] = useState('');
+  const [users, setUsers]                   = useState<any[]>([]);
+  const [usersLoading, setUsersLoading]     = useState(false);
+  const [editingUser, setEditingUser]       = useState<string | null>(null);
+  const [newBalance, setNewBalance]         = useState('');
+  const [addAmount, setAddAmount]           = useState('');
+  const [userMessage, setUserMessage]       = useState('');
   const [deleteUserConfirm, setDeleteUserConfirm] = useState<string | null>(null);
-  const [userSearch, setUserSearch] = useState('');
+  const [userSearch, setUserSearch]         = useState('');
 
   const [dashStats, setDashStats] = useState<{
-    totalUsers: number;
-    openMarkets: number;
-    tradesToday: number;
-    volumeToday: number;
-    activeUsersToday: number;
-    activeUsersWeek: number;
-    topMarkets: any[];
+    totalUsers: number; openMarkets: number; tradesToday: number;
+    volumeToday: number; activeUsersToday: number; activeUsersWeek: number; topMarkets: any[];
   } | null>(null);
   const [dashLoading, setDashLoading] = useState(false);
 
-  const [cronLogs, setCronLogs] = useState<any[]>([]);
+  const [cronLogs, setCronLogs]           = useState<any[]>([]);
   const [cronLogsLoading, setCronLogsLoading] = useState(false);
 
   useEffect(() => {
@@ -117,12 +95,11 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
   }, []);
 
   useEffect(() => {
-    if (adminTab === 'btc')      loadBtcMarkets();
-    if (adminTab === 'edit')     loadAllMarkets();
-    if (adminTab === 'users')    loadUsers();
+    if (adminTab === 'btc')       loadBtcMarkets();
+    if (adminTab === 'edit')      loadAllMarkets();
+    if (adminTab === 'users')     loadUsers();
     if (adminTab === 'dashboard') loadDashboard();
-    if (adminTab === 'cronlogs') loadCronLogs();
-
+    if (adminTab === 'cronlogs')  loadCronLogs();
     if (adminTab === 'cronlogs') {
       const interval = setInterval(loadCronLogs, 30000);
       return () => clearInterval(interval);
@@ -157,50 +134,30 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
   async function loadDashboard() {
     setDashLoading(true);
     const todayStart = new Date(); todayStart.setUTCHours(0, 0, 0, 0);
-    const weekStart = new Date(); weekStart.setUTCDate(weekStart.getUTCDate() - 7); weekStart.setUTCHours(0, 0, 0, 0);
+    const weekStart  = new Date(); weekStart.setUTCDate(weekStart.getUTCDate() - 7); weekStart.setUTCHours(0, 0, 0, 0);
     const sinceToday = todayStart.toISOString();
-    const sinceWeek = weekStart.toISOString();
+    const sinceWeek  = weekStart.toISOString();
 
     const [totalUsers, openMarketsCount, tradesTodayRes, tradesWeekRes, allOpenMarketsRes] = await Promise.all([
       fetchCount('users'),
       fetchCount('markets?status=eq.open&resolved=eq.false'),
-      fetch(`${supabaseUrl}/rest/v1/trades?created_at=gte.${sinceToday}&select=user_id,cost,type`, {
-        headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` },
-      }),
-      fetch(`${supabaseUrl}/rest/v1/trades?created_at=gte.${sinceWeek}&select=user_id,type`, {
-        headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` },
-      }),
-      fetch(`${supabaseUrl}/rest/v1/markets?status=eq.open&select=id,question,short_label,q_yes,q_no`, {
-        headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` },
-      }),
+      fetch(`${supabaseUrl}/rest/v1/trades?created_at=gte.${sinceToday}&select=user_id,cost,type`, { headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` } }),
+      fetch(`${supabaseUrl}/rest/v1/trades?created_at=gte.${sinceWeek}&select=user_id,type`,       { headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` } }),
+      fetch(`${supabaseUrl}/rest/v1/markets?status=eq.open&select=id,question,short_label,q_yes,q_no`, { headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` } }),
     ]);
 
     const [tradesToday, tradesWeek, allOpenMarkets] = await Promise.all([
-      tradesTodayRes.json(),
-      tradesWeekRes.json(),
-      allOpenMarketsRes.json(),
+      tradesTodayRes.json(), tradesWeekRes.json(), allOpenMarketsRes.json(),
     ]);
 
     const buyTradesToday = (tradesToday ?? []).filter((t: any) => t.type === 'buy_yes' || t.type === 'buy_no');
     const buyTradesWeek  = (tradesWeek  ?? []).filter((t: any) => t.type === 'buy_yes' || t.type === 'buy_no');
+    const volumeToday       = buyTradesToday.reduce((s: number, t: any) => s + Math.abs(t.cost ?? 0), 0);
+    const activeUsersToday  = new Set(buyTradesToday.map((t: any) => t.user_id)).size;
+    const activeUsersWeek   = new Set(buyTradesWeek.map((t: any)  => t.user_id)).size;
+    const topMarkets        = [...(allOpenMarkets ?? [])].sort((a: any, b: any) => (b.q_yes + b.q_no) - (a.q_yes + a.q_no)).slice(0, 5);
 
-    const volumeToday      = buyTradesToday.reduce((s: number, t: any) => s + Math.abs(t.cost ?? 0), 0);
-    const activeUsersToday = new Set(buyTradesToday.map((t: any) => t.user_id)).size;
-    const activeUsersWeek  = new Set(buyTradesWeek.map((t: any) => t.user_id)).size;
-
-    const topMarkets = [...(allOpenMarkets ?? [])]
-      .sort((a: any, b: any) => (b.q_yes + b.q_no) - (a.q_yes + a.q_no))
-      .slice(0, 5);
-
-    setDashStats({
-      totalUsers,
-      openMarkets: openMarketsCount,
-      tradesToday: buyTradesToday.length,
-      volumeToday: Math.round(volumeToday),
-      activeUsersToday,
-      activeUsersWeek,
-      topMarkets,
-    });
+    setDashStats({ totalUsers, openMarkets: openMarketsCount, tradesToday: buyTradesToday.length, volumeToday: Math.round(volumeToday), activeUsersToday, activeUsersWeek, topMarkets });
     setDashLoading(false);
   }
 
@@ -222,16 +179,8 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
       const pad = (n: number) => String(n).padStart(2, '0');
       closesAtLocal = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
     }
-    setEditFields({
-      question:    m.question    ?? '',
-      short_label: m.short_label ?? '',
-      description: m.description ?? '',
-      category:    m.category    ?? 'Politik',
-      closes_at:   closesAtLocal,
-      group_title: m.group_title ?? '',
-    });
-    setEditMessage('');
-    setDeleteConfirm(null);
+    setEditFields({ question: m.question ?? '', short_label: m.short_label ?? '', description: m.description ?? '', category: m.category ?? 'Politik', closes_at: closesAtLocal, group_title: m.group_title ?? '' });
+    setEditMessage(''); setDeleteConfirm(null);
   }
 
   async function saveMarket(marketId: string) {
@@ -254,62 +203,65 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
       setAllMarkets(prev => prev.map(m => m.id === marketId ? { ...m, ...body } : m));
       setTimeout(() => { setEditMessage(''); setEditingMarket(null); }, 1500);
       onMarketResolved();
-    } else {
-      setEditMessage(`Fehler: ${await res.text()}`);
-    }
+    } else { setEditMessage(`Fehler: ${await res.text()}`); }
     setEditSaving(false);
   }
 
   async function deleteMarket(marketId: string) {
     setDeleteLoading(true);
-    await fetch(`${supabaseUrl}/rest/v1/trades?market_id=eq.${marketId}`, {
-      method: 'DELETE',
-      headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` },
-    });
-    await fetch(`${supabaseUrl}/rest/v1/positions?market_id=eq.${marketId}`, {
-      method: 'DELETE',
-      headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` },
-    });
-    const res = await fetch(`${supabaseUrl}/rest/v1/markets?id=eq.${marketId}`, {
-      method: 'DELETE',
-      headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` },
-    });
+    await fetch(`${supabaseUrl}/rest/v1/trades?market_id=eq.${marketId}`,    { method: 'DELETE', headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` } });
+    await fetch(`${supabaseUrl}/rest/v1/positions?market_id=eq.${marketId}`, { method: 'DELETE', headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` } });
+    const res = await fetch(`${supabaseUrl}/rest/v1/markets?id=eq.${marketId}`, { method: 'DELETE', headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` } });
     if (res.ok) {
       setAllMarkets(prev => prev.filter(m => m.id !== marketId));
-      setEditingMarket(null); setDeleteConfirm(null);
-      onMarketResolved();
+      setEditingMarket(null); setDeleteConfirm(null); onMarketResolved();
     }
     setDeleteLoading(false);
   }
 
-  async function saveUserBalance(userId: string) {
+  async function saveUserBalance(uid: string) {
     const parsed = parseInt(newBalance);
     if (isNaN(parsed) || parsed < 0) { setUserMessage('Ungültiger Betrag.'); return; }
-    const res = await fetch(`${supabaseUrl}/rest/v1/users?id=eq.${userId}`, {
+    const res = await fetch(`${supabaseUrl}/rest/v1/users?id=eq.${uid}`, {
       method: 'PATCH',
       headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
       body: JSON.stringify({ balance: parsed }),
     });
     if (res.ok) {
-      setUsers(prev => prev.map(u => u.id === userId ? { ...u, balance: parsed } : u));
+      setUsers(prev => prev.map(u => u.id === uid ? { ...u, balance: parsed } : u));
       setUserMessage('Gespeichert ✓');
       setTimeout(() => { setUserMessage(''); setEditingUser(null); }, 1500);
-    } else {
-      setUserMessage('Fehler beim Speichern.');
-    }
+    } else { setUserMessage('Fehler beim Speichern.'); }
+  }
+
+  async function addDukaten(u: any) {
+    const amount = parseInt(addAmount);
+    if (isNaN(amount) || amount <= 0) { setUserMessage('Ungültiger Betrag.'); return; }
+    const newBal = (u.balance ?? 0) + amount;
+    const res = await fetch(`${supabaseUrl}/rest/v1/users?id=eq.${u.id}`, {
+      method: 'PATCH',
+      headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      body: JSON.stringify({ balance: newBal }),
+    });
+    if (res.ok) {
+      setUsers(prev => prev.map(x => x.id === u.id ? { ...x, balance: newBal } : x));
+      setUserMessage(`+${amount.toLocaleString('de')} ₫ gutgeschrieben ✓`);
+      setAddAmount('');
+      setTimeout(() => { setUserMessage(''); setEditingUser(null); }, 2000);
+    } else { setUserMessage('Fehler beim Speichern.'); }
   }
 
   async function deleteUser(uid: string) {
-    await fetch(`${supabaseUrl}/rest/v1/trades?user_id=eq.${uid}`, { method: 'DELETE', headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` } });
+    await fetch(`${supabaseUrl}/rest/v1/trades?user_id=eq.${uid}`,    { method: 'DELETE', headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` } });
     await fetch(`${supabaseUrl}/rest/v1/positions?user_id=eq.${uid}`, { method: 'DELETE', headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` } });
-    await fetch(`${supabaseUrl}/rest/v1/users?id=eq.${uid}`, { method: 'DELETE', headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` } });
+    await fetch(`${supabaseUrl}/rest/v1/users?id=eq.${uid}`,          { method: 'DELETE', headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` } });
     setUsers(prev => prev.filter(u => u.id !== uid));
     setDeleteUserConfirm(null);
   }
 
   async function createCryptoMarket(coin: string) {
     setBtcCreating(true); setBtcMessage('');
-    const res = await fetch('/api/create-crypto-market', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ coin }) });
+    const res  = await fetch('/api/create-crypto-market', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ coin }) });
     const data = await res.json();
     if (data.success) {
       setBtcMessage(`✅ ${coin}-Markt erstellt! Startpreis: $${Number(data.startPrice).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
@@ -320,7 +272,7 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
 
   async function resolveCryptoMarket(marketId: string) {
     setResolvingBtc(marketId); setBtcMessage('');
-    const res = await fetch('/api/resolve-crypto-market', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ market_id: marketId }) });
+    const res  = await fetch('/api/resolve-crypto-market', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ market_id: marketId }) });
     const data = await res.json();
     if (data.success) {
       const dir = data.resolution === 'yes' ? '📈 GESTIEGEN' : '📉 GEFALLEN';
@@ -332,16 +284,16 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
 
   async function handleCreateMarket() {
     if (!newQuestion.trim()) { setCreateMessage('❌ Frage ist Pflichtfeld.'); return; }
-    if (!newClosesAt) { setCreateMessage('❌ Schlussdatum ist Pflichtfeld.'); return; }
+    if (!newClosesAt)        { setCreateMessage('❌ Schlussdatum ist Pflichtfeld.'); return; }
     setCreateLoading(true); setCreateMessage('');
     const body: any = {
       question:    newQuestion.trim(),
       short_label: newShortLabel.trim() || newQuestion.trim().slice(0, 60),
       description: newDescription.trim() || null,
       category:    newCategory,
-      status:      'open', b: newB, q_yes: 0, q_no: 0,
-      closes_at:   new Date(newClosesAt).toISOString(),
-      resolved:    false, is_auto: false,
+      status: 'open', b: newB, q_yes: 0, q_no: 0,
+      closes_at: new Date(newClosesAt).toISOString(),
+      resolved: false, is_auto: false,
     };
     if (newGroupTitle.trim()) body.group_title = newGroupTitle.trim();
     const res = await fetch(`${supabaseUrl}/rest/v1/markets`, {
@@ -379,15 +331,15 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
   async function loadResolvedMarketDetails() {
     const [closedRes, tradesRes, usersRes] = await Promise.all([
       fetch(`${supabaseUrl}/rest/v1/markets?resolved=eq.true&select=*&order=created_at.desc`, { headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` } }),
-      fetch(`${supabaseUrl}/rest/v1/trades?select=*`, { headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` } }),
-      fetch(`${supabaseUrl}/rest/v1/users?select=id,username`, { headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` } }),
+      fetch(`${supabaseUrl}/rest/v1/trades?select=*`,                                          { headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` } }),
+      fetch(`${supabaseUrl}/rest/v1/users?select=id,username`,                                 { headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` } }),
     ]);
     const [closedMarkets, allTrades, allUsers] = await Promise.all([closedRes.json(), tradesRes.json(), usersRes.json()]);
     const usersMap: Record<string, string> = {};
     allUsers.forEach((u: any) => { usersMap[u.id] = u.username; });
     setResolvedMarketDetails(closedMarkets.map((market: any) => {
       const marketTrades = allTrades.filter((t: any) => t.market_id === market.id);
-      const winningType = market.resolution === 'yes' ? 'buy_yes' : 'buy_no';
+      const winningType  = market.resolution === 'yes' ? 'buy_yes' : 'buy_no';
       return {
         ...market,
         tradeDetails: marketTrades.map((t: any) => ({
@@ -408,8 +360,9 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   }
 
-  const adminCategories = Array.from(new Set(openMarkets.map((m: any) => m.category).filter(Boolean))) as string[];
+  const adminCategories      = Array.from(new Set(openMarkets.map((m: any) => m.category).filter(Boolean))) as string[];
   const adminFilteredMarkets = adminCategory === '' ? openMarkets : openMarkets.filter((m: any) => m.category === adminCategory);
+
   function groupMarkets(markets: any[]) {
     const groups: { [key: string]: any[] } = {};
     markets.forEach((market) => {
@@ -422,16 +375,12 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
   const adminGrouped = groupMarkets(adminFilteredMarkets);
 
   const filteredEditMarkets = allMarkets.filter(m => {
-    const matchSearch = editSearch === '' ||
-      (m.question ?? '').toLowerCase().includes(editSearch.toLowerCase()) ||
-      (m.short_label ?? '').toLowerCase().includes(editSearch.toLowerCase());
+    const matchSearch = editSearch === '' || (m.question ?? '').toLowerCase().includes(editSearch.toLowerCase()) || (m.short_label ?? '').toLowerCase().includes(editSearch.toLowerCase());
     const matchFilter = editFilter === 'all' || (editFilter === 'auto' ? m.is_auto : !m.is_auto);
     return matchSearch && matchFilter;
   });
 
-  const filteredUsers = users.filter(u =>
-    userSearch === '' || (u.username ?? '').toLowerCase().includes(userSearch.toLowerCase())
-  );
+  const filteredUsers = users.filter(u => userSearch === '' || (u.username ?? '').toLowerCase().includes(userSearch.toLowerCase()));
 
   const inputStyle: React.CSSProperties = {
     width: '100%', padding: '10px 12px', border: '1px solid var(--border)',
@@ -449,7 +398,6 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
     border: `1px solid ${active ? accent : 'var(--border)'}`,
     borderRadius: 8, cursor: 'pointer' as const, fontSize: 13, fontWeight: 600,
   });
-
   const statCard = (label: string, value: string | number, color = 'var(--text)') => (
     <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 12, padding: '16px 20px' }}>
       <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>{label}</div>
@@ -460,14 +408,14 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
   return (
     <div>
       <div style={{ display: 'flex', gap: 8, marginBottom: 24, flexWrap: 'wrap' }}>
-        <button style={tabBtn(adminTab === 'dashboard', '#7c3aed')}    onClick={() => setAdminTab('dashboard')}>📊 Dashboard</button>
-        <button style={tabBtn(adminTab === 'open')}                     onClick={() => setAdminTab('open')}>Offene Märkte</button>
-        <button style={tabBtn(adminTab === 'resolved')}                 onClick={() => { setAdminTab('resolved'); loadResolvedMarketDetails(); }}>Aufgelöste Märkte</button>
-        <button style={tabBtn(adminTab === 'btc', '#f59e0b')}           onClick={() => setAdminTab('btc')}>🪙 Krypto-Märkte</button>
-        <button style={tabBtn(adminTab === 'create', '#16a34a')}        onClick={() => setAdminTab('create')}>＋ Markt erstellen</button>
-        <button style={tabBtn(adminTab === 'edit', '#0ea5e9')}          onClick={() => setAdminTab('edit')}>✏️ Märkte bearbeiten</button>
-        <button style={tabBtn(adminTab === 'users', '#f97316')}         onClick={() => setAdminTab('users')}>👥 Nutzer</button>
-        <button style={tabBtn(adminTab === 'cronlogs', '#64748b')}      onClick={() => setAdminTab('cronlogs')}>🔍 Cron-Logs</button>
+        <button style={tabBtn(adminTab === 'dashboard', '#7c3aed')} onClick={() => setAdminTab('dashboard')}>📊 Dashboard</button>
+        <button style={tabBtn(adminTab === 'open')}                 onClick={() => setAdminTab('open')}>Offene Märkte</button>
+        <button style={tabBtn(adminTab === 'resolved')}             onClick={() => { setAdminTab('resolved'); loadResolvedMarketDetails(); }}>Aufgelöste Märkte</button>
+        <button style={tabBtn(adminTab === 'btc', '#f59e0b')}       onClick={() => setAdminTab('btc')}>🪙 Krypto-Märkte</button>
+        <button style={tabBtn(adminTab === 'create', '#16a34a')}    onClick={() => setAdminTab('create')}>＋ Markt erstellen</button>
+        <button style={tabBtn(adminTab === 'edit', '#0ea5e9')}      onClick={() => setAdminTab('edit')}>✏️ Märkte bearbeiten</button>
+        <button style={tabBtn(adminTab === 'users', '#f97316')}     onClick={() => setAdminTab('users')}>👥 Nutzer</button>
+        <button style={tabBtn(adminTab === 'cronlogs', '#64748b')}  onClick={() => setAdminTab('cronlogs')}>🔍 Cron-Logs</button>
       </div>
 
       {/* ── DASHBOARD ── */}
@@ -478,12 +426,12 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
           ) : dashStats ? (
             <>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 12, marginBottom: 28 }}>
-                {statCard('Nutzer gesamt', dashStats.totalUsers)}
-                {statCard('Offene Märkte', dashStats.openMarkets, '#16a34a')}
-                {statCard('Trades heute', dashStats.tradesToday, '#6366f1')}
-                {statCard('Volumen heute', `${dashStats.volumeToday.toLocaleString('de')} ₫`, '#f59e0b')}
-                {statCard('Aktive Nutzer heute', dashStats.activeUsersToday, '#0ea5e9')}
-                {statCard('Aktive Nutzer diese Woche', dashStats.activeUsersWeek, '#8b5cf6')}
+                {statCard('Nutzer gesamt',             dashStats.totalUsers)}
+                {statCard('Offene Märkte',             dashStats.openMarkets,       '#16a34a')}
+                {statCard('Trades heute',              dashStats.tradesToday,        '#6366f1')}
+                {statCard('Volumen heute',             `${dashStats.volumeToday.toLocaleString('de')} ₫`, '#f59e0b')}
+                {statCard('Aktive Nutzer heute',       dashStats.activeUsersToday,  '#0ea5e9')}
+                {statCard('Aktive Nutzer diese Woche', dashStats.activeUsersWeek,   '#8b5cf6')}
               </div>
               {dashStats.topMarkets.length > 0 && (
                 <div>
@@ -503,9 +451,7 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
                 </div>
               )}
               <div style={{ marginTop: 20 }}>
-                <button onClick={loadDashboard} style={{ padding: '8px 16px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}>
-                  ↺ Aktualisieren
-                </button>
+                <button onClick={loadDashboard} style={{ padding: '8px 16px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}>↺ Aktualisieren</button>
               </div>
             </>
           ) : null}
@@ -526,15 +472,15 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {cronLogs.map((log: any) => {
-                const r = log.results ?? {}
-                const ranAt = new Date(log.ran_at)
-                const cryptoOk  = !r.cryptoResolveError && Object.keys(r).filter(k => k.startsWith('cryptoCreate_') && k.endsWith('_error')).length === 0
-                const financeOk = !r.financeCreateError && !r.financeResolveError
-                const weatherOk = !r.weatherCreateError && !r.weatherResolveError
-                const weatherCreated  = r.weatherCreate?.created?.length ?? 0
-                const weatherResolved = r.weatherResolve?.resolved ?? 0
-                const financeCreated  = r.financeCreate?.created?.length ?? 0
-                const financeErrors   = r.financeCreate?.errors?.length ?? 0
+                const r = log.results ?? {};
+                const ranAt       = new Date(log.ran_at);
+                const cryptoOk    = !r.cryptoResolveError && Object.keys(r).filter(k => k.startsWith('cryptoCreate_') && k.endsWith('_error')).length === 0;
+                const financeOk   = !r.financeCreateError && !r.financeResolveError;
+                const weatherOk   = !r.weatherCreateError && !r.weatherResolveError;
+                const weatherCreated  = r.weatherCreate?.created?.length ?? 0;
+                const weatherResolved = r.weatherResolve?.resolved ?? 0;
+                const financeCreated  = r.financeCreate?.created?.length ?? 0;
+                const financeErrors   = r.financeCreate?.errors?.length ?? 0;
                 return (
                   <div key={log.id} style={{ border: `1px solid ${log.had_errors ? 'rgba(220,38,38,0.3)' : 'rgba(22,163,74,0.2)'}`, borderLeft: `4px solid ${log.had_errors ? '#dc2626' : '#16a34a'}`, borderRadius: 10, overflow: 'hidden', background: 'var(--card)' }}>
                     <div style={{ padding: '10px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
@@ -548,7 +494,7 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
                         </div>
                       </div>
                       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                        <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 6, background: cryptoOk ? 'rgba(22,163,74,0.1)' : 'rgba(220,38,38,0.1)', color: cryptoOk ? '#16a34a' : '#dc2626' }}>🪙 Krypto {cryptoOk ? '✓' : '✗'}</span>
+                        <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 6, background: cryptoOk  ? 'rgba(22,163,74,0.1)' : 'rgba(220,38,38,0.1)', color: cryptoOk  ? '#16a34a' : '#dc2626' }}>🪙 Krypto {cryptoOk ? '✓' : '✗'}</span>
                         <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 6, background: financeOk ? 'rgba(22,163,74,0.1)' : 'rgba(220,38,38,0.1)', color: financeOk ? '#16a34a' : '#dc2626' }}>📈 Finance {financeOk ? `✓ ${financeCreated} neu` : `✗ ${financeErrors} Fehler`}</span>
                         <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 6, background: weatherOk ? 'rgba(22,163,74,0.1)' : 'rgba(220,38,38,0.1)', color: weatherOk ? '#16a34a' : '#dc2626' }}>🌤 Wetter {weatherOk ? `✓ ${weatherCreated} neu · ${weatherResolved} aufgelöst` : '✗ Fehler'}</span>
                       </div>
@@ -565,7 +511,7 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
                       </div>
                     )}
                   </div>
-                )
+                );
               })}
             </div>
           )}
@@ -611,13 +557,7 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
                     </div>
                     <div>
                       <label style={labelStyle}>Auflösungsregeln</label>
-                      <textarea
-                        style={{ ...inputStyle, minHeight: 160, resize: 'vertical', fontSize: 13, lineHeight: 1.6 }}
-                        value={editFields.description}
-                        onChange={e => setEditFields(f => ({ ...f, description: e.target.value }))}
-                        placeholder="z.B. Löst mit JA auf, wenn…"
-                        maxLength={2000}
-                      />
+                      <textarea style={{ ...inputStyle, minHeight: 160, resize: 'vertical', fontSize: 13, lineHeight: 1.6 }} value={editFields.description} onChange={e => setEditFields(f => ({ ...f, description: e.target.value }))} placeholder="z.B. Löst mit JA auf, wenn…" maxLength={2000} />
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                       <div>
@@ -687,20 +627,46 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
                       <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>{(u.balance ?? 0).toLocaleString('de')} ₫</div>
                     </div>
                     <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-                      <button onClick={() => { setEditingUser(u.id); setNewBalance(String(u.balance ?? 0)); setUserMessage(''); }} style={{ padding: '6px 12px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, cursor: 'pointer', fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}>✏️ Guthaben</button>
+                      <button
+                        onClick={() => { setEditingUser(u.id); setNewBalance(String(u.balance ?? 0)); setAddAmount(''); setUserMessage(''); }}
+                        style={{ padding: '6px 12px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, cursor: 'pointer', fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}
+                      >
+                        ✏️ Guthaben
+                      </button>
                       {u.id !== userId && (
                         <button onClick={() => setDeleteUserConfirm(u.id)} style={{ padding: '6px 10px', background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)', borderRadius: 6, cursor: 'pointer', fontSize: 12, color: '#dc2626', fontWeight: 600 }}>🗑</button>
                       )}
                     </div>
                   </div>
+
                   {editingUser === u.id && (
-                    <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border)', background: 'rgba(249,115,22,0.04)', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                      <input type="number" min={0} style={{ ...inputStyle, width: 140, marginBottom: 0, fontSize: 14 }} value={newBalance} onChange={e => setNewBalance(e.target.value)} placeholder="Neues Guthaben" />
-                      <button onClick={() => saveUserBalance(u.id)} style={{ padding: '8px 16px', background: '#f97316', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>Speichern</button>
-                      <button onClick={() => setEditingUser(null)} style={{ padding: '8px 12px', background: 'var(--surface)', color: 'var(--text-muted)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>Abbrechen</button>
-                      {userMessage && <span style={{ fontSize: 13, fontWeight: 600, color: userMessage.includes('Fehler') || userMessage.includes('Ungültig') ? '#dc2626' : '#16a34a' }}>{userMessage}</span>}
+                    <div style={{ padding: '14px 16px', borderTop: '1px solid var(--border)', background: 'rgba(249,115,22,0.04)', display: 'flex', flexDirection: 'column', gap: 12 }}>
+                      {/* Dukaten addieren */}
+                      <div>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>Betrag addieren</div>
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                          <input type="number" min={1} style={{ ...inputStyle, width: 120, marginBottom: 0, fontSize: 14 }} value={addAmount} onChange={e => setAddAmount(e.target.value)} placeholder="z.B. 500" />
+                          <button onClick={() => addDukaten(u)} style={{ padding: '8px 16px', background: '#16a34a', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>+ Addieren</button>
+                          {[100, 500, 1000].map(v => (
+                            <button key={v} onClick={() => setAddAmount(String(v))} style={{ padding: '6px 10px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, cursor: 'pointer', fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}>+{v}</button>
+                          ))}
+                        </div>
+                      </div>
+                      {/* Absolut setzen */}
+                      <div>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>Absolut setzen</div>
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                          <input type="number" min={0} style={{ ...inputStyle, width: 120, marginBottom: 0, fontSize: 14 }} value={newBalance} onChange={e => setNewBalance(e.target.value)} placeholder="Neues Guthaben" />
+                          <button onClick={() => saveUserBalance(u.id)} style={{ padding: '8px 16px', background: '#f97316', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>Setzen</button>
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                        <button onClick={() => { setEditingUser(null); setAddAmount(''); setUserMessage(''); }} style={{ padding: '7px 12px', background: 'var(--surface)', color: 'var(--text-muted)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>Schließen</button>
+                        {userMessage && <span style={{ fontSize: 13, fontWeight: 600, color: userMessage.includes('Fehler') || userMessage.includes('Ungültig') ? '#dc2626' : '#16a34a' }}>{userMessage}</span>}
+                      </div>
                     </div>
                   )}
+
                   {deleteUserConfirm === u.id && (
                     <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border)', background: 'rgba(220,38,38,0.04)', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                       <span style={{ fontSize: 13, color: '#dc2626', fontWeight: 600 }}>Nutzer {u.username} — alle Daten löschen?</span>
@@ -732,13 +698,7 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
               </div>
               <div>
                 <label style={labelStyle}>Auflösungsregeln (optional)</label>
-                <textarea
-                  style={{ ...inputStyle, minHeight: 160, resize: 'vertical', fontSize: 13, lineHeight: 1.6 }}
-                  placeholder="z.B. Löst mit JA auf, wenn…"
-                  value={newDescription}
-                  onChange={e => setNewDescription(e.target.value)}
-                  maxLength={2000}
-                />
+                <textarea style={{ ...inputStyle, minHeight: 160, resize: 'vertical', fontSize: 13, lineHeight: 1.6 }} placeholder="z.B. Löst mit JA auf, wenn…" value={newDescription} onChange={e => setNewDescription(e.target.value)} maxLength={2000} />
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div>
@@ -793,8 +753,8 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
           <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 10 }}>Laufende & vergangene Krypto-Märkte</div>
           {btcMarkets.length === 0 && <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Noch keine Krypto-Märkte erstellt.</div>}
           {btcMarkets.map((market: any) => {
-            const isOpen = !market.resolved;
-            const expired = new Date(market.closes_at).getTime() < now;
+            const isOpen   = !market.resolved;
+            const expired  = new Date(market.closes_at).getTime() < now;
             const coinData = COINS.find(c => c.id === (market.coin ?? 'BTC'));
             return (
               <div key={market.id} className="card" style={{ padding: '12px 16px', marginBottom: 8 }}>
