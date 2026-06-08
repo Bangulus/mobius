@@ -241,7 +241,7 @@ export default function PublicProfilePage() {
     const user: ProfileUser = users[0]
     setProfileUser(user)
     if (user.privacy_settings) {
-      setPrivacy({ guthaben: true, gewinn_verlust: true, groesster_gewinn: true, eingesetzt_gewonnen: true, streak: true, offene_positionen: true, aktivitaet: true, lieblingskategorie: true, durchschnittlicher_einsatz: true, ...user.privacy_settings })
+      setPrivacy({ ...DEFAULT_PRIVACY, ...user.privacy_settings })
     }
 
     // Trades laden
