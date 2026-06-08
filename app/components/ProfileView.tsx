@@ -155,7 +155,7 @@ function formatDateTime(iso: string): { date: string; time: string } {
   return { date, time };
 }
 
-type TabType = 'positionen' | 'aktivitaet' | 'einstellungen';
+type TabType = 'positionen' | 'aktivitaet';
 type SubTabType = 'offen' | 'geschlossen';
 
 function useIsMobile() {
@@ -292,7 +292,13 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, o
     setPortfolioLoading(false);
   }, [userId]);
 
-  useEffect(() => { if (userId) loadPortfolio(); }, [userId, loadPortfolio]);
+  useEffect(() => {
+    if (userId) {
+      loadPortfolio()
+      const id = setInterval(loadPortfolio, 3000)
+      return () => clearInterval(id)
+    }
+  }, [userId, loadPortfolio]);
 
   async function saveUsername() {
     if (!newUsername.trim()) return;
@@ -385,7 +391,7 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, o
             onClick={() => router.push(`/profil/${encodeURIComponent(displayName)}`)}
             style={{ fontSize: 12, padding: '6px 14px', background: 'var(--accent-light)', border: '1px solid rgba(99,102,241,0.2)', borderRadius: 20, cursor: 'pointer', color: 'var(--accent)', fontWeight: 600, whiteSpace: 'nowrap' }}
           >
-            Öffentliches Profil →
+            Mein vollständiges Profil →
           </button>
         </div>
       </div>
@@ -461,7 +467,7 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, o
 
       {/* ── TABS ── */}
       <div style={{ borderBottom: '1px solid var(--border)', marginBottom: 20, display: 'flex', overflowX: 'auto' }}>
-        {(['positionen', 'aktivitaet', 'einstellungen'] as TabType[]).map(t => (
+        {(['positionen', 'aktivitaet'] as TabType[]).map(t => (
           <button key={t} onClick={() => setTab(t)} style={{
             background: 'none', border: 'none', cursor: 'pointer',
             padding: '10px 20px', fontSize: 14, whiteSpace: 'nowrap',
@@ -470,7 +476,7 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, o
             borderBottom: tab === t ? '2px solid var(--accent)' : '2px solid transparent',
             marginBottom: -1, transition: 'color 0.15s', fontFamily: 'var(--font)',
           }}>
-            {t === 'positionen' ? 'Positionen' : t === 'aktivitaet' ? 'Aktivität' : '🔒 Datenschutz'}
+            {t === 'positionen' ? 'Positionen' : 'Aktivität'}
           </button>
         ))}
       </div>
@@ -609,44 +615,6 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, o
       {/* ── AKTIVITÄT ── */}
       {tab === 'aktivitaet' && (
         <AktivitaetsFeed userId={userId} />
-      )}
-
-      {/* ── DATENSCHUTZ / EINSTELLUNGEN ── */}
-      {tab === 'einstellungen' && (
-        <div>
-          <div style={{ fontSize: 14, color: 'var(--text-muted)', marginBottom: 20, lineHeight: 1.6 }}>
-            Wähle welche Stats auf deinem öffentlichen Profil sichtbar sind. Trefferquote, Streak, Anzahl Prognosen und &quot;Zuletzt online&quot; sind immer öffentlich.
-          </div>
-
-          <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-            {PRIVACY_LABELS.map(({ key, label, desc }, i) => (
-              <div key={key} style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16,
-                padding: '16px 20px',
-                borderBottom: i < PRIVACY_LABELS.length - 1 ? '1px solid var(--border)' : 'none',
-              }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', marginBottom: 2 }}>{label}</div>
-                  <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{desc}</div>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-                  <span style={{ fontSize: 12, color: privacy[key] ? 'var(--yes)' : 'var(--text-muted)', fontWeight: 600 }}>
-                    {privacy[key] ? 'Öffentlich' : 'Privat'}
-                  </span>
-                  <Toggle checked={privacy[key]} onChange={() => togglePrivacy(key)} />
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {savingPrivacy && (
-            <div style={{ textAlign: 'center', marginTop: 12, fontSize: 12, color: 'var(--text-muted)' }}>Wird gespeichert…</div>
-          )}
-
-          <div style={{ marginTop: 12, padding: '12px 16px', borderRadius: 10, background: 'var(--accent-light)', border: '1px solid rgba(99,102,241,0.15)', fontSize: 12, color: 'var(--accent)' }}>
-            💡 Änderungen werden sofort gespeichert und sind direkt auf deinem öffentlichen Profil sichtbar.
-          </div>
-        </div>
       )}
     </div>
   );
