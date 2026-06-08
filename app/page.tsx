@@ -305,7 +305,6 @@ export default function PublicProfilePage() {
 
   if (!profileUser) return null
 
-  const privacy: PrivacySettings = { ...DEFAULT_PRIVACY, ...(profileUser.privacy_settings ?? {}) }
   // Admin und eigenes Profil sehen immer alles
   const show = (key: keyof PrivacySettings): boolean => isAdmin || isOwn || privacy[key]
 
