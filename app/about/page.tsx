@@ -55,7 +55,7 @@ export default function AboutPage() {
         {/* Das Grundprinzip */}
         <Section label="Das Grundprinzip">
           <Callout>
-            Wenn 73 Cent auf „Ja" stehen, glaubt die Masse, dass etwas mit 73 % Wahrscheinlichkeit eintritt.
+            Wenn 73 Cent auf &bdquo;Ja&ldquo; stehen, glaubt die Masse, dass etwas mit 73 % Wahrscheinlichkeit eintritt.
           </Callout>
           <p style={pStyle}>
             Ein Prognosemarkt ist im Kern eine einfache Frage mit Preisschild. Dieser Preis repräsentiert eine Wahrscheinlichkeit. Wer glaubt, dass ein Ereignis eintritt, kauft JA-Anteile. Wer glaubt, dass dieses Ereignis nicht eintritt, kauft NEIN-Anteile. So entsteht aus vielen Einzelmeinungen ein einziges, verdichtetes Signal.
@@ -64,7 +64,7 @@ export default function AboutPage() {
             Das funktioniert, weil Prognosemärkte die Anreizstruktur von Kapitalmärkten mit der Flexibilität direkter Ereignisprognosen kombinieren. Wer richtig liegt, gewinnt. Wer falsch liegt, verliert. Das schafft einen Anreiz, den es bei keiner Sonntagsumfrage und keinem YouTube-Kommentar gibt: es lohnt sich, die Wahrheit zu sagen.
           </p>
           <p style={pStyle}>
-            Prognosemärkte sind keine Erfindung des Internets. Organisierte politische Prognosemärkte existierten nachweislich seit dem 16. Jahrhundert. Dort wurde in Italien nicht nur auf die päpstliche Nachfolge gewettet. Die Preisbildung erfasste nicht nur den wahrscheinlichen Sieger, sondern auch die Dauer der Konklaven — was auf eine bemerkenswert differenzierte Marktmikrostruktur hinweist. Diese Märkte wurden bereits 1503 als „alte Praxis" bezeichnet.
+            Prognosemärkte sind keine Erfindung des Internets. Organisierte politische Prognosemärkte existierten nachweislich seit dem 16. Jahrhundert. Dort wurde in Italien nicht nur auf die päpstliche Nachfolge gewettet. Die Preisbildung erfasste nicht nur den wahrscheinlichen Sieger, sondern auch die Dauer der Konklaven — was auf eine bemerkenswert differenzierte Marktmikrostruktur hinweist. Diese Märkte wurden bereits 1503 als &bdquo;alte Praxis&ldquo; bezeichnet.
           </p>
         </Section>
 
@@ -76,7 +76,7 @@ export default function AboutPage() {
             Kein Experte kennt alles. Aber jeder kennt etwas.
           </Callout>
           <p style={pStyle}>
-            Der österreichisch-britische Ökonom Friedrich Hayek hat 1945 in seinem berühmten Aufsatz „The Use of Knowledge in Society" gezeigt, dass Wissen in einer Gesellschaft niemals zentral verfügbar ist. Es existiert nur lokal, implizit und über Millionen Menschen verteilt.
+            Der österreichisch-britische Ökonom Friedrich Hayek hat 1945 in seinem berühmten Aufsatz &bdquo;The Use of Knowledge in Society&ldquo; gezeigt, dass Wissen in einer Gesellschaft niemals zentral verfügbar ist. Es existiert nur lokal, implizit und über Millionen Menschen verteilt.
           </p>
           <SideNote title="Das Fahrrad-Beispiel">
             Das gilt besonders für implizites Wissen: Das ist Wissen, das ein Mensch zwar hat, aber nicht formulieren kann. Wir alle wissen, wie man beim Fahrradfahren die Balance hält — aber wir können niemandem erklären, wie er beim Fahrradfahren die Balance halten kann, wenn er noch nie Fahrrad gefahren ist. Genauso spürt ein erfahrener Trader, wenn die Märkte nervös werden. Auf Prognosemärkten lässt sich dieses Wissen in Preise übersetzen.
