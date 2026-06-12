@@ -766,6 +766,16 @@ export default function Home() {
           <div style={{ padding: '0 8px' }}>
             {NAV_ITEMS.map(item => (<NavItem key={item.id} item={item} category={category} expandedNav={expandedNav} onSelect={selectCategory} onToggle={toggleNav} depth={0} />))}
           </div>
+          <div style={{ padding: '12px 8px 0', borderTop: '1px solid var(--border)', marginTop: 8 }}>
+            <a href="/about" className="nav-item-btn" style={{ display: 'flex', alignItems: 'center', gap: 8, textDecoration: 'none', fontSize: 13, fontWeight: 500, color: 'var(--text-muted)', padding: '8px 12px', borderRadius: 8 }}>
+              <span style={{ fontSize: 14 }}>💡</span>
+              <span>About</span>
+            </a>
+            <a href="/faq" className="nav-item-btn" style={{ display: 'flex', alignItems: 'center', gap: 8, textDecoration: 'none', fontSize: 13, fontWeight: 500, color: 'var(--text-muted)', padding: '8px 12px', borderRadius: 8 }}>
+              <span style={{ fontSize: 14 }}>❓</span>
+              <span>FAQ</span>
+            </a>
+          </div>
         </aside>
 
         <main style={{ flex: 1, minWidth: 0, padding: '24px 32px' }}>
@@ -836,12 +846,6 @@ export default function Home() {
           )}
         </main>
       </div>
-
-      {/* Footer */}
-      <footer style={{ borderTop: '1px solid var(--border)', padding: '20px 24px', display: 'flex', justifyContent: 'center', gap: 24, background: 'var(--bg)' }}>
-        <a href="/about" style={{ fontSize: 12, color: 'var(--text-muted)', textDecoration: 'none' }}>Über Möbius</a>
-        <a href="/faq" style={{ fontSize: 12, color: 'var(--text-muted)', textDecoration: 'none' }}>FAQ</a>
-      </footer>
 
       {/* Mobile Bottom Tab Bar */}
       <nav className="mobile-tab-bar">
