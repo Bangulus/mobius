@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { XP_WIN, XP_LOSS, RP_WIN, RP_LOSS, levelFromXp, titleFromRp } from '@/lib/progression'
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -41,38 +42,33 @@ async function resolveMarket(id: string, resolution: 'yes' | 'no') {
   })
 }
 
-async function payoutWinners(marketId: string, resolution: 'yes' | 'no') {
-  const field  = resolution === 'yes' ? 'shares_yes' : 'shares_no'
-  const posRes = await fetch(
-    `${SUPABASE_URL}/rest/v1/positions?market_id=eq.${marketId}&${field}=gt.0`,
-    { headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` } }
-  )
-  if (!posRes.ok) return
-  const positions: any[] = await posRes.json()
-  if (!positions.length) return
-
-  const marketRes = await fetch(
-    `${SUPABASE_URL}/rest/v1/markets?id=eq.${marketId}`,
-    { headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` } }
-  )
-  const markets: any[] = await marketRes.json()
-  if (!markets.length) return
-  const market = markets[0]
-  const totalShares = positions.reduce((sum: number, p: any) => sum + p[field], 0)
-
-  for (const pos of positions) {
-    const userShares = pos[field] as number
-    const payout     = Math.round((userShares / totalShares) * (market.q_yes + market.q_no) * market.b)
-    if (payout <= 0) continue
-
+// Progression: Gewinn/Verlust-XP + RP nach Marktauflösung verbuchen.
+// Fehler hier werden geloggt, blockieren aber nicht den Payout-Flow.
+async function awardResolutionXp(userId: string, won: boolean, marketId: string) {
+  try {
     const userRes = await fetch(
-      `${SUPABASE_URL}/rest/v1/users?id=eq.${pos.user_id}&select=balance`,
+      `${SUPABASE_URL}/rest/v1/users?id=eq.${userId}&select=xp,rp`,
       { headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` } }
     )
     const users: any[] = await userRes.json()
-    if (!users.length) continue
+    const u = users?.[0]
+    if (!u) {
+      console.error(`awardResolutionXp: User ${userId} nicht gefunden.`)
+      return
+    }
 
-    await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${pos.user_id}`, {
+    const currentXp: number = u.xp ?? 0
+    const currentRp: number = u.rp ?? 0
+
+    const xpDelta = won ? XP_WIN : XP_LOSS
+    const rpDelta = won ? RP_WIN : RP_LOSS
+
+    const newXp = currentXp + xpDelta
+    const newRp = Math.max(0, currentRp + rpDelta)
+    const newLevel = levelFromXp(newXp)
+    const newTitle = titleFromRp(newRp)
+
+    const patchRes = await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${userId}`, {
       method: 'PATCH',
       headers: {
         apikey: SERVICE_KEY,
@@ -80,8 +76,97 @@ async function payoutWinners(marketId: string, resolution: 'yes' | 'no') {
         'Content-Type': 'application/json',
         Prefer: 'return=minimal',
       },
-      body: JSON.stringify({ balance: users[0].balance + payout }),
+      body: JSON.stringify({ xp: newXp, level: newLevel, rp: newRp, title: newTitle }),
     })
+    if (!patchRes.ok) {
+      console.error(`awardResolutionXp: users-Update fehlgeschlagen (${patchRes.status}) für User ${userId}.`)
+      return
+    }
+
+    const eventRes = await fetch(`${SUPABASE_URL}/rest/v1/xp_events`, {
+      method: 'POST',
+      headers: {
+        apikey: SERVICE_KEY,
+        Authorization: `Bearer ${SERVICE_KEY}`,
+        'Content-Type': 'application/json',
+        Prefer: 'return=minimal',
+      },
+      body: JSON.stringify({
+        user_id: userId,
+        type: won ? 'win' : 'loss',
+        xp_delta: xpDelta,
+        rp_delta: rpDelta,
+        market_id: marketId,
+      }),
+    })
+    if (!eventRes.ok) {
+      console.error(`awardResolutionXp: xp_events-Insert fehlgeschlagen (${eventRes.status}) für User ${userId}.`)
+    }
+  } catch (err) {
+    console.error('awardResolutionXp: unerwarteter Fehler', err)
+  }
+}
+
+async function payoutWinners(marketId: string, resolution: 'yes' | 'no') {
+  const field      = resolution === 'yes' ? 'shares_yes' : 'shares_no'
+  const loserField = resolution === 'yes' ? 'shares_no'  : 'shares_yes'
+
+  const posRes = await fetch(
+    `${SUPABASE_URL}/rest/v1/positions?market_id=eq.${marketId}&${field}=gt.0`,
+    { headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` } }
+  )
+  if (posRes.ok) {
+    const positions: any[] = await posRes.json()
+    if (positions.length) {
+      const marketRes = await fetch(
+        `${SUPABASE_URL}/rest/v1/markets?id=eq.${marketId}`,
+        { headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` } }
+      )
+      const markets: any[] = await marketRes.json()
+      if (markets.length) {
+        const market = markets[0]
+        const totalShares = positions.reduce((sum: number, p: any) => sum + p[field], 0)
+
+        for (const pos of positions) {
+          const userShares = pos[field] as number
+          const payout     = Math.round((userShares / totalShares) * (market.q_yes + market.q_no) * market.b)
+          if (payout <= 0) continue
+
+          const userRes = await fetch(
+            `${SUPABASE_URL}/rest/v1/users?id=eq.${pos.user_id}&select=balance`,
+            { headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` } }
+          )
+          const users: any[] = await userRes.json()
+          if (!users.length) continue
+
+          const patchRes = await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${pos.user_id}`, {
+            method: 'PATCH',
+            headers: {
+              apikey: SERVICE_KEY,
+              Authorization: `Bearer ${SERVICE_KEY}`,
+              'Content-Type': 'application/json',
+              Prefer: 'return=minimal',
+            },
+            body: JSON.stringify({ balance: users[0].balance + payout }),
+          })
+          if (patchRes.ok) {
+            await awardResolutionXp(pos.user_id, true, marketId)
+          }
+        }
+      }
+    }
+  }
+
+  // Verlierer-Seite: nur Loss-XP/RP, kein Payout
+  const loserPosRes = await fetch(
+    `${SUPABASE_URL}/rest/v1/positions?market_id=eq.${marketId}&${loserField}=gt.0`,
+    { headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` } }
+  )
+  if (loserPosRes.ok) {
+    const loserPositions: any[] = await loserPosRes.json()
+    for (const pos of loserPositions) {
+      await awardResolutionXp(pos.user_id, false, marketId)
+    }
   }
 }
 
