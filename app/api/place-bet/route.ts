@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { XP_TRADE, XP_NEW_CATEGORY, levelFromXp } from '@/lib/progression'
 
 const SUPABASE_URL   = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const SERVICE_KEY    = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -57,6 +58,59 @@ function calcProb(qYes: number, qNo: number, b: number): number {
   const eYes = Math.exp(qYes / b)
   const eNo  = Math.exp(qNo  / b)
   return Math.round((eYes / (eYes + eNo)) * 100)
+}
+
+// Trade-XP anwenden (Buy & Sell). Liest aktuellen XP-Stand, berechnet neue Werte,
+// schreibt users-Update + xp_events-Eintrag. Fehler hier werden geloggt, aber
+// blockieren den Trade nicht (Progression ist sekundär zum Trade selbst).
+async function awardTradeXp(userId: string, marketId: string, category: string | undefined) {
+  try {
+    const userRows = await dbGet('users', `id=eq.${userId}&select=xp,total_trades,categories_traded`)
+    const u = userRows?.[0]
+    if (!u) {
+      console.error(`awardTradeXp: User ${userId} nicht gefunden.`)
+      return
+    }
+
+    const currentXp: number = u.xp ?? 0
+    const categoriesTraded: string[] = u.categories_traded ?? []
+    const totalTrades: number = u.total_trades ?? 0
+
+    let xpGain = XP_TRADE
+    let newCategories = categoriesTraded
+    if (category && !categoriesTraded.includes(category)) {
+      xpGain += XP_NEW_CATEGORY
+      newCategories = [...categoriesTraded, category]
+    }
+
+    const newXp = currentXp + xpGain
+    const newLevel = levelFromXp(newXp)
+    const newTotalTrades = totalTrades + 1
+
+    const patchRes = await dbWrite('PATCH', 'users', `id=eq.${userId}`, {
+      xp: newXp,
+      level: newLevel,
+      total_trades: newTotalTrades,
+      categories_traded: newCategories,
+    })
+    if (!patchRes.ok) {
+      console.error(`awardTradeXp: users-Update fehlgeschlagen (${patchRes.status}) für User ${userId}.`)
+      return
+    }
+
+    const eventRes = await dbWrite('POST', 'xp_events', '', {
+      user_id: userId,
+      type: 'trade',
+      xp_delta: xpGain,
+      rp_delta: 0,
+      market_id: marketId,
+    })
+    if (!eventRes.ok) {
+      console.error(`awardTradeXp: xp_events-Insert fehlgeschlagen (${eventRes.status}) für User ${userId}.`)
+    }
+  } catch (err) {
+    console.error('awardTradeXp: unerwarteter Fehler', err)
+  }
 }
 
 // Rate Limiter — in-memory, reset bei Serverrestart
@@ -214,6 +268,9 @@ export async function POST(req: NextRequest) {
       })
     }
 
+    // Progression: Trade-XP (+ ggf. neue-Kategorie-Bonus)
+    await awardTradeXp(userId, marketId, market.category)
+
     return NextResponse.json({ success: true, newBalance, shares: Math.round(shares) })
   }
 
@@ -254,6 +311,9 @@ export async function POST(req: NextRequest) {
     await dbWrite('PATCH', 'markets', `id=eq.${marketId}`, { q_yes: newQYes, q_no: newQNo })
     await dbWrite('PATCH', 'users', `id=eq.${userId}`, { balance: newBalance })
     await dbWrite('DELETE', 'positions', `user_id=eq.${userId}&market_id=eq.${marketId}`)
+
+    // Progression: Trade-XP (+ ggf. neue-Kategorie-Bonus)
+    await awardTradeXp(userId, marketId, market.category)
 
     return NextResponse.json({ success: true, newBalance, returned: Math.round(returnAmt) })
   }
