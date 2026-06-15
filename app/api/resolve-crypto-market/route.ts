@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { XP_WIN, XP_LOSS, RP_WIN, RP_LOSS, levelFromXp, titleFromRp } from '@/lib/progression'
 
 const SUPABASE_URL  = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const SERVICE_KEY   = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -62,6 +63,54 @@ async function dbPost(table: string, body: object) {
   return res
 }
 
+// Progression: Gewinn/Verlust-XP + RP nach Marktauflösung verbuchen.
+// Fehler hier werden geloggt, blockieren aber nicht den Payout-Flow.
+async function awardResolutionXp(userId: string, won: boolean, marketId: string) {
+  try {
+    const userRows = await dbGet('users', `id=eq.${userId}&select=xp,rp`)
+    const u = userRows?.[0]
+    if (!u) {
+      console.error(`awardResolutionXp: User ${userId} nicht gefunden.`)
+      return
+    }
+
+    const currentXp: number = u.xp ?? 0
+    const currentRp: number = u.rp ?? 0
+
+    const xpDelta = won ? XP_WIN : XP_LOSS
+    const rpDelta = won ? RP_WIN : RP_LOSS
+
+    const newXp = currentXp + xpDelta
+    const newRp = Math.max(0, currentRp + rpDelta)
+    const newLevel = levelFromXp(newXp)
+    const newTitle = titleFromRp(newRp)
+
+    const patchRes = await dbPatch('users', `id=eq.${userId}`, {
+      xp: newXp,
+      level: newLevel,
+      rp: newRp,
+      title: newTitle,
+    })
+    if (!patchRes.ok) {
+      console.error(`awardResolutionXp: users-Update fehlgeschlagen (${patchRes.status}) für User ${userId}.`)
+      return
+    }
+
+    const eventRes = await dbPost('xp_events', {
+      user_id: userId,
+      type: won ? 'win' : 'loss',
+      xp_delta: xpDelta,
+      rp_delta: rpDelta,
+      market_id: marketId,
+    })
+    if (!eventRes.ok) {
+      console.error(`awardResolutionXp: xp_events-Insert fehlgeschlagen (${eventRes.status}) für User ${userId}.`)
+    }
+  } catch (err) {
+    console.error('awardResolutionXp: unerwarteter Fehler', err)
+  }
+}
+
 async function resolveMarket(marketId: string, coin: string, startPrice: number) {
   const endPrice = await getCoinPrice(coin)
   if (!endPrice) return { error: 'Preis nicht abrufbar' }
@@ -78,27 +127,38 @@ async function resolveMarket(marketId: string, coin: string, startPrice: number)
 
   for (const pos of (positions ?? [])) {
     if (!pos.user_id) continue
+
     const winningShares = resolution === 'yes' ? (pos.shares_yes ?? 0) : (pos.shares_no ?? 0)
-    if (winningShares <= 0) continue
-    const payout = Math.round(winningShares)
-    const users = await dbGet('users', `id=eq.${pos.user_id}&select=balance`)
-    const currentBalance = users?.[0]?.balance ?? 0
-    const patchRes = await dbPatch('users', `id=eq.${pos.user_id}`, {
-      balance: Math.round(currentBalance + payout),
-    })
-    if (patchRes.ok) {
-      payoutCount++
-      await dbPost('trades', {
-        market_id: marketId,
-        user_id: pos.user_id,
-        type: 'payout',
-        shares: payout,
-        cost: payout,
-        price_before: 0,
-        price_after: 0,
+    const losingShares  = resolution === 'yes' ? (pos.shares_no  ?? 0) : (pos.shares_yes ?? 0)
+
+    // Gewinner-Seite: Payout + Win-XP/RP
+    if (winningShares > 0) {
+      const payout = Math.round(winningShares)
+      const users = await dbGet('users', `id=eq.${pos.user_id}&select=balance`)
+      const currentBalance = users?.[0]?.balance ?? 0
+      const patchRes = await dbPatch('users', `id=eq.${pos.user_id}`, {
+        balance: Math.round(currentBalance + payout),
       })
-    } else {
-      errors.push(`user ${pos.user_id}: ${patchRes.status}`)
+      if (patchRes.ok) {
+        payoutCount++
+        await dbPost('trades', {
+          market_id: marketId,
+          user_id: pos.user_id,
+          type: 'payout',
+          shares: payout,
+          cost: payout,
+          price_before: 0,
+          price_after: 0,
+        })
+        await awardResolutionXp(pos.user_id, true, marketId)
+      } else {
+        errors.push(`user ${pos.user_id}: ${patchRes.status}`)
+      }
+    }
+
+    // Verlierer-Seite: nur Loss-XP/RP, kein Payout
+    if (losingShares > 0) {
+      await awardResolutionXp(pos.user_id, false, marketId)
     }
   }
 
