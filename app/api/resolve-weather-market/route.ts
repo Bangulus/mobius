@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { WEATHER_CITIES, getYesterdayMax } from '@/lib/openmeteo'
+import { XP_WIN, XP_LOSS, RP_WIN, RP_LOSS, levelFromXp, titleFromRp } from '@/lib/progression'
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -28,39 +29,104 @@ async function dbGet(table: string, params: string) {
   return res.json()
 }
 
+// Progression: Gewinn/Verlust-XP + RP nach Marktauflösung verbuchen.
+// Fehler hier werden geloggt, blockieren aber nicht den Payout-Flow.
+async function awardResolutionXp(userId: string, won: boolean, marketId: string) {
+  try {
+    const userRows = await dbGet('users', `id=eq.${userId}&select=xp,rp`)
+    const u = userRows?.[0]
+    if (!u) {
+      console.error(`awardResolutionXp: User ${userId} nicht gefunden.`)
+      return
+    }
+
+    const currentXp: number = u.xp ?? 0
+    const currentRp: number = u.rp ?? 0
+
+    const xpDelta = won ? XP_WIN : XP_LOSS
+    const rpDelta = won ? RP_WIN : RP_LOSS
+
+    const newXp = currentXp + xpDelta
+    const newRp = Math.max(0, currentRp + rpDelta)
+    const newLevel = levelFromXp(newXp)
+    const newTitle = titleFromRp(newRp)
+
+    const patchRes = await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${userId}`, {
+      method: 'PATCH',
+      headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      body: JSON.stringify({ xp: newXp, level: newLevel, rp: newRp, title: newTitle }),
+    })
+    if (!patchRes.ok) {
+      console.error(`awardResolutionXp: users-Update fehlgeschlagen (${patchRes.status}) für User ${userId}.`)
+      return
+    }
+
+    const eventRes = await fetch(`${SUPABASE_URL}/rest/v1/xp_events`, {
+      method: 'POST',
+      headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      body: JSON.stringify({
+        user_id: userId,
+        type: won ? 'win' : 'loss',
+        xp_delta: xpDelta,
+        rp_delta: rpDelta,
+        market_id: marketId,
+      }),
+    })
+    if (!eventRes.ok) {
+      console.error(`awardResolutionXp: xp_events-Insert fehlgeschlagen (${eventRes.status}) für User ${userId}.`)
+    }
+  } catch (err) {
+    console.error('awardResolutionXp: unerwarteter Fehler', err)
+  }
+}
+
 async function payoutWinners(marketId: string, resolution: 'yes' | 'no') {
   const positions = await dbGet('positions', `market_id=eq.${marketId}&select=*`)
   if (!Array.isArray(positions) || positions.length === 0) return
 
   for (const pos of positions) {
-    const shares = resolution === 'yes' ? (pos.shares_yes ?? 0) : (pos.shares_no ?? 0)
-    if (shares <= 0) continue
-    const payout = Math.round(shares)
+    if (!pos.user_id) continue
 
-    const userRes = await dbGet('users', `id=eq.${pos.user_id}&select=balance`)
-    const user = userRes?.[0]
-    if (!user) continue
+    const winShares  = resolution === 'yes' ? (pos.shares_yes ?? 0) : (pos.shares_no ?? 0)
+    const loseShares = resolution === 'yes' ? (pos.shares_no  ?? 0) : (pos.shares_yes ?? 0)
 
-    await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${pos.user_id}`, {
-      method: 'PATCH',
-      headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-      body: JSON.stringify({ balance: user.balance + payout }),
-    })
+    // Gewinner-Seite: Payout + Win-XP/RP
+    if (winShares > 0) {
+      const payout = Math.round(winShares)
 
-    await fetch(`${SUPABASE_URL}/rest/v1/trades`, {
-      method: 'POST',
-      headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-      body: JSON.stringify({
-        market_id:    marketId,
-        user_id:      pos.user_id,
-        type:         'payout',
-        shares:       payout,
-        amount:       payout,
-        cost:         -payout,
-        price_before: 0,
-        price_after:  0,
-      }),
-    })
+      const userRes = await dbGet('users', `id=eq.${pos.user_id}&select=balance`)
+      const user = userRes?.[0]
+      if (user) {
+        const patchRes = await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${pos.user_id}`, {
+          method: 'PATCH',
+          headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+          body: JSON.stringify({ balance: user.balance + payout }),
+        })
+
+        if (patchRes.ok) {
+          await fetch(`${SUPABASE_URL}/rest/v1/trades`, {
+            method: 'POST',
+            headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+            body: JSON.stringify({
+              market_id:    marketId,
+              user_id:      pos.user_id,
+              type:         'payout',
+              shares:       payout,
+              amount:       payout,
+              cost:         -payout,
+              price_before: 0,
+              price_after:  0,
+            }),
+          })
+          await awardResolutionXp(pos.user_id, true, marketId)
+        }
+      }
+    }
+
+    // Verlierer-Seite: nur Loss-XP/RP, kein Payout
+    if (loseShares > 0) {
+      await awardResolutionXp(pos.user_id, false, marketId)
+    }
   }
 }
 
