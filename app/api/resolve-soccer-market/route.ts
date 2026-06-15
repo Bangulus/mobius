@@ -182,7 +182,7 @@ async function payoutWinners(marketId: string, resolution: 'yes' | 'no' | 'draw'
   }
 
   // Verlierer: nur Loss-XP/RP, kein Payout
-  for (const userId of userLosses) {
+  for (const userId of Array.from(userLosses)) {
     await awardResolutionXp(userId, 'loss', marketId)
   }
 }
