@@ -64,6 +64,11 @@ export const XP_NEW_CATEGORY = 30
 export const RP_WIN = 25
 export const RP_LOSS = -5
 
+// Refund-Fall (z.B. Unentschieden bei Soccer-Heim/Auswärts-Markt): Einsatz wird
+// erstattet, kleine Teilnahme-XP, aber kein RP-Effekt (weder Gewinn noch Verlust).
+export const XP_REFUND = 5
+export const RP_REFUND = 0
+
 // ── RP-Verfall ───────────────────────────────────────────────
 
 export const RP_DECAY_PER_DAY = 15
