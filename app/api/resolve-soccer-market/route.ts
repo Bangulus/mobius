@@ -1,5 +1,10 @@
 import { NextResponse } from 'next/server'
 import { getCurrentMatches, getMatchOutcome, OpenLigaMatch } from '@/lib/openligadb'
+import {
+  XP_WIN, XP_LOSS, XP_REFUND,
+  RP_WIN, RP_LOSS, RP_REFUND,
+  levelFromXp, titleFromRp,
+} from '@/lib/progression'
 
 export const runtime = 'edge'
 
@@ -73,11 +78,73 @@ async function getTradesForMarket(marketId: string) {
   return res.json()
 }
 
+// Progression: XP/RP nach Marktauflösung verbuchen.
+// outcome: 'win' (+25 XP/+25 RP), 'loss' (+5 XP/-5 RP), 'refund' (+5 XP/0 RP).
+// Fehler hier werden geloggt, blockieren aber nicht den Payout-Flow.
+async function awardResolutionXp(userId: string, outcome: 'win' | 'loss' | 'refund', marketId: string) {
+  try {
+    const userRes = await fetch(
+      `${supabaseUrl}/rest/v1/users?id=eq.${userId}&select=xp,rp`,
+      { headers: adminHeaders(), cache: 'no-store' }
+    )
+    if (!userRes.ok) {
+      console.error(`awardResolutionXp: users-Abfrage fehlgeschlagen (${userRes.status}) für User ${userId}.`)
+      return
+    }
+    const [u] = await userRes.json()
+    if (!u) {
+      console.error(`awardResolutionXp: User ${userId} nicht gefunden.`)
+      return
+    }
+
+    const currentXp: number = u.xp ?? 0
+    const currentRp: number = u.rp ?? 0
+
+    let xpDelta = XP_LOSS
+    let rpDelta = RP_LOSS
+    if (outcome === 'win') { xpDelta = XP_WIN; rpDelta = RP_WIN }
+    else if (outcome === 'refund') { xpDelta = XP_REFUND; rpDelta = RP_REFUND }
+
+    const newXp = currentXp + xpDelta
+    const newRp = Math.max(0, currentRp + rpDelta)
+    const newLevel = levelFromXp(newXp)
+    const newTitle = titleFromRp(newRp)
+
+    const patchRes = await fetch(`${supabaseUrl}/rest/v1/users?id=eq.${userId}`, {
+      method: 'PATCH',
+      headers: { ...adminHeaders(), Prefer: 'return=minimal' },
+      body: JSON.stringify({ xp: newXp, level: newLevel, rp: newRp, title: newTitle }),
+    })
+    if (!patchRes.ok) {
+      console.error(`awardResolutionXp: users-Update fehlgeschlagen (${patchRes.status}) für User ${userId}.`)
+      return
+    }
+
+    const eventRes = await fetch(`${supabaseUrl}/rest/v1/xp_events`, {
+      method: 'POST',
+      headers: { ...adminHeaders(), Prefer: 'return=minimal' },
+      body: JSON.stringify({
+        user_id: userId,
+        type: outcome,
+        xp_delta: xpDelta,
+        rp_delta: rpDelta,
+        market_id: marketId,
+      }),
+    })
+    if (!eventRes.ok) {
+      console.error(`awardResolutionXp: xp_events-Insert fehlgeschlagen (${eventRes.status}) für User ${userId}.`)
+    }
+  } catch (err) {
+    console.error('awardResolutionXp: unerwarteter Fehler', err)
+  }
+}
+
 async function payoutWinners(marketId: string, resolution: 'yes' | 'no' | 'draw') {
   const trades = await getTradesForMarket(marketId)
   if (!trades.length) return
 
   if (resolution === 'draw') {
+    // Refund: alle Buy-Trades werden erstattet, jeder bekommt +5 XP / 0 RP.
     const userRefunds: Record<string, number> = {}
     for (const trade of trades) {
       if (trade.type === 'buy_yes' || trade.type === 'buy_no') {
@@ -88,21 +155,35 @@ async function payoutWinners(marketId: string, resolution: 'yes' | 'no' | 'draw'
       const current = await getUserBalance(userId)
       await updateUserBalance(userId, current + refund)
       await writePayoutTrade(marketId, userId, Math.round(refund))
+      await awardResolutionXp(userId, 'refund', marketId)
     }
     return
   }
 
   const winningType = resolution === 'yes' ? 'buy_yes' : 'buy_no'
+  const losingType  = resolution === 'yes' ? 'buy_no'  : 'buy_yes'
+
   const userWinnings: Record<string, number> = {}
+  const userLosses: Set<string> = new Set()
   for (const trade of trades) {
     if (trade.type === winningType) {
       userWinnings[trade.user_id] = (userWinnings[trade.user_id] ?? 0) + trade.shares
+    } else if (trade.type === losingType) {
+      userLosses.add(trade.user_id)
     }
   }
+
+  // Gewinner: Payout + Win-XP/RP
   for (const [userId, winnings] of Object.entries(userWinnings)) {
     const current = await getUserBalance(userId)
     await updateUserBalance(userId, current + winnings)
     await writePayoutTrade(marketId, userId, Math.round(winnings))
+    await awardResolutionXp(userId, 'win', marketId)
+  }
+
+  // Verlierer: nur Loss-XP/RP, kein Payout
+  for (const userId of userLosses) {
+    await awardResolutionXp(userId, 'loss', marketId)
   }
 }
 
