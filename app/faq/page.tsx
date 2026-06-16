@@ -274,7 +274,7 @@ export default function FAQPage() {
               border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer',
             }}
           >
-            Über Möbius lesen →
+            Mehr über die Möbius-Prognosemärkte →
           </button>
         </div>
 
