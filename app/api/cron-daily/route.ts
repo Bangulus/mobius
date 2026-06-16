@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { rpDecay, titleFromRp } from '@/lib/progression'
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -11,6 +12,134 @@ function isAuthorized(request: Request): boolean {
   return authHeader === `Bearer ${CRON_SECRET}` || querySecret === CRON_SECRET
 }
 
+async function dbGet(table: string, params: string) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}`, {
+    headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` },
+    cache: 'no-store',
+  })
+  return res.json()
+}
+
+async function dbWrite(method: 'POST' | 'PATCH' | 'DELETE', table: string, filter: string, body?: object) {
+  const url = filter ? `${SUPABASE_URL}/rest/v1/${table}?${filter}` : `${SUPABASE_URL}/rest/v1/${table}`
+  const res = await fetch(url, {
+    method,
+    headers: {
+      apikey:         SERVICE_KEY,
+      Authorization:  `Bearer ${SERVICE_KEY}`,
+      'Content-Type': 'application/json',
+      Prefer:         'return=minimal',
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  })
+  return res
+}
+
+// Heutiges Datum in Berliner Zeitzone als YYYY-MM-DD (gleiches Pattern wie lib/finnhub.ts: getDayMarketCloseISO)
+function todayBerlin(): string {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Berlin' })
+}
+
+// Differenz in ganzen Tagen zwischen zwei YYYY-MM-DD-Strings (identisch zu app/api/login-xp/route.ts)
+function daysBetween(from: string, to: string): number {
+  const fromMs = new Date(from + 'T00:00:00Z').getTime()
+  const toMs   = new Date(to   + 'T00:00:00Z').getTime()
+  return Math.round((toMs - fromMs) / (24 * 60 * 60 * 1000))
+}
+
+// Erster und letzter Tag des Monats von "today" (YYYY-MM-DD), als YYYY-MM-DD.
+function monthBounds(today: string): { start: string; end: string } {
+  const [y, m] = today.split('-').map(Number)
+  const start = `${y}-${String(m).padStart(2, '0')}-01`
+  const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate() // Tag 0 des Folgemonats = letzter Tag dieses Monats
+  const end = `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+  return { start, end }
+}
+
+// ── RP-Verfall: täglich nur das Delta abziehen ───────────────
+// rpDecay(n) ist kumulativ seit Inaktivitätsbeginn. Um pro Tag nur den
+// zusätzlichen Verlust abzuziehen (statt bei jedem Lauf neu zu kumulieren),
+// ziehen wir die Differenz zum Vortag ab: rpDecay(n) - rpDecay(n-1).
+async function applyRpDecay(today: string) {
+  const users: { id: string; rp: number; last_active_date: string | null }[] =
+    await dbGet('users', `rp=gt.0&select=id,rp,last_active_date`)
+
+  if (!users || users.length === 0) return { checked: 0, decayed: 0 }
+
+  let decayed = 0
+  for (const u of users) {
+    if (!u.last_active_date) continue
+    const daysInactive = daysBetween(u.last_active_date, today)
+    if (daysInactive <= 0) continue
+
+    const decayToday     = rpDecay(daysInactive)
+    const decayYesterday = rpDecay(daysInactive - 1)
+    const dailyLoss      = decayToday - decayYesterday
+    if (dailyLoss <= 0) continue
+
+    const newRp = Math.max(0, u.rp - dailyLoss)
+    if (newRp === u.rp) continue
+
+    await dbWrite('PATCH', 'users', `id=eq.${u.id}`, {
+      rp: newRp,
+      title: titleFromRp(newRp),
+    })
+    decayed++
+  }
+  return { checked: users.length, decayed }
+}
+
+// ── Saison-Reset (self-healing) ──────────────────────────────
+// Prüft, ob eine aktive Season existiert und ob sie abgelaufen ist.
+// Fehlt eine aktive Season komplett (Erstlauf oder Datenfehler), wird
+// direkt eine neue für den aktuellen Kalendermonat angelegt.
+async function checkSeasonReset(today: string) {
+  const activeSeasons: { id: string; start_date: string; end_date: string }[] =
+    await dbGet('seasons', `is_active=eq.true&select=id,start_date,end_date`)
+
+  const active = activeSeasons?.[0]
+
+  // Fall 1: keine aktive Season vorhanden → self-healing, neue anlegen
+  if (!active) {
+    const { start, end } = monthBounds(today)
+    await dbWrite('POST', 'seasons', '', { start_date: start, end_date: end, is_active: true })
+    return { action: 'self_healed_new_season', start, end }
+  }
+
+  // Fall 2: aktive Season noch nicht abgelaufen → nichts tun
+  if (active.end_date >= today) {
+    return { action: 'none', activeSeasonId: active.id, endsAt: active.end_date }
+  }
+
+  // Fall 3: aktive Season ist abgelaufen → Reset durchführen
+  const users: { id: string; rp: number; title: string | null }[] =
+    await dbGet('users', `select=id,rp,title`)
+
+  let snapshotted = 0
+  for (const u of users) {
+    const rp = u.rp ?? 0
+    const peakTitle = u.title ?? 'Nadir'
+    // Nur User mit tatsächlicher Aktivität in der Saison snapshotten
+    if (rp > 0 || peakTitle !== 'Nadir') {
+      await dbWrite('POST', 'user_seasons', '', {
+        user_id: u.id,
+        season_id: active.id,
+        rp,
+        peak_title: peakTitle,
+      })
+      snapshotted++
+    }
+    await dbWrite('PATCH', 'users', `id=eq.${u.id}`, { rp: 0, title: 'Nadir' })
+  }
+
+  // Alte Season schließen, neue für den aktuellen Kalendermonat anlegen
+  await dbWrite('PATCH', 'seasons', `id=eq.${active.id}`, { is_active: false })
+  const { start, end } = monthBounds(today)
+  await dbWrite('POST', 'seasons', '', { start_date: start, end_date: end, is_active: true })
+
+  return { action: 'reset_performed', closedSeasonId: active.id, snapshotted, newStart: start, newEnd: end }
+}
+
 export async function GET(request: Request) {
   if (!isAuthorized(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -19,6 +148,7 @@ export async function GET(request: Request) {
   const host     = request.headers.get('host') || 'localhost:3000'
   const protocol = host.includes('localhost') ? 'http' : 'https'
   const base     = `${protocol}://${host}`
+  const today    = todayBerlin()
   const results: Record<string, unknown> = {}
 
   // --- FINANCE ---
@@ -40,7 +170,6 @@ export async function GET(request: Request) {
   } catch (e) {
     results.financeCreateError = String(e)
   }
-
   // --- SOCCER ---
   try {
     const soccerCreate = await fetch(`${base}/api/create-soccer-market`, {
@@ -60,7 +189,6 @@ export async function GET(request: Request) {
   } catch (e) {
     results.soccerResolveError = String(e)
   }
-
   // --- FORMULA 1 ---
   try {
     const f1Create = await fetch(`${base}/api/create-f1-markets`, {
@@ -80,7 +208,6 @@ export async function GET(request: Request) {
   } catch (e) {
     results.f1ResolveError = String(e)
   }
-
   // --- WETTER ---
   try {
     const weatherResolve = await fetch(`${base}/api/resolve-weather-market`, {
@@ -101,6 +228,20 @@ export async function GET(request: Request) {
     results.weatherCreateError = String(e)
   }
 
+  // --- PROGRESSION: RP-VERFALL ---
+  try {
+    results.rpDecay = await applyRpDecay(today)
+  } catch (e) {
+    results.rpDecayError = String(e)
+  }
+
+  // --- PROGRESSION: SAISON-RESET (SELF-HEALING) ---
+  try {
+    results.seasonCheck = await checkSeasonReset(today)
+  } catch (e) {
+    results.seasonCheckError = String(e)
+  }
+
   // --- CRON LOG ---
   try {
     const hadErrors =
@@ -108,7 +249,6 @@ export async function GET(request: Request) {
       ((results.financeCreate as { errors?: unknown[] })?.errors?.length ?? 0) > 0 ||
       ((results.weatherResolve as { errors?: unknown[] })?.errors?.length ?? 0) > 0 ||
       Object.keys(results).some(k => k.endsWith('Error'))
-
     await fetch(`${SUPABASE_URL}/rest/v1/cron_logs`, {
       method: 'POST',
       headers: {
