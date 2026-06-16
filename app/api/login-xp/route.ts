@@ -1,0 +1,129 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { XP_LOGIN, XP_STREAK_7, levelFromXp } from '@/lib/progression'
+
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const SERVICE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY!
+
+async function dbGet(table: string, params: string) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}`, {
+    headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` },
+    cache: 'no-store',
+  })
+  return res.json()
+}
+
+async function dbWrite(method: 'POST' | 'PATCH' | 'DELETE', table: string, filter: string, body?: object) {
+  const url = filter ? `${SUPABASE_URL}/rest/v1/${table}?${filter}` : `${SUPABASE_URL}/rest/v1/${table}`
+  const res = await fetch(url, {
+    method,
+    headers: {
+      apikey: SERVICE_KEY,
+      Authorization: `Bearer ${SERVICE_KEY}`,
+      'Content-Type': 'application/json',
+      Prefer: 'return=minimal',
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  })
+  return res
+}
+
+// Heutiges Datum in Berliner Zeitzone als YYYY-MM-DD (gleiches Pattern wie lib/finnhub.ts: getDayMarketCloseISO)
+function todayBerlin(): string {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Berlin' })
+}
+
+// Differenz in ganzen Tagen zwischen zwei YYYY-MM-DD-Strings
+function daysBetween(from: string, to: string): number {
+  const fromMs = new Date(from + 'T00:00:00Z').getTime()
+  const toMs   = new Date(to   + 'T00:00:00Z').getTime()
+  return Math.round((toMs - fromMs) / (24 * 60 * 60 * 1000))
+}
+
+export async function POST(req: NextRequest) {
+  // Auth: Session aus Authorization Header (identisch zu place-bet)
+  const authHeader = req.headers.get('authorization')
+  if (!authHeader?.startsWith('Bearer ')) {
+    return NextResponse.json({ error: 'Nicht eingeloggt.' }, { status: 401 })
+  }
+  const userToken = authHeader.replace('Bearer ', '').trim()
+
+  const authRes = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+    headers: {
+      apikey: SERVICE_KEY,
+      Authorization: `Bearer ${userToken}`,
+    },
+    cache: 'no-store',
+  })
+  if (!authRes.ok) {
+    return NextResponse.json({ error: 'Ungültige Session.' }, { status: 401 })
+  }
+  const authUser = await authRes.json()
+  const userId = authUser?.id
+  if (!userId) {
+    return NextResponse.json({ error: 'Ungültige Session.' }, { status: 401 })
+  }
+
+  const userRows = await dbGet('users', `id=eq.${userId}&select=xp,login_streak,last_login_date`)
+  const u = userRows?.[0]
+  if (!u) {
+    return NextResponse.json({ error: 'Benutzer nicht gefunden.' }, { status: 404 })
+  }
+
+  const today = todayBerlin()
+  const lastLogin: string | null = u.last_login_date ?? null
+  const currentStreak: number = u.login_streak ?? 0
+  const currentXp: number = u.xp ?? 0
+
+  // Bereits heute eingeloggt → idempotent, kein XP, kein Streak-Update
+  if (lastLogin === today) {
+    return NextResponse.json({ success: true, alreadyAwarded: true, streak: currentStreak })
+  }
+
+  const gap = lastLogin ? daysBetween(lastLogin, today) : null
+  const newStreak = gap === 1 ? currentStreak + 1 : 1
+
+  let xpGain = XP_LOGIN
+  const streakBonusAwarded = newStreak > 0 && newStreak % 7 === 0
+  if (streakBonusAwarded) xpGain += XP_STREAK_7
+
+  const newXp = currentXp + xpGain
+  const newLevel = levelFromXp(newXp)
+
+  const patchRes = await dbWrite('PATCH', 'users', `id=eq.${userId}`, {
+    xp: newXp,
+    level: newLevel,
+    login_streak: newStreak,
+    last_login_date: today,
+    last_active_date: today,
+  })
+  if (!patchRes.ok) {
+    return NextResponse.json({ error: 'Update fehlgeschlagen.' }, { status: 500 })
+  }
+
+  await dbWrite('POST', 'xp_events', '', {
+    user_id: userId,
+    type: 'login',
+    xp_delta: XP_LOGIN,
+    rp_delta: 0,
+    market_id: null,
+  })
+  if (streakBonusAwarded) {
+    await dbWrite('POST', 'xp_events', '', {
+      user_id: userId,
+      type: 'streak_bonus',
+      xp_delta: XP_STREAK_7,
+      rp_delta: 0,
+      market_id: null,
+    })
+  }
+
+  return NextResponse.json({
+    success: true,
+    alreadyAwarded: false,
+    streak: newStreak,
+    streakBonusAwarded,
+    xpGain,
+    newXp,
+    newLevel,
+  })
+}
