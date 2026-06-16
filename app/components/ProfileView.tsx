@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import PnLChart from './PnLChart';
+import { xpForLevel, cumulativeXpForLevel } from '@/lib/progression';
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -34,6 +35,11 @@ interface Props {
   displayName: string;
   avatarUrl: string;
   balance: number | null;
+  xp?: number | null;
+  level?: number | null;
+  rp?: number | null;
+  title?: string | null;
+  peakTitle?: string | null;
   onUsernameChange: (name: string) => void;
   onAvatarChange: (url: string) => void;
 }
@@ -121,6 +127,26 @@ function avatarColor(str: string) {
   return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length];
 }
 
+// ── Titel-Farben (Platzhalter bis eigene Logos existieren) ──
+// Aktueller Titel (Karte 1) immer Bitcoin-Orange, unabhängig vom Rang.
+const CURRENT_TITLE_BG = 'rgba(247,147,26,0.12)';
+const CURRENT_TITLE_COLOR = '#c9740f';
+
+// Titel-Historie: feste Ramp pro Rang (50er-Hintergrund / 800er-Text)
+const TITLE_RAMP: Record<string, { bg: string; color: string }> = {
+  Nadir:      { bg: '#F1EFE8', color: '#444441' },
+  Initiat:    { bg: '#FAECE7', color: '#712B13' },
+  Bayes:      { bg: '#E6F1FB', color: '#0C447C' },
+  Indigator:  { bg: '#E1F5EE', color: '#085041' },
+  Mantiker:   { bg: '#EAF3DE', color: '#27500A' },
+  Theoros:    { bg: '#FBEAF0', color: '#72243E' },
+  Heliomant:  { bg: '#FAEEDA', color: '#633806' },
+  Praesagium: { bg: '#FCEBEB', color: '#791F1F' },
+};
+function titleRampColors(title: string | null | undefined) {
+  return TITLE_RAMP[title ?? ''] ?? TITLE_RAMP.Nadir;
+}
+
 function calcStreak(trades: TradeRow[]): number {
   if (trades.length === 0) return 0;
   const days = new Set(
@@ -192,7 +218,122 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean
   );
 }
 
-export default function ProfileView({ userId, displayName, avatarUrl, balance, onUsernameChange, onAvatarChange }: Props) {
+// ── PROGRESSIONS-SEKTION (Level/XP/RP + Titel-Historie) ──────
+
+interface SeasonHistoryEntry {
+  seasonId: string;
+  startDate: string;
+  rp: number;
+  peakTitle: string;
+}
+
+function monthLabel(isoDate: string): string {
+  const d = new Date(isoDate);
+  return d.toLocaleDateString('de-DE', { month: 'long', year: 'numeric', timeZone: 'Europe/Berlin' });
+}
+
+function ProgressionSection({ userId, xp, level, rp, title, peakTitle }: {
+  userId: string;
+  xp: number;
+  level: number;
+  rp: number;
+  title: string;
+  peakTitle: string;
+}) {
+  const [historyOpen, setHistoryOpen]   = useState(false);
+  const [history, setHistory]           = useState<SeasonHistoryEntry[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyLoaded, setHistoryLoaded]   = useState(false);
+
+  const xpFloor   = level > 1 ? cumulativeXpForLevel(level - 1) : 0;
+  const xpForThis = xpForLevel(level);
+  const xpInto    = Math.max(0, Math.min(xpForThis, xp - xpFloor));
+
+  const loadHistory = useCallback(async () => {
+    if (historyLoaded) return;
+    setHistoryLoading(true);
+    const seasonRows: { season_id: string; rp: number; peak_title: string }[] =
+      await dbGet('user_seasons', `user_id=eq.${userId}&select=season_id,rp,peak_title`);
+    if (!seasonRows || seasonRows.length === 0) {
+      setHistory([]);
+      setHistoryLoading(false);
+      setHistoryLoaded(true);
+      return;
+    }
+    const seasonIds = seasonRows.map(r => r.season_id);
+    const seasons: { id: string; start_date: string }[] =
+      await dbGet('seasons', `id=in.(${seasonIds.join(',')})&select=id,start_date`);
+    const seasonMap: Record<string, string> = {};
+    seasons?.forEach(s => { seasonMap[s.id] = s.start_date; });
+
+    const merged: SeasonHistoryEntry[] = seasonRows
+      .filter(r => seasonMap[r.season_id])
+      .map(r => ({ seasonId: r.season_id, startDate: seasonMap[r.season_id], rp: r.rp, peakTitle: r.peak_title }))
+      .sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime());
+
+    setHistory(merged);
+    setHistoryLoading(false);
+    setHistoryLoaded(true);
+  }, [userId, historyLoaded]);
+
+  const toggleHistory = () => {
+    const next = !historyOpen;
+    setHistoryOpen(next);
+    if (next) loadHistory();
+  };
+
+  return (
+    <div style={{ marginBottom: 24 }}>
+      <div className="card" style={{ padding: '1.25rem 1.5rem', marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, flexWrap: 'wrap', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 16, fontWeight: 500, color: 'var(--text)' }}>Level {level}</span>
+            <span style={{ fontSize: 12, padding: '3px 10px', borderRadius: 8, background: CURRENT_TITLE_BG, color: CURRENT_TITLE_COLOR, fontWeight: 500 }}>{title}</span>
+          </div>
+          <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{xpInto.toLocaleString('de')} / {xpForThis.toLocaleString('de')} XP bis Level {level + 1}</span>
+        </div>
+        <div style={{ height: 8, borderRadius: 4, background: 'var(--surface)', overflow: 'hidden', marginBottom: 18 }}>
+          <div style={{ width: `${Math.round((xpInto / xpForThis) * 100)}%`, height: '100%', background: '#7F77DD', borderRadius: 4 }} />
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: 14, borderTop: '0.5px solid var(--border)', flexWrap: 'wrap', gap: 8 }}>
+          <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{rp.toLocaleString('de')} RP <span style={{ color: 'var(--text-subtle)' }}>diese Saison</span></span>
+          <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>Bestwert dieser Saison: <span style={{ color: 'var(--text)', fontWeight: 500 }}>{peakTitle}</span></span>
+        </div>
+      </div>
+
+      <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+        <div onClick={toggleHistory} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', cursor: 'pointer' }}>
+          <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--text)' }}>Titel-Historie</span>
+          <span style={{ fontSize: 18, color: 'var(--text-muted)', transition: 'transform 0.2s', transform: historyOpen ? 'rotate(180deg)' : 'rotate(0deg)', display: 'inline-block' }}>▾</span>
+        </div>
+        {historyOpen && (
+          <div style={{ borderTop: '0.5px solid var(--border)' }}>
+            {historyLoading ? (
+              <div style={{ padding: '20px 18px', fontSize: 13, color: 'var(--text-muted)', textAlign: 'center' }}>Wird geladen…</div>
+            ) : history.length === 0 ? (
+              <div style={{ padding: '20px 18px', fontSize: 13, color: 'var(--text-muted)', textAlign: 'center' }}>Noch keine abgeschlossenen Saisons.</div>
+            ) : (
+              history.map((h, i) => {
+                const colors = titleRampColors(h.peakTitle);
+                return (
+                  <div key={h.seasonId} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '11px 18px', borderBottom: i < history.length - 1 ? '0.5px solid var(--border)' : 'none' }}>
+                    <span style={{ fontSize: 13, color: 'var(--text)' }}>{monthLabel(h.startDate)}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <span style={{ fontSize: 12, color: 'var(--text-subtle)' }}>{h.rp.toLocaleString('de')} RP</span>
+                      <span style={{ fontSize: 12, padding: '2px 9px', borderRadius: 8, background: colors.bg, color: colors.color, fontWeight: 500 }}>{h.peakTitle}</span>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export default function ProfileView({ userId, displayName, avatarUrl, balance, xp, level, rp, title, peakTitle, onUsernameChange, onAvatarChange }: Props) {
   const router = useRouter();
   const [newUsername, setNewUsername]           = useState(displayName);
   const [uploadingAvatar, setUploadingAvatar]   = useState(false);
@@ -464,6 +605,16 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, o
           {rightCards}
         </div>
       )}
+
+      {/* ── PROGRESSION (Level/XP/RP + Titel-Historie) ── */}
+      <ProgressionSection
+        userId={userId}
+        xp={xp ?? 0}
+        level={level ?? 1}
+        rp={rp ?? 0}
+        title={title ?? 'Nadir'}
+        peakTitle={peakTitle ?? title ?? 'Nadir'}
+      />
 
       {/* ── TABS ── */}
       <div style={{ borderBottom: '1px solid var(--border)', marginBottom: 20, display: 'flex', overflowX: 'auto' }}>
