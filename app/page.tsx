@@ -499,6 +499,7 @@ export default function Home() {
     if (userData?.[0]) {
       setUser(userData[0]); userRef.current = userData[0]
       localStorage.setItem('mobius_session', JSON.stringify({ access_token: res.access_token, user_id: userId }))
+      fetch('/api/login-xp', { method: 'POST', headers: { Authorization: `Bearer ${res.access_token}` } }).catch(() => {})
       setShowAuth(false); resetAuthForm()
     } else { setAuthError('Benutzer nicht gefunden.') }
   }
