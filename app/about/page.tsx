@@ -280,7 +280,7 @@ function MarketExample() {
         fontSize: 13, color: 'var(--text-muted, #64748b)', marginTop: 12,
         textAlign: 'center', maxWidth: 320, lineHeight: 1.5,
       }}>
-        So sieht das auf Möbius konkret aus: 50&nbsp;% glauben an &bdquo;Ja&ldquo;, 50&nbsp;% an &bdquo;Nein&ldquo; — der Preis ist die Wahrscheinlichkeit.
+        So sieht das auf Möbius konkret aus: 50&nbsp;% glauben an &bdquo;Ja&ldquo;, 50&nbsp;% an &bdquo;Nein&ldquo;. Der Preis für einen  &bdquo;Ja&ldquo;-Anteil liegt also bei 50ct. 
       </div>
     </div>
   )
