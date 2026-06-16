@@ -60,6 +60,9 @@ export default function AboutPage() {
           <p style={pStyle}>
             Ein Prognosemarkt ist im Kern eine einfache Frage mit Preisschild. Dieser Preis repräsentiert eine Wahrscheinlichkeit. Wer glaubt, dass ein Ereignis eintritt, kauft JA-Anteile. Wer glaubt, dass dieses Ereignis nicht eintritt, kauft NEIN-Anteile. So entsteht aus vielen Einzelmeinungen ein einziges, verdichtetes Signal.
           </p>
+
+          <MarketExample />
+
           <p style={pStyle}>
             Das funktioniert, weil Prognosemärkte die Anreizstruktur von Kapitalmärkten mit der Flexibilität direkter Ereignisprognosen kombinieren. Wer richtig liegt, gewinnt. Wer falsch liegt, verliert. Das schafft einen Anreiz, den es bei keiner Sonntagsumfrage und keinem YouTube-Kommentar gibt: es lohnt sich, die Wahrheit zu sagen.
           </p>
@@ -254,6 +257,31 @@ function FeatureBlock({ title, children }: { title: string; children: React.Reac
         {title}
       </div>
       <p style={{ ...pStyle, margin: 0 }}>{children}</p>
+    </div>
+  )
+}
+
+function MarketExample() {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', margin: '24px 0 28px' }}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src="/about-market-beispiel.jpg"
+        alt="Beispiel eines Möbius-Marktes: Wird es in New York heute wärmer als gestern? Aktuell 50 % Ja, 50 % Nein."
+        style={{
+          width: 280,
+          maxWidth: '100%',
+          borderRadius: 12,
+          border: '1px solid var(--border, #e2e8f0)',
+          boxShadow: '0 4px 16px rgba(15,23,42,0.06)',
+        }}
+      />
+      <div style={{
+        fontSize: 13, color: 'var(--text-muted, #64748b)', marginTop: 12,
+        textAlign: 'center', maxWidth: 320, lineHeight: 1.5,
+      }}>
+        So sieht das auf Möbius konkret aus: 50&nbsp;% glauben an &bdquo;Ja&ldquo;, 50&nbsp;% an &bdquo;Nein&ldquo; — der Preis ist die Wahrscheinlichkeit.
+      </div>
     </div>
   )
 }
