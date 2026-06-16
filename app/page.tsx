@@ -69,6 +69,11 @@ interface User {
   username: string
   balance: number
   avatar_url?: string
+  xp?: number
+  level?: number
+  rp?: number
+  title?: string
+  peak_title?: string
 }
 
 interface LeaderboardEntry {
@@ -789,6 +794,11 @@ export default function Home() {
                 displayName={user.username}
                 avatarUrl={user.avatar_url ?? ''}
                 balance={user.balance}
+                xp={user.xp}
+                level={user.level}
+                rp={user.rp}
+                title={user.title}
+                peakTitle={user.peak_title}
                 onUsernameChange={(name) => setUser({ ...user, username: name })}
                 onAvatarChange={(url) => setUser({ ...user, avatar_url: url })}
               />
