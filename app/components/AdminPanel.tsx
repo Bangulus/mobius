@@ -227,7 +227,8 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
     const existing = new Set<string>((existingRows ?? []).map((r: { badge_id: string }) => r.badge_id));
 
     // Neue Badges vergeben
-    for (const badgeId of progBadges) {
+    // Neue Badges vergeben
+    for (const badgeId of Array.from(progBadges)) {
       if (!existing.has(badgeId)) {
         await fetch(`${supabaseUrl}/rest/v1/user_badges`, {
           method: 'POST',
@@ -238,7 +239,7 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
     }
 
     // Entzogene Badges löschen
-    for (const badgeId of existing) {
+    for (const badgeId of Array.from(existing)) {
       if (!progBadges.has(badgeId)) {
         await fetch(`${supabaseUrl}/rest/v1/user_badges?user_id=eq.${uid}&badge_id=eq.${badgeId}`, {
           method: 'DELETE',
