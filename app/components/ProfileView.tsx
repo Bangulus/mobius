@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import PnLChart from './PnLChart';
 import { xpForLevel, cumulativeXpForLevel } from '@/lib/progression';
-import { BADGES, BadgeDef } from '@/lib/badges';
+import { BADGES } from '@/lib/badges';
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -101,14 +101,14 @@ const DEFAULT_PRIVACY: PrivacySettings = {
 };
 
 const PRIVACY_LABELS: { key: keyof PrivacySettings; label: string; desc: string }[] = [
-  { key: 'guthaben',               label: 'Guthaben',               desc: 'Dein aktuelles Guthaben in ₫' },
-  { key: 'gewinn_verlust',         label: 'Gewinn / Verlust',        desc: 'Gesamte Bilanz aller Prognosen' },
-  { key: 'groesster_gewinn',       label: 'Größter Gewinn',          desc: 'Deine beste Einzelauszahlung' },
-  { key: 'eingesetzt_gewonnen',    label: 'Eingesetzt & Gewonnen',   desc: 'Gesamtvolumen deiner Trades' },
-  { key: 'offene_positionen',      label: 'Offene Positionen',       desc: 'Anzahl aktiver Wetten' },
-  { key: 'lieblingskategorie',     label: 'Lieblingskategorie',      desc: 'In welcher Kategorie du am meisten handelst' },
-  { key: 'durchschnittlicher_einsatz', label: 'Ø Einsatz',          desc: 'Durchschnittlicher Einsatz pro Prognose' },
-  { key: 'aktivitaet',             label: 'Aktivitäts-Feed',         desc: 'Deine letzten Trades öffentlich sichtbar' },
+  { key: 'guthaben',                   label: 'Guthaben',           desc: 'Dein aktuelles Guthaben in ₫' },
+  { key: 'gewinn_verlust',             label: 'Gewinn / Verlust',   desc: 'Gesamte Bilanz aller Prognosen' },
+  { key: 'groesster_gewinn',           label: 'Größter Gewinn',     desc: 'Deine beste Einzelauszahlung' },
+  { key: 'eingesetzt_gewonnen',        label: 'Eingesetzt & Gewonnen', desc: 'Gesamtvolumen deiner Trades' },
+  { key: 'offene_positionen',          label: 'Offene Positionen',  desc: 'Anzahl aktiver Wetten' },
+  { key: 'lieblingskategorie',         label: 'Lieblingskategorie', desc: 'In welcher Kategorie du am meisten handelst' },
+  { key: 'durchschnittlicher_einsatz', label: 'Ø Einsatz',         desc: 'Durchschnittlicher Einsatz pro Prognose' },
+  { key: 'aktivitaet',                 label: 'Aktivitäts-Feed',    desc: 'Deine letzten Trades öffentlich sichtbar' },
 ];
 
 const COIN_COLORS: Record<string, string> = {
@@ -128,7 +128,7 @@ function avatarColor(str: string) {
   return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length];
 }
 
-const CURRENT_TITLE_BG = 'rgba(247,147,26,0.12)';
+const CURRENT_TITLE_BG    = 'rgba(247,147,26,0.12)';
 const CURRENT_TITLE_COLOR = '#c9740f';
 
 const TITLE_RAMP: Record<string, { bg: string; color: string }> = {
@@ -147,14 +147,12 @@ function titleRampColors(title: string | null | undefined) {
 
 function calcStreak(trades: TradeRow[]): number {
   if (trades.length === 0) return 0;
-  const days = new Set(
-    trades.map(t => {
-      const d = new Date(t.created_at);
-      return `${d.getUTCFullYear()}-${d.getUTCMonth()}-${d.getUTCDate()}`;
-    })
-  );
+  const days = new Set(trades.map(t => {
+    const d = new Date(t.created_at);
+    return `${d.getUTCFullYear()}-${d.getUTCMonth()}-${d.getUTCDate()}`;
+  }));
   let streak = 0;
-  const now = new Date();
+  const now   = new Date();
   const check = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
   while (true) {
     const key = `${check.getUTCFullYear()}-${check.getUTCMonth()}-${check.getUTCDate()}`;
@@ -174,12 +172,13 @@ function calcTrefferquote(entries: PortfolioEntry[]): number | null {
 
 function formatDateTime(iso: string): { date: string; time: string } {
   const d = new Date(iso);
-  const date = d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit' });
-  const time = d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
-  return { date, time };
+  return {
+    date: d.toLocaleDateString('de-DE',  { day: '2-digit', month: '2-digit', year: '2-digit' }),
+    time: d.toLocaleTimeString('de-DE',  { hour: '2-digit', minute: '2-digit' }),
+  };
 }
 
-type TabType = 'positionen' | 'aktivitaet';
+type TabType    = 'positionen' | 'aktivitaet';
 type SubTabType = 'offen' | 'geschlossen';
 
 function useIsMobile() {
@@ -200,18 +199,84 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean
       style={{
         width: 44, height: 24, borderRadius: 12, border: 'none', cursor: 'pointer',
         background: checked ? 'var(--accent)' : 'var(--border-md)',
-        position: 'relative', flexShrink: 0, transition: 'background 0.2s',
-        padding: 0,
+        position: 'relative', flexShrink: 0, transition: 'background 0.2s', padding: 0,
       }}
     >
       <div style={{
         width: 18, height: 18, borderRadius: '50%', background: '#fff',
-        position: 'absolute', top: 3,
-        left: checked ? 23 : 3,
-        transition: 'left 0.2s',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+        position: 'absolute', top: 3, left: checked ? 23 : 3,
+        transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
       }} />
     </button>
+  );
+}
+
+// ── PRIVACY-SEKTION ───────────────────────────────────────────
+
+function PrivacySection({ userId }: { userId: string }) {
+  const [open, setOpen]         = useState(false);
+  const [privacy, setPrivacy]   = useState<PrivacySettings>(DEFAULT_PRIVACY);
+  const [saving, setSaving]     = useState(false);
+  const [loaded, setLoaded]     = useState(false);
+
+  useEffect(() => {
+    if (!open || loaded) return;
+    dbGet('users', `id=eq.${userId}&select=privacy_settings`).then(data => {
+      if (data?.[0]?.privacy_settings) setPrivacy({ ...DEFAULT_PRIVACY, ...data[0].privacy_settings });
+      setLoaded(true);
+    });
+  }, [open, loaded, userId]);
+
+  const toggle = async (key: keyof PrivacySettings) => {
+    const updated = { ...privacy, [key]: !privacy[key] };
+    setPrivacy(updated);
+    setSaving(true);
+    await dbPatch('users', `id=eq.${userId}`, { privacy_settings: updated });
+    setSaving(false);
+  };
+
+  return (
+    <div className="card" style={{ padding: 0, overflow: 'hidden', marginBottom: 24 }}>
+      <div
+        onClick={() => setOpen(o => !o)}
+        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', cursor: 'pointer' }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--text)' }}>Datenschutz</span>
+          {saving && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Speichert…</span>}
+        </div>
+        <span style={{ fontSize: 18, color: 'var(--text-muted)', transition: 'transform 0.2s', transform: open ? 'rotate(180deg)' : 'rotate(0deg)', display: 'inline-block' }}>▾</span>
+      </div>
+
+      {open && (
+        <div style={{ borderTop: '0.5px solid var(--border)' }}>
+          <div style={{ padding: '12px 18px', fontSize: 12, color: 'var(--text-muted)', borderBottom: '0.5px solid var(--border)' }}>
+            Steuere was andere Nutzer auf deinem öffentlichen Profil sehen können.
+          </div>
+          {PRIVACY_LABELS.map((item, i) => (
+            <div
+              key={item.key}
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '13px 18px',
+                borderBottom: i < PRIVACY_LABELS.length - 1 ? '0.5px solid var(--border)' : 'none',
+              }}
+            >
+              <div style={{ flex: 1, minWidth: 0, marginRight: 16 }}>
+                <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)', marginBottom: 2 }}>{item.label}</div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{item.desc}</div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                <span style={{ fontSize: 11, color: privacy[item.key] ? '#16a34a' : 'var(--text-muted)', fontWeight: 500 }}>
+                  {privacy[item.key] ? 'Sichtbar' : 'Versteckt'}
+                </span>
+                <Toggle checked={privacy[item.key]} onChange={() => toggle(item.key)} />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -221,31 +286,31 @@ const BADGE_CATEGORY_LABELS: Record<string, string> = {
   trades: 'Trades',
   wins:   'Korrekte Prognosen',
   streak: 'Login-Streak',
-}
+};
 
 function BadgeSection({ userId }: { userId: string }) {
-  const [earnedIds, setEarnedIds] = useState<Set<string>>(new Set())
-  const [awardedAt, setAwardedAt] = useState<Record<string, string>>({})
-  const [loading, setLoading]     = useState(true)
-  const [open, setOpen]           = useState(true)
+  const [earnedIds, setEarnedIds] = useState<Set<string>>(new Set());
+  const [awardedAt, setAwardedAt] = useState<Record<string, string>>({});
+  const [loading, setLoading]     = useState(true);
+  const [open, setOpen]           = useState(true);
 
   useEffect(() => {
     dbGet('user_badges', `user_id=eq.${userId}&select=badge_id,awarded_at`).then(rows => {
-      const ids = new Set<string>()
-      const dates: Record<string, string> = {}
-      ;(rows ?? []).forEach((r: { badge_id: string; awarded_at: string }) => {
-        ids.add(r.badge_id)
-        dates[r.badge_id] = r.awarded_at
-      })
-      setEarnedIds(ids)
-      setAwardedAt(dates)
-      setLoading(false)
-    })
-  }, [userId])
+      const ids   = new Set<string>();
+      const dates: Record<string, string> = {};
+      (rows ?? []).forEach((r: { badge_id: string; awarded_at: string }) => {
+        ids.add(r.badge_id);
+        dates[r.badge_id] = r.awarded_at;
+      });
+      setEarnedIds(ids);
+      setAwardedAt(dates);
+      setLoading(false);
+    });
+  }, [userId]);
 
-  const categories = ['trades', 'wins', 'streak'] as const
-  const earnedCount = earnedIds.size
-  const totalCount  = BADGES.length
+  const categories  = ['trades', 'wins', 'streak'] as const;
+  const earnedCount = earnedIds.size;
+  const totalCount  = BADGES.length;
 
   return (
     <div className="card" style={{ padding: 0, overflow: 'hidden', marginBottom: 24 }}>
@@ -267,7 +332,7 @@ function BadgeSection({ userId }: { userId: string }) {
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
               {categories.map(cat => {
-                const catBadges = BADGES.filter(b => b.category === cat)
+                const catBadges = BADGES.filter(b => b.category === cat);
                 return (
                   <div key={cat}>
                     <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12 }}>
@@ -275,8 +340,8 @@ function BadgeSection({ userId }: { userId: string }) {
                     </div>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
                       {catBadges.map(badge => {
-                        const earned = earnedIds.has(badge.id)
-                        const date   = awardedAt[badge.id]
+                        const earned = earnedIds.has(badge.id);
+                        const date   = awardedAt[badge.id];
                         return (
                           <div
                             key={badge.id}
@@ -284,7 +349,7 @@ function BadgeSection({ userId }: { userId: string }) {
                             style={{
                               display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
                               padding: '12px 14px', borderRadius: 12, minWidth: 80,
-                              border: earned ? '1px solid rgba(99,102,241,0.25)' : '1px solid var(--border)',
+                              border:     earned ? '1px solid rgba(99,102,241,0.25)' : '1px solid var(--border)',
                               background: earned ? 'rgba(99,102,241,0.06)' : 'var(--surface)',
                               opacity: earned ? 1 : 0.4,
                               transition: 'all 0.15s',
@@ -300,41 +365,35 @@ function BadgeSection({ userId }: { userId: string }) {
                               </span>
                             )}
                           </div>
-                        )
+                        );
                       })}
                     </div>
                   </div>
-                )
+                );
               })}
             </div>
           )}
         </div>
       )}
     </div>
-  )
+  );
 }
 
 // ── PROGRESSIONS-SEKTION ──────────────────────────────────────
 
 interface SeasonHistoryEntry {
-  seasonId: string;
-  startDate: string;
-  rp: number;
-  peakTitle: string;
+  seasonId:   string;
+  startDate:  string;
+  rp:         number;
+  peakTitle:  string;
 }
 
 function monthLabel(isoDate: string): string {
-  const d = new Date(isoDate);
-  return d.toLocaleDateString('de-DE', { month: 'long', year: 'numeric', timeZone: 'Europe/Berlin' });
+  return new Date(isoDate).toLocaleDateString('de-DE', { month: 'long', year: 'numeric', timeZone: 'Europe/Berlin' });
 }
 
 function ProgressionSection({ userId, xp, level, rp, title, peakTitle }: {
-  userId: string;
-  xp: number;
-  level: number;
-  rp: number;
-  title: string;
-  peakTitle: string;
+  userId: string; xp: number; level: number; rp: number; title: string; peakTitle: string;
 }) {
   const [historyOpen, setHistoryOpen]       = useState(false);
   const [history, setHistory]               = useState<SeasonHistoryEntry[]>([]);
@@ -350,33 +409,23 @@ function ProgressionSection({ userId, xp, level, rp, title, peakTitle }: {
     setHistoryLoading(true);
     const seasonRows: { season_id: string; rp: number; peak_title: string }[] =
       await dbGet('user_seasons', `user_id=eq.${userId}&select=season_id,rp,peak_title`);
-    if (!seasonRows || seasonRows.length === 0) {
-      setHistory([]);
-      setHistoryLoading(false);
-      setHistoryLoaded(true);
-      return;
-    }
+    if (!seasonRows || seasonRows.length === 0) { setHistory([]); setHistoryLoading(false); setHistoryLoaded(true); return; }
     const seasonIds = seasonRows.map(r => r.season_id);
     const seasons: { id: string; start_date: string }[] =
       await dbGet('seasons', `id=in.(${seasonIds.join(',')})&select=id,start_date`);
     const seasonMap: Record<string, string> = {};
     seasons?.forEach(s => { seasonMap[s.id] = s.start_date; });
-
-    const merged: SeasonHistoryEntry[] = seasonRows
-      .filter(r => seasonMap[r.season_id])
-      .map(r => ({ seasonId: r.season_id, startDate: seasonMap[r.season_id], rp: r.rp, peakTitle: r.peak_title }))
-      .sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime());
-
-    setHistory(merged);
+    setHistory(
+      seasonRows
+        .filter(r => seasonMap[r.season_id])
+        .map(r => ({ seasonId: r.season_id, startDate: seasonMap[r.season_id], rp: r.rp, peakTitle: r.peak_title }))
+        .sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime())
+    );
     setHistoryLoading(false);
     setHistoryLoaded(true);
   }, [userId, historyLoaded]);
 
-  const toggleHistory = () => {
-    const next = !historyOpen;
-    setHistoryOpen(next);
-    if (next) loadHistory();
-  };
+  const toggleHistory = () => { const next = !historyOpen; setHistoryOpen(next); if (next) loadHistory(); };
 
   return (
     <div style={{ marginBottom: 24 }}>
@@ -408,20 +457,18 @@ function ProgressionSection({ userId, xp, level, rp, title, peakTitle }: {
               <div style={{ padding: '20px 18px', fontSize: 13, color: 'var(--text-muted)', textAlign: 'center' }}>Wird geladen…</div>
             ) : history.length === 0 ? (
               <div style={{ padding: '20px 18px', fontSize: 13, color: 'var(--text-muted)', textAlign: 'center' }}>Noch keine abgeschlossenen Saisons.</div>
-            ) : (
-              history.map((h, i) => {
-                const colors = titleRampColors(h.peakTitle);
-                return (
-                  <div key={h.seasonId} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '11px 18px', borderBottom: i < history.length - 1 ? '0.5px solid var(--border)' : 'none' }}>
-                    <span style={{ fontSize: 13, color: 'var(--text)' }}>{monthLabel(h.startDate)}</span>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <span style={{ fontSize: 12, color: 'var(--text-subtle)' }}>{h.rp.toLocaleString('de')} RP</span>
-                      <span style={{ fontSize: 12, padding: '2px 9px', borderRadius: 8, background: colors.bg, color: colors.color, fontWeight: 500 }}>{h.peakTitle}</span>
-                    </div>
+            ) : history.map((h, i) => {
+              const colors = titleRampColors(h.peakTitle);
+              return (
+                <div key={h.seasonId} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '11px 18px', borderBottom: i < history.length - 1 ? '0.5px solid var(--border)' : 'none' }}>
+                  <span style={{ fontSize: 13, color: 'var(--text)' }}>{monthLabel(h.startDate)}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ fontSize: 12, color: 'var(--text-subtle)' }}>{h.rp.toLocaleString('de')} RP</span>
+                    <span style={{ fontSize: 12, padding: '2px 9px', borderRadius: 8, background: colors.bg, color: colors.color, fontWeight: 500 }}>{h.peakTitle}</span>
                   </div>
-                );
-              })
-            )}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
@@ -431,57 +478,31 @@ function ProgressionSection({ userId, xp, level, rp, title, peakTitle }: {
 
 export default function ProfileView({ userId, displayName, avatarUrl, balance, xp, level, rp, title, peakTitle, onUsernameChange, onAvatarChange }: Props) {
   const router = useRouter();
-  const [newUsername, setNewUsername]           = useState(displayName);
-  const [uploadingAvatar, setUploadingAvatar]   = useState(false);
-  const [savingUsername, setSavingUsername]     = useState(false);
-  const [profileMessage, setProfileMessage]     = useState('');
-  const [editingUsername, setEditingUsername]   = useState(false);
-  const [tab, setTab]                           = useState<TabType>('positionen');
-  const [subTab, setSubTab]                     = useState<SubTabType>('offen');
-  const [allRows, setAllRows]                   = useState<PortfolioEntry[]>([]);
-  const [allTrades, setAllTrades]               = useState<TradeRow[]>([]);
+  const [newUsername, setNewUsername]         = useState(displayName);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [savingUsername, setSavingUsername]   = useState(false);
+  const [profileMessage, setProfileMessage]   = useState('');
+  const [editingUsername, setEditingUsername] = useState(false);
+  const [tab, setTab]                         = useState<TabType>('positionen');
+  const [subTab, setSubTab]                   = useState<SubTabType>('offen');
+  const [allRows, setAllRows]                 = useState<PortfolioEntry[]>([]);
+  const [allTrades, setAllTrades]             = useState<TradeRow[]>([]);
   const [portfolioLoading, setPortfolioLoading] = useState(true);
-  const [privacy, setPrivacy]                   = useState<PrivacySettings>(DEFAULT_PRIVACY);
-  const [savingPrivacy, setSavingPrivacy]       = useState(false);
-  const isMobile                                = useIsMobile();
+  const isMobile                              = useIsMobile();
 
-  const totalEinsatz     = allRows.reduce((s, r) => s + r.einsatz, 0);
-  const totalAusbe       = allRows.filter(r => r.auszahlung !== null && r.auszahlung > 0).reduce((s, r) => s + (r.auszahlung ?? 0), 0);
-  const offeneCount      = allRows.filter(r => !r.market.resolved).length;
-  const gewonnen         = allRows.filter(r => r.market.resolved && r.auszahlung !== null && r.auszahlung > 0);
-  const groessterGewinn  = gewonnen.length > 0 ? Math.max(...gewonnen.map(r => r.auszahlung ?? 0)) : 0;
-  const offeneRows       = allRows.filter(r => !r.market.resolved);
+  const gewonnen        = allRows.filter(r => r.market.resolved && r.auszahlung !== null && r.auszahlung > 0);
+  const groessterGewinn = gewonnen.length > 0 ? Math.max(...gewonnen.map(r => r.auszahlung ?? 0)) : 0;
+  const offeneRows      = allRows.filter(r => !r.market.resolved);
   const geschlosseneRows = allRows.filter(r => r.market.resolved);
-  const displayRows      = subTab === 'offen' ? offeneRows : geschlosseneRows;
-  const streak           = calcStreak(allTrades);
-  const trefferquote     = calcTrefferquote(allRows);
-  const avgEinsatz       = allRows.length > 0 ? Math.round(totalEinsatz / allRows.length) : 0;
+  const displayRows     = subTab === 'offen' ? offeneRows : geschlosseneRows;
+  const streak          = calcStreak(allTrades);
+  const trefferquote    = calcTrefferquote(allRows);
+  const totalEinsatz    = allRows.reduce((s, r) => s + r.einsatz, 0);
 
   useEffect(() => {
     if (!userId) return;
     dbPatch('users', `id=eq.${userId}`, { last_seen_at: new Date().toISOString() });
   }, [userId]);
-
-  useEffect(() => {
-    if (!userId) return;
-    dbGet('users', `id=eq.${userId}&select=privacy_settings`).then(data => {
-      if (data?.[0]?.privacy_settings) {
-        setPrivacy({ ...DEFAULT_PRIVACY, ...data[0].privacy_settings });
-      }
-    });
-  }, [userId]);
-
-  const savePrivacy = async (newPrivacy: PrivacySettings) => {
-    setSavingPrivacy(true);
-    await dbPatch('users', `id=eq.${userId}`, { privacy_settings: newPrivacy });
-    setSavingPrivacy(false);
-  };
-
-  const togglePrivacy = (key: keyof PrivacySettings) => {
-    const updated = { ...privacy, [key]: !privacy[key] };
-    setPrivacy(updated);
-    savePrivacy(updated);
-  };
 
   const loadPortfolio = useCallback(async () => {
     setPortfolioLoading(true);
@@ -529,9 +550,9 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, x
 
   useEffect(() => {
     if (userId) {
-      loadPortfolio()
-      const id = setInterval(loadPortfolio, 3000)
-      return () => clearInterval(id)
+      loadPortfolio();
+      const id = setInterval(loadPortfolio, 3000);
+      return () => clearInterval(id);
     }
   }, [userId, loadPortfolio]);
 
@@ -593,18 +614,13 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, x
                 <input type="text" value={newUsername} onChange={e => setNewUsername(e.target.value)} autoFocus
                   onKeyDown={e => { if (e.key === 'Enter') saveUsername(); if (e.key === 'Escape') setEditingUsername(false); }}
                   style={{ fontSize: isMobile ? 16 : 20, fontWeight: 700, padding: '4px 10px', borderRadius: 8, border: '1.5px solid var(--accent)', background: 'var(--surface)', color: 'var(--text)', flex: 1, minWidth: 0 }} />
-                <button onClick={saveUsername} disabled={savingUsername}
-                  style={{ padding: '4px 12px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600, flexShrink: 0 }}>
-                  {savingUsername ? '…' : 'OK'}
-                </button>
-                <button onClick={() => setEditingUsername(false)}
-                  style={{ padding: '4px 8px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', fontSize: 13, color: 'var(--text-muted)', flexShrink: 0 }}>✕</button>
+                <button onClick={saveUsername} disabled={savingUsername} style={{ padding: '4px 12px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600, flexShrink: 0 }}>{savingUsername ? '…' : 'OK'}</button>
+                <button onClick={() => setEditingUsername(false)} style={{ padding: '4px 8px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', fontSize: 13, color: 'var(--text-muted)', flexShrink: 0 }}>✕</button>
               </div>
             ) : (
               <>
                 <span style={{ fontSize: isMobile ? 18 : 22, fontWeight: 700, color: 'var(--text)' }}>{displayName}</span>
-                <button onClick={() => setEditingUsername(true)}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: '2px 4px', fontSize: 14, lineHeight: 1 }}>✎</button>
+                <button onClick={() => setEditingUsername(true)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: '2px 4px', fontSize: 14, lineHeight: 1 }}>✎</button>
               </>
             )}
           </div>
@@ -622,16 +638,13 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, x
             {uploadingAvatar ? 'Lädt…' : 'Bild ändern'}
             <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => { if (e.target.files?.[0]) uploadAvatar(e.target.files[0]); }} />
           </label>
-          <button
-            onClick={() => router.push(`/profil/${encodeURIComponent(displayName)}`)}
-            style={{ fontSize: 12, padding: '6px 14px', background: 'var(--accent-light)', border: '1px solid rgba(99,102,241,0.2)', borderRadius: 20, cursor: 'pointer', color: 'var(--accent)', fontWeight: 600, whiteSpace: 'nowrap' }}
-          >
+          <button onClick={() => router.push(`/profil/${encodeURIComponent(displayName)}`)} style={{ fontSize: 12, padding: '6px 14px', background: 'var(--accent-light)', border: '1px solid rgba(99,102,241,0.2)', borderRadius: 20, cursor: 'pointer', color: 'var(--accent)', fontWeight: 600, whiteSpace: 'nowrap' }}>
             Mein vollständiges Profil →
           </button>
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(3, 1fr)' : 'repeat(3, 1fr)', borderTop: '1px solid var(--border)', paddingTop: isMobile ? 16 : 20, gap: 8 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', borderTop: '1px solid var(--border)', paddingTop: isMobile ? 16 : 20, gap: 8 }}>
         {[
           { label: 'Portfoliowert',  value: `${Math.round(balance ?? 0).toLocaleString('de')} ₫`, color: 'var(--text)' },
           { label: 'Größter Gewinn', value: groessterGewinn > 0 ? `+${Math.round(groessterGewinn).toLocaleString('de')} ₫` : '—', color: groessterGewinn > 0 ? 'var(--yes)' : 'var(--text-muted)' },
@@ -685,26 +698,22 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, x
 
       {isMobile ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 20 }}>
-          {headerCard}
-          {rightCards}
+          {headerCard}{rightCards}
         </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 16, marginBottom: 24 }}>
-          {headerCard}
-          {rightCards}
+          {headerCard}{rightCards}
         </div>
       )}
 
       <ProgressionSection
-        userId={userId}
-        xp={xp ?? 0}
-        level={level ?? 1}
-        rp={rp ?? 0}
-        title={title ?? 'Nadir'}
-        peakTitle={peakTitle ?? title ?? 'Nadir'}
+        userId={userId} xp={xp ?? 0} level={level ?? 1}
+        rp={rp ?? 0} title={title ?? 'Nadir'} peakTitle={peakTitle ?? title ?? 'Nadir'}
       />
 
       <BadgeSection userId={userId} />
+
+      <PrivacySection userId={userId} />
 
       <div style={{ borderBottom: '1px solid var(--border)', marginBottom: 20, display: 'flex', overflowX: 'auto' }}>
         {(['positionen', 'aktivitaet'] as TabType[]).map(t => (
@@ -758,24 +767,15 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, x
                 return (
                   <div key={entry.market.id} className="card" style={{ padding: '13px 14px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, marginBottom: 10 }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', lineHeight: 1.4, flex: 1 }}>
-                        {marktName.length > 60 ? marktName.slice(0, 60) + '…' : marktName}
-                      </div>
-                      <span style={{ fontSize: 11, padding: '3px 9px', borderRadius: 20, fontWeight: 600, flexShrink: 0, background: isYes ? 'rgba(22,163,74,0.12)' : 'rgba(220,38,38,0.12)', color: isYes ? '#15803d' : '#b91c1c' }}>
-                        {richtungLabel}
-                      </span>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', lineHeight: 1.4, flex: 1 }}>{marktName.length > 60 ? marktName.slice(0, 60) + '…' : marktName}</div>
+                      <span style={{ fontSize: 11, padding: '3px 9px', borderRadius: 20, fontWeight: 600, flexShrink: 0, background: isYes ? 'rgba(22,163,74,0.12)' : 'rgba(220,38,38,0.12)', color: isYes ? '#15803d' : '#b91c1c' }}>{richtungLabel}</span>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12 }}>
                       <span style={{ color: 'var(--text-muted)' }}>Einsatz: <strong style={{ color: 'var(--text)' }}>{Math.round(entry.einsatz).toLocaleString('de')} ₫</strong></span>
-                      {!resolved ? (
-                        <span style={{ padding: '2px 8px', borderRadius: 12, background: 'rgba(245,158,11,0.12)', color: '#b45309', fontWeight: 600, fontSize: 11 }}>Läuft</span>
-                      ) : won ? (
-                        <span style={{ color: 'var(--yes)', fontWeight: 700 }}>+{Math.round(entry.auszahlung ?? 0).toLocaleString('de')} ₫</span>
-                      ) : lost ? (
-                        <span style={{ color: 'var(--no)', fontWeight: 700 }}>–{Math.round(entry.einsatz).toLocaleString('de')} ₫</span>
-                      ) : (
-                        <span style={{ color: 'var(--text-muted)' }}>—</span>
-                      )}
+                      {!resolved ? <span style={{ padding: '2px 8px', borderRadius: 12, background: 'rgba(245,158,11,0.12)', color: '#b45309', fontWeight: 600, fontSize: 11 }}>Läuft</span>
+                        : won ? <span style={{ color: 'var(--yes)', fontWeight: 700 }}>+{Math.round(entry.auszahlung ?? 0).toLocaleString('de')} ₫</span>
+                        : lost ? <span style={{ color: 'var(--no)', fontWeight: 700 }}>–{Math.round(entry.einsatz).toLocaleString('de')} ₫</span>
+                        : <span style={{ color: 'var(--text-muted)' }}>—</span>}
                     </div>
                     <div style={{ fontSize: 11, color: 'var(--text-subtle)', marginTop: 6 }}>{date}</div>
                   </div>
@@ -798,9 +798,7 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, x
                     const isYes = entry.direction === 'yes';
                     const richtungLabel = m.is_auto ? (isYes ? '↑ Up' : '↓ Down') : (isYes ? 'Ja' : 'Nein');
                     const marktName = m.is_auto && m.coin ? `${m.coin} · 3-Minuten-Markt` : m.question;
-                    const iconEl = m.is_auto && m.coin ? (
-                      <span style={{ width: 28, height: 28, borderRadius: 8, background: COIN_COLORS[m.coin] ?? '#f97316', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, color: '#fff', flexShrink: 0 }}>{m.coin.charAt(0)}</span>
-                    ) : null;
+                    const iconEl = m.is_auto && m.coin ? (<span style={{ width: 28, height: 28, borderRadius: 8, background: COIN_COLORS[m.coin] ?? '#f97316', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, color: '#fff', flexShrink: 0 }}>{m.coin.charAt(0)}</span>) : null;
                     const resolved = m.resolved;
                     const won  = resolved && entry.auszahlung !== null && entry.auszahlung > 0;
                     const lost = resolved && entry.auszahlung === 0;
@@ -810,32 +808,19 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, x
                     return (
                       <tr key={entry.market.id} style={{ borderBottom: '1px solid var(--border)' }}>
                         <td style={{ padding: '14px 20px', fontSize: 13, color: 'var(--text)', maxWidth: 280 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                            {iconEl}
-                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block', maxWidth: 240 }}>{marktName}</span>
-                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>{iconEl}<span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block', maxWidth: 240 }}>{marktName}</span></div>
                         </td>
-                        <td style={{ padding: '14px 20px', textAlign: 'right' }}>
-                          <span style={{ fontSize: 12, padding: '3px 10px', borderRadius: 20, fontWeight: 600, background: isYes ? 'rgba(22,163,74,0.12)' : 'rgba(220,38,38,0.12)', color: isYes ? '#15803d' : '#b91c1c' }}>{richtungLabel}</span>
-                        </td>
+                        <td style={{ padding: '14px 20px', textAlign: 'right' }}><span style={{ fontSize: 12, padding: '3px 10px', borderRadius: 20, fontWeight: 600, background: isYes ? 'rgba(22,163,74,0.12)' : 'rgba(220,38,38,0.12)', color: isYes ? '#15803d' : '#b91c1c' }}>{richtungLabel}</span></td>
                         <td style={{ padding: '14px 20px', textAlign: 'right', fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{Math.round(entry.einsatz).toLocaleString('de')} ₫</td>
                         <td style={{ padding: '14px 20px', textAlign: 'right' }}>
-                          {!resolved ? (
-                            <span style={{ fontSize: 12, padding: '3px 10px', borderRadius: 20, background: 'rgba(245,158,11,0.12)', color: '#b45309', fontWeight: 600 }}>Läuft</span>
-                          ) : (
-                            <span style={{ fontSize: 12, padding: '3px 10px', borderRadius: 20, fontWeight: 600, background: won ? 'rgba(22,163,74,0.12)' : 'rgba(220,38,38,0.12)', color: won ? '#15803d' : '#b91c1c' }}>{ergebnisLabel}</span>
-                          )}
+                          {!resolved ? <span style={{ fontSize: 12, padding: '3px 10px', borderRadius: 20, background: 'rgba(245,158,11,0.12)', color: '#b45309', fontWeight: 600 }}>Läuft</span>
+                            : <span style={{ fontSize: 12, padding: '3px 10px', borderRadius: 20, fontWeight: 600, background: won ? 'rgba(22,163,74,0.12)' : 'rgba(220,38,38,0.12)', color: won ? '#15803d' : '#b91c1c' }}>{ergebnisLabel}</span>}
                         </td>
                         <td style={{ padding: '14px 20px', textAlign: 'right', fontSize: 13, fontWeight: 700 }}>
-                          {!resolved && entry.auszahlung === null ? (
-                            <span style={{ color: 'var(--text-muted)', fontWeight: 400, fontSize: 12 }}>ausstehend</span>
-                          ) : won ? (
-                            <span style={{ color: 'var(--yes)' }}>+{Math.round(entry.auszahlung ?? 0).toLocaleString('de')} ₫</span>
-                          ) : lost ? (
-                            <span style={{ color: 'var(--no)' }}>–{Math.round(entry.einsatz).toLocaleString('de')} ₫</span>
-                          ) : (
-                            <span style={{ color: 'var(--text-muted)' }}>—</span>
-                          )}
+                          {!resolved && entry.auszahlung === null ? <span style={{ color: 'var(--text-muted)', fontWeight: 400, fontSize: 12 }}>ausstehend</span>
+                            : won  ? <span style={{ color: 'var(--yes)' }}>+{Math.round(entry.auszahlung ?? 0).toLocaleString('de')} ₫</span>
+                            : lost ? <span style={{ color: 'var(--no)' }}>–{Math.round(entry.einsatz).toLocaleString('de')} ₫</span>
+                            : <span style={{ color: 'var(--text-muted)' }}>—</span>}
                         </td>
                         <td style={{ padding: '14px 20px', textAlign: 'right' }}>
                           <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)' }}>{date}</div>
@@ -851,30 +836,19 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, x
         </>
       )}
 
-      {tab === 'aktivitaet' && (
-        <AktivitaetsFeed userId={userId} />
-      )}
+      {tab === 'aktivitaet' && <AktivitaetsFeed userId={userId} />}
     </div>
   );
 }
 
 interface FeedMarket {
-  question: string;
-  is_auto: boolean;
-  coin?: string;
-  category?: string;
-  resolved: boolean;
-  resolution?: string;
+  question: string; is_auto: boolean; coin?: string;
+  category?: string; resolved: boolean; resolution?: string;
 }
 
 interface FeedItem {
-  id: string;
-  market_id: string;
-  type: string;
-  shares: number;
-  cost: number;
-  created_at: string;
-  market?: FeedMarket;
+  id: string; market_id: string; type: string;
+  shares: number; cost: number; created_at: string; market?: FeedMarket;
 }
 
 function AktivitaetsFeed({ userId }: { userId: string }) {
@@ -896,9 +870,9 @@ function AktivitaetsFeed({ userId }: { userId: string }) {
       markets?.forEach((m: FeedMarket & { id: string }) => { mMap[m.id] = m; });
 
       const withMarkets: FeedItem[] = raw.map(t => ({ ...t, market: mMap[t.market_id] }));
-
       const winItems: FeedItem[] = [];
       const processedWins = new Set<string>();
+
       for (const t of withMarkets) {
         const m = t.market;
         if (!m?.resolved || processedWins.has(t.market_id)) continue;
@@ -914,8 +888,7 @@ function AktivitaetsFeed({ userId }: { userId: string }) {
         winItems.push({ id: `win_${t.market_id}`, market_id: t.market_id, type: 'win', shares: totalShares, cost: totalShares, created_at: new Date(firstBuyTime + 3 * 60 * 1000).toISOString(), market: m });
       }
 
-      const combined = [...withMarkets, ...winItems].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-      setItems(combined);
+      setItems([...withMarkets, ...winItems].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()));
       setLoading(false);
     }
     load();
