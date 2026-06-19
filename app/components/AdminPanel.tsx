@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { BADGES } from '@/lib/badges';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -18,6 +19,8 @@ const CATEGORIES = [
   'Krypto', 'Entertainment', 'Wirtschaft', 'Geopolitik',
   'Finanzen', 'Tech', 'Wetter', 'Kultur', 'formula1', 'finance', 'weather',
 ];
+
+const TITLES = ['Nadir', 'Initiat', 'Bayes', 'Indigator', 'Mantiker', 'Theoros', 'Heliomant', 'Praesagium'];
 
 interface Props {
   userId: string;
@@ -73,11 +76,21 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
   const [users, setUsers]                   = useState<any[]>([]);
   const [usersLoading, setUsersLoading]     = useState(false);
   const [editingUser, setEditingUser]       = useState<string | null>(null);
+  const [editingUserProgression, setEditingUserProgression] = useState<string | null>(null);
   const [newBalance, setNewBalance]         = useState('');
   const [addAmount, setAddAmount]           = useState('');
   const [userMessage, setUserMessage]       = useState('');
   const [deleteUserConfirm, setDeleteUserConfirm] = useState<string | null>(null);
   const [userSearch, setUserSearch]         = useState('');
+
+  // Progression editor state
+  const [progXp, setProgXp]         = useState('');
+  const [progLevel, setProgLevel]   = useState('');
+  const [progRp, setProgRp]         = useState('');
+  const [progTitle, setProgTitle]   = useState('Nadir');
+  const [progBadges, setProgBadges] = useState<Set<string>>(new Set());
+  const [progLoading, setProgLoading] = useState(false);
+  const [progMessage, setProgMessage] = useState('');
 
   const [dashStats, setDashStats] = useState<{
     totalUsers: number; openMarkets: number; tradesToday: number;
@@ -168,6 +181,75 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
     );
     setCronLogs(await res.json());
     setCronLogsLoading(false);
+  }
+
+  async function openProgressionEditor(uid: string) {
+    setProgLoading(true);
+    setProgMessage('');
+    setEditingUserProgression(uid);
+
+    const [userRows, badgeRows] = await Promise.all([
+      fetch(`${supabaseUrl}/rest/v1/users?id=eq.${uid}&select=xp,level,rp,title`, { headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` } }).then(r => r.json()),
+      fetch(`${supabaseUrl}/rest/v1/user_badges?user_id=eq.${uid}&select=badge_id`, { headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` } }).then(r => r.json()),
+    ]);
+
+    const u = userRows?.[0];
+    if (u) {
+      setProgXp(String(u.xp ?? 0));
+      setProgLevel(String(u.level ?? 1));
+      setProgRp(String(u.rp ?? 0));
+      setProgTitle(u.title ?? 'Nadir');
+    }
+    const earned = new Set<string>((badgeRows ?? []).map((r: { badge_id: string }) => r.badge_id));
+    setProgBadges(earned);
+    setProgLoading(false);
+  }
+
+  async function saveProgression(uid: string) {
+    setProgLoading(true); setProgMessage('');
+
+    const xp    = parseInt(progXp)    || 0;
+    const level = parseInt(progLevel) || 1;
+    const rp    = parseInt(progRp)    || 0;
+
+    const patchRes = await fetch(`${supabaseUrl}/rest/v1/users?id=eq.${uid}`, {
+      method: 'PATCH',
+      headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      body: JSON.stringify({ xp, level, rp, title: progTitle }),
+    });
+
+    if (!patchRes.ok) { setProgMessage('Fehler beim Speichern.'); setProgLoading(false); return; }
+
+    // Bestehende Badges laden und diff berechnen
+    const existingRows = await fetch(`${supabaseUrl}/rest/v1/user_badges?user_id=eq.${uid}&select=badge_id`, {
+      headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` },
+    }).then(r => r.json());
+    const existing = new Set<string>((existingRows ?? []).map((r: { badge_id: string }) => r.badge_id));
+
+    // Neue Badges vergeben
+    for (const badgeId of progBadges) {
+      if (!existing.has(badgeId)) {
+        await fetch(`${supabaseUrl}/rest/v1/user_badges`, {
+          method: 'POST',
+          headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+          body: JSON.stringify({ user_id: uid, badge_id: badgeId }),
+        });
+      }
+    }
+
+    // Entzogene Badges löschen
+    for (const badgeId of existing) {
+      if (!progBadges.has(badgeId)) {
+        await fetch(`${supabaseUrl}/rest/v1/user_badges?user_id=eq.${uid}&badge_id=eq.${badgeId}`, {
+          method: 'DELETE',
+          headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` },
+        });
+      }
+    }
+
+    setProgMessage('Gespeichert ✓');
+    setProgLoading(false);
+    setTimeout(() => { setProgMessage(''); setEditingUserProgression(null); }, 1500);
   }
 
   function openEditor(m: any) {
@@ -521,12 +603,7 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
       {adminTab === 'edit' && (
         <div style={{ maxWidth: 720 }}>
           <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center' }}>
-            <input
-              style={{ ...inputStyle, width: 260, marginBottom: 0 }}
-              placeholder="Markt suchen…"
-              value={editSearch}
-              onChange={e => setEditSearch(e.target.value)}
-            />
+            <input style={{ ...inputStyle, width: 260, marginBottom: 0 }} placeholder="Markt suchen…" value={editSearch} onChange={e => setEditSearch(e.target.value)} />
             <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{filteredEditMarkets.length} Märkte</span>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -544,45 +621,19 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
                 </div>
                 {editingMarket === m.id && (
                   <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
-                    <div>
-                      <label style={labelStyle}>Frage *</label>
-                      <input style={inputStyle} value={editFields.question} onChange={e => setEditFields(f => ({ ...f, question: e.target.value }))} maxLength={300} />
-                    </div>
-                    <div>
-                      <label style={labelStyle}>Kurztitel</label>
-                      <input style={inputStyle} value={editFields.short_label} onChange={e => setEditFields(f => ({ ...f, short_label: e.target.value }))} placeholder="Wird auf der Übersichtsseite angezeigt" maxLength={80} />
-                    </div>
-                    <div>
-                      <label style={labelStyle}>Auflösungsregeln</label>
-                      <textarea style={{ ...inputStyle, minHeight: 160, resize: 'vertical', fontSize: 13, lineHeight: 1.6 }} value={editFields.description} onChange={e => setEditFields(f => ({ ...f, description: e.target.value }))} placeholder="z.B. Löst mit JA auf, wenn…" maxLength={2000} />
-                    </div>
+                    <div><label style={labelStyle}>Frage *</label><input style={inputStyle} value={editFields.question} onChange={e => setEditFields(f => ({ ...f, question: e.target.value }))} maxLength={300} /></div>
+                    <div><label style={labelStyle}>Kurztitel</label><input style={inputStyle} value={editFields.short_label} onChange={e => setEditFields(f => ({ ...f, short_label: e.target.value }))} maxLength={80} /></div>
+                    <div><label style={labelStyle}>Auflösungsregeln</label><textarea style={{ ...inputStyle, minHeight: 160, resize: 'vertical', fontSize: 13, lineHeight: 1.6 }} value={editFields.description} onChange={e => setEditFields(f => ({ ...f, description: e.target.value }))} maxLength={2000} /></div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                      <div>
-                        <label style={labelStyle}>Kategorie</label>
-                        <select style={inputStyle} value={editFields.category} onChange={e => setEditFields(f => ({ ...f, category: e.target.value }))}>
-                          {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                        </select>
-                      </div>
-                      <div>
-                        <label style={labelStyle}>Gruppe</label>
-                        <input style={inputStyle} value={editFields.group_title} onChange={e => setEditFields(f => ({ ...f, group_title: e.target.value }))} placeholder="z.B. WM 2026" maxLength={80} />
-                      </div>
+                      <div><label style={labelStyle}>Kategorie</label><select style={inputStyle} value={editFields.category} onChange={e => setEditFields(f => ({ ...f, category: e.target.value }))}>{CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
+                      <div><label style={labelStyle}>Gruppe</label><input style={inputStyle} value={editFields.group_title} onChange={e => setEditFields(f => ({ ...f, group_title: e.target.value }))} maxLength={80} /></div>
                     </div>
-                    <div>
-                      <label style={labelStyle}>Schließt am</label>
-                      <input style={inputStyle} type="datetime-local" value={editFields.closes_at} onChange={e => setEditFields(f => ({ ...f, closes_at: e.target.value }))} />
-                    </div>
+                    <div><label style={labelStyle}>Schließt am</label><input style={inputStyle} type="datetime-local" value={editFields.closes_at} onChange={e => setEditFields(f => ({ ...f, closes_at: e.target.value }))} /></div>
                     <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 4, flexWrap: 'wrap' }}>
-                      <button onClick={() => saveMarket(m.id)} disabled={editSaving || !editFields.question.trim()} style={{ padding: '9px 22px', background: editSaving ? 'var(--surface)' : '#0ea5e9', color: editSaving ? 'var(--text-muted)' : 'white', border: 'none', borderRadius: 8, cursor: editSaving ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 700, opacity: editSaving ? 0.7 : 1 }}>
-                        {editSaving ? 'Speichert…' : 'Speichern'}
-                      </button>
+                      <button onClick={() => saveMarket(m.id)} disabled={editSaving || !editFields.question.trim()} style={{ padding: '9px 22px', background: editSaving ? 'var(--surface)' : '#0ea5e9', color: editSaving ? 'var(--text-muted)' : 'white', border: 'none', borderRadius: 8, cursor: editSaving ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 700 }}>{editSaving ? 'Speichert…' : 'Speichern'}</button>
                       <button onClick={() => setEditingMarket(null)} style={{ padding: '9px 16px', background: 'var(--surface)', color: 'var(--text-muted)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>Abbrechen</button>
                       {deleteConfirm === m.id ? (
-                        <>
-                          <span style={{ fontSize: 13, color: '#dc2626', fontWeight: 600 }}>Sicher löschen?</span>
-                          <button onClick={() => deleteMarket(m.id)} disabled={deleteLoading} style={{ padding: '9px 16px', background: '#dc2626', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>{deleteLoading ? 'Löscht…' : 'Ja, löschen'}</button>
-                          <button onClick={() => setDeleteConfirm(null)} style={{ padding: '9px 12px', background: 'var(--surface)', color: 'var(--text-muted)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>Abbrechen</button>
-                        </>
+                        <><span style={{ fontSize: 13, color: '#dc2626', fontWeight: 600 }}>Sicher löschen?</span><button onClick={() => deleteMarket(m.id)} disabled={deleteLoading} style={{ padding: '9px 16px', background: '#dc2626', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>{deleteLoading ? 'Löscht…' : 'Ja, löschen'}</button><button onClick={() => setDeleteConfirm(null)} style={{ padding: '9px 12px', background: 'var(--surface)', color: 'var(--text-muted)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>Abbrechen</button></>
                       ) : (
                         <button onClick={() => setDeleteConfirm(m.id)} style={{ padding: '9px 16px', background: 'rgba(220,38,38,0.08)', color: '#dc2626', border: '1px solid rgba(220,38,38,0.2)', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600, marginLeft: 'auto' }}>🗑 Löschen</button>
                       )}
@@ -624,12 +675,15 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
                       <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>{(u.balance ?? 0).toLocaleString('de')} ₫</div>
                     </div>
                     <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-                      <button onClick={() => { setEditingUser(u.id); setNewBalance(String(u.balance ?? 0)); setAddAmount(''); setUserMessage(''); }} style={{ padding: '6px 12px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, cursor: 'pointer', fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}>✏️ Guthaben</button>
+                      <button onClick={() => { setEditingUser(editingUser === u.id ? null : u.id); setNewBalance(String(u.balance ?? 0)); setAddAmount(''); setUserMessage(''); setEditingUserProgression(null); }} style={{ padding: '6px 12px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, cursor: 'pointer', fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}>✏️ Guthaben</button>
+                      <button onClick={() => { setEditingUserProgression(null); setEditingUser(null); openProgressionEditor(u.id); }} style={{ padding: '6px 12px', background: 'rgba(124,58,237,0.08)', border: '1px solid rgba(124,58,237,0.2)', borderRadius: 6, cursor: 'pointer', fontSize: 12, color: '#7c3aed', fontWeight: 600 }}>⚡ Progression</button>
                       {u.id !== userId && (
                         <button onClick={() => setDeleteUserConfirm(u.id)} style={{ padding: '6px 10px', background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)', borderRadius: 6, cursor: 'pointer', fontSize: 12, color: '#dc2626', fontWeight: 600 }}>🗑</button>
                       )}
                     </div>
                   </div>
+
+                  {/* Guthaben-Editor */}
                   {editingUser === u.id && (
                     <div style={{ padding: '14px 16px', borderTop: '1px solid var(--border)', background: 'rgba(249,115,22,0.04)', display: 'flex', flexDirection: 'column', gap: 12 }}>
                       <div>
@@ -655,6 +709,75 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
                       </div>
                     </div>
                   )}
+
+                  {/* Progression-Editor */}
+                  {editingUserProgression === u.id && (
+                    <div style={{ padding: '14px 16px', borderTop: '1px solid var(--border)', background: 'rgba(124,58,237,0.04)', display: 'flex', flexDirection: 'column', gap: 16 }}>
+                      {progLoading ? (
+                        <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Lädt…</div>
+                      ) : (
+                        <>
+                          {/* XP / Level / RP */}
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+                            <div>
+                              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6 }}>XP</div>
+                              <input type="number" min={0} style={{ ...inputStyle, marginBottom: 0, fontSize: 14 }} value={progXp} onChange={e => setProgXp(e.target.value)} />
+                            </div>
+                            <div>
+                              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6 }}>Level</div>
+                              <input type="number" min={1} max={200} style={{ ...inputStyle, marginBottom: 0, fontSize: 14 }} value={progLevel} onChange={e => setProgLevel(e.target.value)} />
+                            </div>
+                            <div>
+                              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6 }}>RP</div>
+                              <input type="number" min={0} style={{ ...inputStyle, marginBottom: 0, fontSize: 14 }} value={progRp} onChange={e => setProgRp(e.target.value)} />
+                            </div>
+                          </div>
+
+                          {/* Titel */}
+                          <div>
+                            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>Titel</div>
+                            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                              {TITLES.map(t => (
+                                <button key={t} onClick={() => setProgTitle(t)} style={{ padding: '5px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer', border: progTitle === t ? '1px solid #7c3aed' : '1px solid var(--border)', background: progTitle === t ? 'rgba(124,58,237,0.12)' : 'var(--surface)', color: progTitle === t ? '#7c3aed' : 'var(--text-muted)' }}>{t}</button>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Badges */}
+                          <div>
+                            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>Badges</div>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                              {BADGES.map(badge => {
+                                const has = progBadges.has(badge.id)
+                                return (
+                                  <button
+                                    key={badge.id}
+                                    onClick={() => {
+                                      const next = new Set(progBadges)
+                                      has ? next.delete(badge.id) : next.add(badge.id)
+                                      setProgBadges(next)
+                                    }}
+                                    style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer', border: has ? '1px solid rgba(99,102,241,0.4)' : '1px solid var(--border)', background: has ? 'rgba(99,102,241,0.1)' : 'var(--surface)', color: has ? '#6366f1' : 'var(--text-muted)' }}
+                                  >
+                                    <span style={{ fontSize: 14 }}>{badge.icon}</span>
+                                    <span>{badge.label}</span>
+                                  </button>
+                                )
+                              })}
+                            </div>
+                          </div>
+
+                          {/* Speichern */}
+                          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                            <button onClick={() => saveProgression(u.id)} disabled={progLoading} style={{ padding: '8px 20px', background: '#7c3aed', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>Speichern</button>
+                            <button onClick={() => setEditingUserProgression(null)} style={{ padding: '8px 14px', background: 'var(--surface)', color: 'var(--text-muted)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>Schließen</button>
+                            {progMessage && <span style={{ fontSize: 13, fontWeight: 600, color: progMessage.includes('Fehler') ? '#dc2626' : '#16a34a' }}>{progMessage}</span>}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
+
                   {deleteUserConfirm === u.id && (
                     <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border)', background: 'rgba(220,38,38,0.04)', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                       <span style={{ fontSize: 13, color: '#dc2626', fontWeight: 600 }}>Nutzer {u.username} — alle Daten löschen?</span>
@@ -675,50 +798,19 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
           <div className="card" style={{ padding: 24 }}>
             <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', marginBottom: 20 }}>Neuen Markt erstellen</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <div>
-                <label style={labelStyle}>Frage *</label>
-                <input style={inputStyle} placeholder="z.B. Wird Bitcoin 2026 auf 200.000$ steigen?" value={newQuestion} onChange={e => setNewQuestion(e.target.value)} maxLength={300} />
-              </div>
-              <div>
-                <label style={labelStyle}>Kurztitel (optional)</label>
-                <input style={inputStyle} placeholder="z.B. BTC auf 200k?" value={newShortLabel} onChange={e => setNewShortLabel(e.target.value)} maxLength={80} />
-                <div style={{ fontSize: 11, color: 'var(--text-subtle)', marginTop: 4 }}>Wird auf der Marktübersicht angezeigt. Falls leer: Frage wird gekürzt.</div>
-              </div>
-              <div>
-                <label style={labelStyle}>Auflösungsregeln (optional)</label>
-                <textarea style={{ ...inputStyle, minHeight: 160, resize: 'vertical', fontSize: 13, lineHeight: 1.6 }} placeholder="z.B. Löst mit JA auf, wenn…" value={newDescription} onChange={e => setNewDescription(e.target.value)} maxLength={2000} />
+              <div><label style={labelStyle}>Frage *</label><input style={inputStyle} placeholder="z.B. Wird Bitcoin 2026 auf 200.000$ steigen?" value={newQuestion} onChange={e => setNewQuestion(e.target.value)} maxLength={300} /></div>
+              <div><label style={labelStyle}>Kurztitel (optional)</label><input style={inputStyle} placeholder="z.B. BTC auf 200k?" value={newShortLabel} onChange={e => setNewShortLabel(e.target.value)} maxLength={80} /><div style={{ fontSize: 11, color: 'var(--text-subtle)', marginTop: 4 }}>Wird auf der Marktübersicht angezeigt. Falls leer: Frage wird gekürzt.</div></div>
+              <div><label style={labelStyle}>Auflösungsregeln (optional)</label><textarea style={{ ...inputStyle, minHeight: 160, resize: 'vertical', fontSize: 13, lineHeight: 1.6 }} placeholder="z.B. Löst mit JA auf, wenn…" value={newDescription} onChange={e => setNewDescription(e.target.value)} maxLength={2000} /></div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div><label style={labelStyle}>Kategorie</label><select style={inputStyle} value={newCategory} onChange={e => setNewCategory(e.target.value)}>{CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
+                <div><label style={labelStyle}>Liquiditätsparameter b</label><input style={inputStyle} type="number" min={10} max={10000} value={newB} onChange={e => setNewB(Math.max(10, parseInt(e.target.value) || 100))} /><div style={{ fontSize: 11, color: 'var(--text-subtle)', marginTop: 4 }}>100 = Standard.</div></div>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                <div>
-                  <label style={labelStyle}>Kategorie</label>
-                  <select style={inputStyle} value={newCategory} onChange={e => setNewCategory(e.target.value)}>
-                    {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label style={labelStyle}>Liquiditätsparameter b</label>
-                  <input style={inputStyle} type="number" min={10} max={10000} value={newB} onChange={e => setNewB(Math.max(10, parseInt(e.target.value) || 100))} />
-                  <div style={{ fontSize: 11, color: 'var(--text-subtle)', marginTop: 4 }}>100 = Standard.</div>
-                </div>
+                <div><label style={labelStyle}>Schließt am *</label><input style={inputStyle} type="datetime-local" value={newClosesAt} onChange={e => setNewClosesAt(e.target.value)} /></div>
+                <div><label style={labelStyle}>Gruppe (optional)</label><input style={inputStyle} placeholder="z.B. WM 2026" value={newGroupTitle} onChange={e => setNewGroupTitle(e.target.value)} maxLength={80} /></div>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                <div>
-                  <label style={labelStyle}>Schließt am *</label>
-                  <input style={inputStyle} type="datetime-local" value={newClosesAt} onChange={e => setNewClosesAt(e.target.value)} />
-                </div>
-                <div>
-                  <label style={labelStyle}>Gruppe (optional)</label>
-                  <input style={inputStyle} placeholder="z.B. WM 2026" value={newGroupTitle} onChange={e => setNewGroupTitle(e.target.value)} maxLength={80} />
-                </div>
-              </div>
-              {createMessage && (
-                <div style={{ padding: '10px 14px', borderRadius: 8, background: createMessage.startsWith('✅') ? 'rgba(22,163,74,0.1)' : 'rgba(220,38,38,0.1)', color: createMessage.startsWith('✅') ? '#16a34a' : '#dc2626', fontSize: 13, fontWeight: 600 }}>
-                  {createMessage}
-                </div>
-              )}
-              <button onClick={handleCreateMarket} disabled={createLoading} style={{ padding: '12px', background: createLoading ? 'var(--surface)' : '#16a34a', color: createLoading ? 'var(--text-muted)' : 'white', border: 'none', borderRadius: 10, cursor: createLoading ? 'not-allowed' : 'pointer', fontSize: 14, fontWeight: 700 }}>
-                {createLoading ? 'Wird erstellt…' : 'Markt erstellen'}
-              </button>
+              {createMessage && (<div style={{ padding: '10px 14px', borderRadius: 8, background: createMessage.startsWith('✅') ? 'rgba(22,163,74,0.1)' : 'rgba(220,38,38,0.1)', color: createMessage.startsWith('✅') ? '#16a34a' : '#dc2626', fontSize: 13, fontWeight: 600 }}>{createMessage}</div>)}
+              <button onClick={handleCreateMarket} disabled={createLoading} style={{ padding: '12px', background: createLoading ? 'var(--surface)' : '#16a34a', color: createLoading ? 'var(--text-muted)' : 'white', border: 'none', borderRadius: 10, cursor: createLoading ? 'not-allowed' : 'pointer', fontSize: 14, fontWeight: 700 }}>{createLoading ? 'Wird erstellt…' : 'Markt erstellen'}</button>
             </div>
           </div>
         </div>
@@ -731,9 +823,7 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
             <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', marginBottom: 12 }}>Neuen 3-Minuten Krypto-Markt starten</div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               {COINS.map((c) => (
-                <button key={c.id} onClick={() => createCryptoMarket(c.id)} disabled={btcCreating} style={{ padding: '8px 16px', background: c.color, color: 'white', border: 'none', borderRadius: 8, cursor: btcCreating ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 700, opacity: btcCreating ? 0.6 : 1 }}>
-                  {btcCreating ? '⏳' : c.label}
-                </button>
+                <button key={c.id} onClick={() => createCryptoMarket(c.id)} disabled={btcCreating} style={{ padding: '8px 16px', background: c.color, color: 'white', border: 'none', borderRadius: 8, cursor: btcCreating ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 700, opacity: btcCreating ? 0.6 : 1 }}>{btcCreating ? '⏳' : c.label}</button>
               ))}
             </div>
             {btcMessage && <div style={{ marginTop: 10, fontSize: 13, color: btcMessage.startsWith('✅') ? '#16a34a' : '#dc2626', fontWeight: 600 }}>{btcMessage}</div>}
@@ -751,20 +841,14 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
                     <span style={{ padding: '2px 8px', borderRadius: 4, background: coinData?.color ?? '#888', color: 'white', fontSize: 11, fontWeight: 700 }}>{market.coin ?? 'BTC'}</span>
                     <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--text)' }}>{market.short_label}</span>
                   </div>
-                  <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 20, background: isOpen ? 'rgba(22,163,74,0.1)' : 'var(--surface)', color: isOpen ? '#16a34a' : 'var(--text-muted)', fontWeight: 600 }}>
-                    {isOpen ? 'Offen' : `${market.resolution?.toUpperCase()}`}
-                  </span>
+                  <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 20, background: isOpen ? 'rgba(22,163,74,0.1)' : 'var(--surface)', color: isOpen ? '#16a34a' : 'var(--text-muted)', fontWeight: 600 }}>{isOpen ? 'Offen' : `${market.resolution?.toUpperCase()}`}</span>
                 </div>
                 <div style={{ fontSize: 12, color: 'var(--text-muted)', display: 'flex', gap: 16, marginBottom: isOpen ? 10 : 0 }}>
                   <span>Start: ${Number(market.start_price).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                   {market.end_price && <span>End: ${Number(market.end_price).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>}
                   {isOpen && <span style={{ fontWeight: 700, color: expired ? '#dc2626' : '#f59e0b' }}>{formatCountdown(market.closes_at)}</span>}
                 </div>
-                {isOpen && (
-                  <button onClick={() => resolveCryptoMarket(market.id)} disabled={resolvingBtc === market.id} style={{ padding: '4px 12px', background: expired ? '#dc2626' : 'var(--surface)', color: expired ? 'white' : 'var(--text-muted)', border: `1px solid ${expired ? '#dc2626' : 'var(--border)'}`, borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
-                    {resolvingBtc === market.id ? '⏳ Wird aufgelöst…' : expired ? '⚡ Jetzt auflösen' : '🔧 Manuell auflösen'}
-                  </button>
-                )}
+                {isOpen && (<button onClick={() => resolveCryptoMarket(market.id)} disabled={resolvingBtc === market.id} style={{ padding: '4px 12px', background: expired ? '#dc2626' : 'var(--surface)', color: expired ? 'white' : 'var(--text-muted)', border: `1px solid ${expired ? '#dc2626' : 'var(--border)'}`, borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>{resolvingBtc === market.id ? '⏳ Wird aufgelöst…' : expired ? '⚡ Jetzt auflösen' : '🔧 Manuell auflösen'}</button>)}
               </div>
             );
           })}
@@ -776,15 +860,11 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
         <div>
           <div style={{ display: 'flex', gap: 6, marginBottom: 16, flexWrap: 'wrap' }}>
             <button onClick={() => setAdminCategory('')} style={{ padding: '4px 12px', background: adminCategory === '' ? '#7c3aed' : 'var(--surface)', color: adminCategory === '' ? 'white' : 'var(--text-muted)', border: `1px solid ${adminCategory === '' ? '#7c3aed' : 'var(--border)'}`, borderRadius: 20, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>Alle</button>
-            {adminCategories.map((cat) => (
-              <button key={cat} onClick={() => setAdminCategory(cat)} style={{ padding: '4px 12px', background: adminCategory === cat ? '#7c3aed' : 'var(--surface)', color: adminCategory === cat ? 'white' : 'var(--text-muted)', border: `1px solid ${adminCategory === cat ? '#7c3aed' : 'var(--border)'}`, borderRadius: 20, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>{cat}</button>
-            ))}
+            {adminCategories.map((cat) => (<button key={cat} onClick={() => setAdminCategory(cat)} style={{ padding: '4px 12px', background: adminCategory === cat ? '#7c3aed' : 'var(--surface)', color: adminCategory === cat ? 'white' : 'var(--text-muted)', border: `1px solid ${adminCategory === cat ? '#7c3aed' : 'var(--border)'}`, borderRadius: 20, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>{cat}</button>))}
           </div>
           {Object.entries(adminGrouped).map(([groupTitle, groupMarkets]) => (
             <div key={groupTitle} style={{ marginBottom: 16 }}>
-              {groupTitle !== '__ungrouped__' && (
-                <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6, padding: '4px 10px', background: '#7c3aed', color: 'white', borderRadius: 6, display: 'inline-block' }}>{groupTitle}</div>
-              )}
+              {groupTitle !== '__ungrouped__' && (<div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6, padding: '4px 10px', background: '#7c3aed', color: 'white', borderRadius: 6, display: 'inline-block' }}>{groupTitle}</div>)}
               {groupMarkets.map((market: any) => (
                 <div key={market.id} style={{ border: '1px solid var(--border)', padding: '10px 14px', marginBottom: 6, borderRadius: 8, background: 'var(--card)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
                   <div style={{ fontWeight: 500, fontSize: 13, color: 'var(--text)', flex: 1 }}>{market.short_label || market.question}</div>
@@ -806,10 +886,7 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
           {resolvedMarketDetails.map((market: any) => (
             <div key={market.id} style={{ border: '1px solid var(--border)', borderRadius: 10, marginBottom: 8, overflow: 'hidden' }}>
               <div onClick={() => setExpandedMarket(expandedMarket === market.id ? null : market.id)} style={{ padding: '10px 14px', background: market.resolution === 'yes' ? '#16a34a' : '#dc2626', color: 'white', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                  <div style={{ fontWeight: 700, fontSize: 13 }}>{market.short_label || market.question}</div>
-                  <div style={{ fontSize: 12, marginTop: 2, opacity: 0.85 }}>Ergebnis: {market.resolution === 'yes' ? '✓ YES' : '✗ NO'} · {market.tradeDetails.length} Trades</div>
-                </div>
+                <div><div style={{ fontWeight: 700, fontSize: 13 }}>{market.short_label || market.question}</div><div style={{ fontSize: 12, marginTop: 2, opacity: 0.85 }}>Ergebnis: {market.resolution === 'yes' ? '✓ YES' : '✗ NO'} · {market.tradeDetails.length} Trades</div></div>
                 <span style={{ fontSize: 12 }}>{expandedMarket === market.id ? '▲' : '▼'}</span>
               </div>
               {expandedMarket === market.id && (
@@ -819,9 +896,7 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
                     <div key={i} style={{ padding: '8px 14px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--text)' }}>{t.username}</span>
-                        <span style={{ background: t.type === 'buy_yes' ? '#16a34a' : '#dc2626', color: 'white', padding: '1px 6px', borderRadius: 4, fontSize: 11, fontWeight: 700 }}>
-                          {t.type === 'buy_yes' ? 'YES' : t.type === 'buy_no' ? 'NO' : t.type === 'sell_yes' ? 'SELL YES' : 'SELL NO'}
-                        </span>
+                        <span style={{ background: t.type === 'buy_yes' ? '#16a34a' : '#dc2626', color: 'white', padding: '1px 6px', borderRadius: 4, fontSize: 11, fontWeight: 700 }}>{t.type === 'buy_yes' ? 'YES' : t.type === 'buy_no' ? 'NO' : t.type === 'sell_yes' ? 'SELL YES' : 'SELL NO'}</span>
                       </div>
                       <div style={{ textAlign: 'right', fontSize: 12 }}>
                         <div style={{ color: 'var(--text-muted)' }}>{Number(Math.abs(t.cost)).toFixed(0)} ₫</div>
