@@ -201,7 +201,7 @@ export default function CommentsSection({ marketId }: { marketId: string }) {
             const isOwn  = c.user_id === currentUserId
             const liked  = likedIds.has(c.id)
             const isLast = i === comments.length - 1
-            const showTitle = c.title && c.title !== 'Nadir'
+            const showTitle = !!c.title
             return (
               <div key={c.id} style={{
                 display: 'flex', gap: 12, padding: '16px 0',
