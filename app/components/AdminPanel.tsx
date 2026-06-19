@@ -57,7 +57,6 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
   const [editSaving, setEditSaving] = useState(false);
   const [editMessage, setEditMessage] = useState('');
   const [editSearch, setEditSearch] = useState('');
-  const [editFilter, setEditFilter] = useState<'all' | 'manual' | 'auto'>('all');
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
@@ -115,7 +114,7 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
 
   async function loadAllMarkets() {
     const res = await fetch(
-      `${supabaseUrl}/rest/v1/markets?select=id,question,short_label,category,description,closes_at,group_title,is_auto,resolved&order=created_at.desc&limit=2000`,
+      `${supabaseUrl}/rest/v1/markets?is_auto=eq.false&resolved=eq.false&status=eq.open&select=id,question,short_label,category,description,closes_at,group_title,is_auto,resolved&order=created_at.desc&limit=2000`,
       { headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` } }
     );
     setAllMarkets(await res.json());
@@ -374,11 +373,11 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
   }
   const adminGrouped = groupMarkets(adminFilteredMarkets);
 
-  const filteredEditMarkets = allMarkets.filter(m => {
-    const matchSearch = editSearch === '' || (m.question ?? '').toLowerCase().includes(editSearch.toLowerCase()) || (m.short_label ?? '').toLowerCase().includes(editSearch.toLowerCase());
-    const matchFilter = editFilter === 'all' || (editFilter === 'auto' ? m.is_auto : !m.is_auto);
-    return matchSearch && matchFilter;
-  });
+  const filteredEditMarkets = allMarkets.filter(m =>
+    editSearch === '' ||
+    (m.question ?? '').toLowerCase().includes(editSearch.toLowerCase()) ||
+    (m.short_label ?? '').toLowerCase().includes(editSearch.toLowerCase())
+  );
 
   const filteredUsers = users.filter(u => userSearch === '' || (u.username ?? '').toLowerCase().includes(userSearch.toLowerCase()));
 
@@ -521,14 +520,14 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
       {/* ── MÄRKTE BEARBEITEN ── */}
       {adminTab === 'edit' && (
         <div style={{ maxWidth: 720 }}>
-          <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
-            <input style={{ ...inputStyle, width: 260, marginBottom: 0 }} placeholder="Markt suchen…" value={editSearch} onChange={e => setEditSearch(e.target.value)} />
-            {(['all', 'manual', 'auto'] as const).map(f => (
-              <button key={f} onClick={() => setEditFilter(f)} style={{ padding: '8px 14px', borderRadius: 8, border: `1px solid ${editFilter === f ? '#0ea5e9' : 'var(--border)'}`, background: editFilter === f ? '#0ea5e9' : 'var(--surface)', color: editFilter === f ? '#fff' : 'var(--text-muted)', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
-                {f === 'all' ? 'Alle' : f === 'manual' ? 'Manuell' : 'Automatisch'}
-              </button>
-            ))}
-            <span style={{ fontSize: 12, color: 'var(--text-muted)', marginLeft: 4 }}>{filteredEditMarkets.length} Märkte</span>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center' }}>
+            <input
+              style={{ ...inputStyle, width: 260, marginBottom: 0 }}
+              placeholder="Markt suchen…"
+              value={editSearch}
+              onChange={e => setEditSearch(e.target.value)}
+            />
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{filteredEditMarkets.length} Märkte</span>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {filteredEditMarkets.map(m => (
@@ -539,8 +538,6 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
                     <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, display: 'flex', gap: 8, alignItems: 'center' }}>
                       <span>{m.category}</span>
                       {m.group_title && <><span>·</span><span>{m.group_title}</span></>}
-                      <span style={{ padding: '1px 6px', borderRadius: 4, background: m.is_auto ? 'rgba(99,102,241,0.12)' : 'rgba(100,116,139,0.12)', color: m.is_auto ? '#6366f1' : 'var(--text-muted)', fontSize: 10, fontWeight: 700 }}>{m.is_auto ? 'AUTO' : 'MANUELL'}</span>
-                      {m.resolved && <span style={{ padding: '1px 6px', borderRadius: 4, background: 'rgba(220,38,38,0.1)', color: '#dc2626', fontSize: 10, fontWeight: 700 }}>AUFGELÖST</span>}
                     </div>
                   </div>
                   <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0, marginLeft: 12 }}>{editingMarket === m.id ? '▲' : '▼'}</span>
@@ -627,21 +624,14 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
                       <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>{(u.balance ?? 0).toLocaleString('de')} ₫</div>
                     </div>
                     <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-                      <button
-                        onClick={() => { setEditingUser(u.id); setNewBalance(String(u.balance ?? 0)); setAddAmount(''); setUserMessage(''); }}
-                        style={{ padding: '6px 12px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, cursor: 'pointer', fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}
-                      >
-                        ✏️ Guthaben
-                      </button>
+                      <button onClick={() => { setEditingUser(u.id); setNewBalance(String(u.balance ?? 0)); setAddAmount(''); setUserMessage(''); }} style={{ padding: '6px 12px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, cursor: 'pointer', fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}>✏️ Guthaben</button>
                       {u.id !== userId && (
                         <button onClick={() => setDeleteUserConfirm(u.id)} style={{ padding: '6px 10px', background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)', borderRadius: 6, cursor: 'pointer', fontSize: 12, color: '#dc2626', fontWeight: 600 }}>🗑</button>
                       )}
                     </div>
                   </div>
-
                   {editingUser === u.id && (
                     <div style={{ padding: '14px 16px', borderTop: '1px solid var(--border)', background: 'rgba(249,115,22,0.04)', display: 'flex', flexDirection: 'column', gap: 12 }}>
-                      {/* Dukaten addieren */}
                       <div>
                         <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>Betrag addieren</div>
                         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -652,7 +642,6 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
                           ))}
                         </div>
                       </div>
-                      {/* Absolut setzen */}
                       <div>
                         <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>Absolut setzen</div>
                         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -666,7 +655,6 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
                       </div>
                     </div>
                   )}
-
                   {deleteUserConfirm === u.id && (
                     <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border)', background: 'rgba(220,38,38,0.04)', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                       <span style={{ fontSize: 13, color: '#dc2626', fontWeight: 600 }}>Nutzer {u.username} — alle Daten löschen?</span>
