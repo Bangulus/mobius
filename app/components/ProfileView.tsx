@@ -224,9 +224,10 @@ const BADGE_CATEGORY_LABELS: Record<string, string> = {
 }
 
 function BadgeSection({ userId }: { userId: string }) {
-  const [earnedIds, setEarnedIds]   = useState<Set<string>>(new Set())
-  const [awardedAt, setAwardedAt]   = useState<Record<string, string>>({})
-  const [loading, setLoading]       = useState(true)
+  const [earnedIds, setEarnedIds] = useState<Set<string>>(new Set())
+  const [awardedAt, setAwardedAt] = useState<Record<string, string>>({})
+  const [loading, setLoading]     = useState(true)
+  const [open, setOpen]           = useState(true)
 
   useEffect(() => {
     dbGet('user_badges', `user_id=eq.${userId}&select=badge_id,awarded_at`).then(rows => {
@@ -243,71 +244,72 @@ function BadgeSection({ userId }: { userId: string }) {
   }, [userId])
 
   const categories = ['trades', 'wins', 'streak'] as const
-
-  if (loading) return (
-    <div className="card" style={{ padding: '20px 18px', marginBottom: 24 }}>
-      <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--text)', marginBottom: 4 }}>Badges</div>
-      <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Lädt…</div>
-    </div>
-  )
-
   const earnedCount = earnedIds.size
   const totalCount  = BADGES.length
 
   return (
-    <div className="card" style={{ padding: '20px 18px', marginBottom: 24 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-        <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--text)' }}>Badges</div>
-        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{earnedCount} / {totalCount} verdient</div>
+    <div className="card" style={{ padding: 0, overflow: 'hidden', marginBottom: 24 }}>
+      <div
+        onClick={() => setOpen(o => !o)}
+        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', cursor: 'pointer' }}
+      >
+        <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--text)' }}>Badges</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{earnedCount} / {totalCount} verdient</span>
+          <span style={{ fontSize: 18, color: 'var(--text-muted)', transition: 'transform 0.2s', transform: open ? 'rotate(180deg)' : 'rotate(0deg)', display: 'inline-block' }}>▾</span>
+        </div>
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-        {categories.map(cat => {
-          const catBadges = BADGES.filter(b => b.category === cat)
-          return (
-            <div key={cat}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12 }}>
-                {BADGE_CATEGORY_LABELS[cat]}
-              </div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
-                {catBadges.map(badge => {
-                  const earned = earnedIds.has(badge.id)
-                  const date   = awardedAt[badge.id]
-                  return (
-                    <div
-                      key={badge.id}
-                      title={earned && date ? `Verdient am ${new Date(date).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })}` : 'Noch nicht verdient'}
-                      style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        gap: 6,
-                        padding: '12px 14px',
-                        borderRadius: 12,
-                        border: earned ? '1px solid rgba(99,102,241,0.25)' : '1px solid var(--border)',
-                        background: earned ? 'rgba(99,102,241,0.06)' : 'var(--surface)',
-                        opacity: earned ? 1 : 0.4,
-                        minWidth: 80,
-                        transition: 'all 0.15s',
-                      }}
-                    >
-                      <span style={{ fontSize: 28, filter: earned ? 'none' : 'grayscale(1)' }}>{badge.icon}</span>
-                      <span style={{ fontSize: 11, fontWeight: earned ? 600 : 400, color: earned ? 'var(--text)' : 'var(--text-muted)', textAlign: 'center', lineHeight: 1.3 }}>
-                        {badge.label}
-                      </span>
-                      {earned && date && (
-                        <span style={{ fontSize: 10, color: 'var(--text-subtle)', textAlign: 'center' }}>
-                          {new Date(date).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit' })}
-                        </span>
-                      )}
+      {open && (
+        <div style={{ borderTop: '0.5px solid var(--border)', padding: '20px 18px' }}>
+          {loading ? (
+            <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Lädt…</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+              {categories.map(cat => {
+                const catBadges = BADGES.filter(b => b.category === cat)
+                return (
+                  <div key={cat}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12 }}>
+                      {BADGE_CATEGORY_LABELS[cat]}
                     </div>
-                  )
-                })}
-              </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+                      {catBadges.map(badge => {
+                        const earned = earnedIds.has(badge.id)
+                        const date   = awardedAt[badge.id]
+                        return (
+                          <div
+                            key={badge.id}
+                            title={earned && date ? `Verdient am ${new Date(date).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })}` : 'Noch nicht verdient'}
+                            style={{
+                              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
+                              padding: '12px 14px', borderRadius: 12, minWidth: 80,
+                              border: earned ? '1px solid rgba(99,102,241,0.25)' : '1px solid var(--border)',
+                              background: earned ? 'rgba(99,102,241,0.06)' : 'var(--surface)',
+                              opacity: earned ? 1 : 0.4,
+                              transition: 'all 0.15s',
+                            }}
+                          >
+                            <span style={{ fontSize: 28, filter: earned ? 'none' : 'grayscale(1)' }}>{badge.icon}</span>
+                            <span style={{ fontSize: 11, fontWeight: earned ? 600 : 400, color: earned ? 'var(--text)' : 'var(--text-muted)', textAlign: 'center', lineHeight: 1.3 }}>
+                              {badge.label}
+                            </span>
+                            {earned && date && (
+                              <span style={{ fontSize: 10, color: 'var(--text-subtle)', textAlign: 'center' }}>
+                                {new Date(date).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit' })}
+                              </span>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )
+              })}
             </div>
-          )
-        })}
-      </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
