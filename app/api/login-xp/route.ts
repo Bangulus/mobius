@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { XP_LOGIN, XP_STREAK_7, levelFromXp } from '@/lib/progression'
+import { getNewBadges } from '@/lib/badges'
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -27,12 +28,10 @@ async function dbWrite(method: 'POST' | 'PATCH' | 'DELETE', table: string, filte
   return res
 }
 
-// Heutiges Datum in Berliner Zeitzone als YYYY-MM-DD (gleiches Pattern wie lib/finnhub.ts: getDayMarketCloseISO)
 function todayBerlin(): string {
   return new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Berlin' })
 }
 
-// Differenz in ganzen Tagen zwischen zwei YYYY-MM-DD-Strings
 function daysBetween(from: string, to: string): number {
   const fromMs = new Date(from + 'T00:00:00Z').getTime()
   const toMs   = new Date(to   + 'T00:00:00Z').getTime()
@@ -40,7 +39,6 @@ function daysBetween(from: string, to: string): number {
 }
 
 export async function POST(req: NextRequest) {
-  // Auth: Session aus Authorization Header (identisch zu place-bet)
   const authHeader = req.headers.get('authorization')
   if (!authHeader?.startsWith('Bearer ')) {
     return NextResponse.json({ error: 'Nicht eingeloggt.' }, { status: 401 })
@@ -48,10 +46,7 @@ export async function POST(req: NextRequest) {
   const userToken = authHeader.replace('Bearer ', '').trim()
 
   const authRes = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
-    headers: {
-      apikey: SERVICE_KEY,
-      Authorization: `Bearer ${userToken}`,
-    },
+    headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${userToken}` },
     cache: 'no-store',
   })
   if (!authRes.ok) {
@@ -63,7 +58,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Ungültige Session.' }, { status: 401 })
   }
 
-  const userRows = await dbGet('users', `id=eq.${userId}&select=xp,login_streak,last_login_date`)
+  const userRows = await dbGet('users', `id=eq.${userId}&select=xp,login_streak,last_login_date,total_trades`)
   const u = userRows?.[0]
   if (!u) {
     return NextResponse.json({ error: 'Benutzer nicht gefunden.' }, { status: 404 })
@@ -74,7 +69,6 @@ export async function POST(req: NextRequest) {
   const currentStreak: number = u.login_streak ?? 0
   const currentXp: number = u.xp ?? 0
 
-  // Bereits heute eingeloggt → idempotent, kein XP, kein Streak-Update
   if (lastLogin === today) {
     return NextResponse.json({ success: true, alreadyAwarded: true, streak: currentStreak })
   }
@@ -117,6 +111,29 @@ export async function POST(req: NextRequest) {
     })
   }
 
+  // Badge-Vergabe
+  const newBadges: string[] = []
+  try {
+    const existingRows = await dbGet('user_badges', `user_id=eq.${userId}&select=badge_id`)
+    const existing = (existingRows ?? []).map((r: { badge_id: string }) => r.badge_id)
+
+    // Wins zählen aus xp_events
+    const winRows = await dbGet('xp_events', `user_id=eq.${userId}&type=eq.win&select=id`)
+    const totalWins = (winRows ?? []).length
+
+    const earned = getNewBadges(existing, u.total_trades ?? 0, totalWins, newStreak)
+
+    for (const badge of earned) {
+      await dbWrite('POST', 'user_badges', '', {
+        user_id: userId,
+        badge_id: badge.id,
+      })
+      newBadges.push(badge.id)
+    }
+  } catch (err) {
+    console.error('Badge-Vergabe login-xp fehlgeschlagen:', err)
+  }
+
   return NextResponse.json({
     success: true,
     alreadyAwarded: false,
@@ -125,5 +142,6 @@ export async function POST(req: NextRequest) {
     xpGain,
     newXp,
     newLevel,
+    newBadges,
   })
 }
