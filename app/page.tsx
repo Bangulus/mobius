@@ -81,6 +81,7 @@ interface LeaderboardEntry {
   username: string
   total_balance: number
   avatar_url?: string
+  title?: string
 }
 
 interface WeeklyEntry {
@@ -88,6 +89,7 @@ interface WeeklyEntry {
   username: string
   weekly_gain: number
   avatar_url?: string
+  title?: string
 }
 
 interface WinToast {
@@ -384,13 +386,14 @@ export default function Home() {
   }, [])
 
   const loadLeaderboard = useCallback(async () => {
-    const data = await dbGet('users', 'select=id,username,balance,avatar_url&order=balance.desc&limit=10')
+    const data = await dbGet('users', 'select=id,username,balance,avatar_url,title&order=balance.desc&limit=10')
     setLeaderboard(
       (data ?? []).map((u: User) => ({
         user_id: u.id,
         username: u.username,
         total_balance: u.balance,
         avatar_url: u.avatar_url,
+        title: u.title,
       }))
     )
   }, [])
@@ -405,10 +408,18 @@ export default function Home() {
     })
     const topIds = Object.entries(gainMap).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([id]) => id)
     if (topIds.length === 0) { setWeeklyBoard([]); return }
-    const users = await dbGet('users', `id=in.(${topIds.join(',')})&select=id,username,avatar_url`)
-    const userMap: Record<string, { username: string; avatar_url?: string }> = {}
-    users?.forEach((u: { id: string; username: string; avatar_url?: string }) => { userMap[u.id] = { username: u.username, avatar_url: u.avatar_url } })
-    setWeeklyBoard(topIds.map(id => ({ user_id: id, username: userMap[id]?.username ?? 'Unbekannt', weekly_gain: Math.round(gainMap[id]), avatar_url: userMap[id]?.avatar_url })))
+    const users = await dbGet('users', `id=in.(${topIds.join(',')})&select=id,username,avatar_url,title`)
+    const userMap: Record<string, { username: string; avatar_url?: string; title?: string }> = {}
+    users?.forEach((u: { id: string; username: string; avatar_url?: string; title?: string }) => {
+      userMap[u.id] = { username: u.username, avatar_url: u.avatar_url, title: u.title }
+    })
+    setWeeklyBoard(topIds.map(id => ({
+      user_id: id,
+      username: userMap[id]?.username ?? 'Unbekannt',
+      weekly_gain: Math.round(gainMap[id]),
+      avatar_url: userMap[id]?.avatar_url,
+      title: userMap[id]?.title,
+    })))
   }, [])
 
   useEffect(() => { loadMarkets(true); loadLeaderboard() }, [loadMarkets, loadLeaderboard])
@@ -657,7 +668,10 @@ export default function Home() {
         <div className="modal-backdrop" onClick={() => setShowLeaderboard(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 400 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-              <div><div className="modal-title" style={{ marginBottom: 2 }}>Wochenranking</div><div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Top-Händler der letzten 7 Tage</div></div>
+              <div>
+                <div className="modal-title" style={{ marginBottom: 2 }}>Wochenranking</div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Top-Händler der letzten 7 Tage</div>
+              </div>
               <button onClick={() => setShowLeaderboard(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 20, color: 'var(--text-muted)', lineHeight: 1 }}>×</button>
             </div>
             {weeklyBoard.length === 0 ? (
@@ -665,19 +679,27 @@ export default function Home() {
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {weeklyBoard.map((e, i) => {
-                  const av = avatarColor(e.username); const isMe = e.user_id === user?.id
+                  const av = avatarColor(e.username)
+                  const isMe = e.user_id === user?.id
                   const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`
                   return (
                     <div key={e.user_id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 10, background: isMe ? 'var(--accent-light, rgba(99,102,241,0.08))' : 'var(--surface)', border: isMe ? '1px solid rgba(99,102,241,0.2)' : '1px solid transparent' }}>
                       <span style={{ fontSize: 16, width: 24, textAlign: 'center', flexShrink: 0 }}>{medal}</span>
                       {e.avatar_url ? (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img src={e.avatar_url} alt={e.username} style={{ width: 30, height: 30, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+                        <img src={e.avatar_url} alt={e.username} style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
                       ) : (
-                        <div style={{ width: 30, height: 30, borderRadius: '50%', background: av.bg, color: av.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{e.username.slice(0, 2).toUpperCase()}</div>
+                        <div style={{ width: 32, height: 32, borderRadius: '50%', background: av.bg, color: av.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{e.username.slice(0, 2).toUpperCase()}</div>
                       )}
-                      <span style={{ fontSize: 13, color: 'var(--text)', fontWeight: isMe ? 700 : 500, flex: 1 }}>{e.username}{isMe ? ' (du)' : ''}</span>
-                      <span style={{ fontSize: 13, fontWeight: 700, color: '#16a34a' }}>+{e.weekly_gain.toLocaleString('de')} ₫</span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: isMe ? 700 : 500, color: 'var(--text)', lineHeight: 1.2 }}>
+                          {e.username}{isMe ? ' (du)' : ''}
+                        </div>
+                        <div style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.2 }}>
+                          {e.title ?? 'Nadir'}
+                        </div>
+                      </div>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: '#16a34a', flexShrink: 0 }}>+{e.weekly_gain.toLocaleString('de')} ₫</span>
                     </div>
                   )
                 })}
