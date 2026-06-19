@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { XP_TRADE, XP_NEW_CATEGORY, levelFromXp } from '@/lib/progression'
+import { getNewBadges } from '@/lib/badges'
 
 const SUPABASE_URL   = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const SERVICE_KEY    = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -60,17 +61,11 @@ function calcProb(qYes: number, qNo: number, b: number): number {
   return Math.round((eYes / (eYes + eNo)) * 100)
 }
 
-// Trade-XP anwenden (Buy & Sell). Liest aktuellen XP-Stand, berechnet neue Werte,
-// schreibt users-Update + xp_events-Eintrag. Fehler hier werden geloggt, aber
-// blockieren den Trade nicht (Progression ist sekundär zum Trade selbst).
 async function awardTradeXp(userId: string, marketId: string, category: string | undefined) {
   try {
     const userRows = await dbGet('users', `id=eq.${userId}&select=xp,total_trades,categories_traded`)
     const u = userRows?.[0]
-    if (!u) {
-      console.error(`awardTradeXp: User ${userId} nicht gefunden.`)
-      return
-    }
+    if (!u) return
 
     const currentXp: number = u.xp ?? 0
     const categoriesTraded: string[] = u.categories_traded ?? []
@@ -87,39 +82,54 @@ async function awardTradeXp(userId: string, marketId: string, category: string |
     const newLevel = levelFromXp(newXp)
     const newTotalTrades = totalTrades + 1
 
-    const patchRes = await dbWrite('PATCH', 'users', `id=eq.${userId}`, {
+    await dbWrite('PATCH', 'users', `id=eq.${userId}`, {
       xp: newXp,
       level: newLevel,
       total_trades: newTotalTrades,
       categories_traded: newCategories,
     })
-    if (!patchRes.ok) {
-      console.error(`awardTradeXp: users-Update fehlgeschlagen (${patchRes.status}) für User ${userId}.`)
-      return
-    }
 
-    const eventRes = await dbWrite('POST', 'xp_events', '', {
+    await dbWrite('POST', 'xp_events', '', {
       user_id: userId,
       type: 'trade',
       xp_delta: xpGain,
       rp_delta: 0,
       market_id: marketId,
     })
-    if (!eventRes.ok) {
-      console.error(`awardTradeXp: xp_events-Insert fehlgeschlagen (${eventRes.status}) für User ${userId}.`)
+
+    // Badge-Vergabe nach Trade
+    try {
+      const existingRows = await dbGet('user_badges', `user_id=eq.${userId}&select=badge_id`)
+      const existing = (existingRows ?? []).map((r: { badge_id: string }) => r.badge_id)
+
+      const winRows = await dbGet('xp_events', `user_id=eq.${userId}&type=eq.win&select=id`)
+      const totalWins = (winRows ?? []).length
+
+      const loginRows = await dbGet('users', `id=eq.${userId}&select=login_streak`)
+      const loginStreak = loginRows?.[0]?.login_streak ?? 0
+
+      const earned = getNewBadges(existing, newTotalTrades, totalWins, loginStreak)
+
+      for (const badge of earned) {
+        await dbWrite('POST', 'user_badges', '', {
+          user_id: userId,
+          badge_id: badge.id,
+        })
+      }
+    } catch (err) {
+      console.error('Badge-Vergabe place-bet fehlgeschlagen:', err)
     }
   } catch (err) {
     console.error('awardTradeXp: unerwarteter Fehler', err)
   }
 }
 
-// Rate Limiter — in-memory, reset bei Serverrestart
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>()
 
 function checkRateLimit(ip: string): boolean {
   const now = Date.now()
-  const windowMs = 60 * 1000 // 1 Minute
-  const maxRequests = 30     // max 30 Wetten pro Minute pro IP
+  const windowMs = 60 * 1000
+  const maxRequests = 30
 
   const entry = rateLimitMap.get(ip)
   if (!entry || now > entry.resetAt) {
@@ -132,25 +142,19 @@ function checkRateLimit(ip: string): boolean {
 }
 
 export async function POST(req: NextRequest) {
-  // Rate Limiting
   const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown'
   if (!checkRateLimit(ip)) {
     return NextResponse.json({ error: 'Zu viele Anfragen. Bitte warte kurz.' }, { status: 429 })
   }
 
-  // Auth: Session aus Authorization Header
   const authHeader = req.headers.get('authorization')
   if (!authHeader?.startsWith('Bearer ')) {
     return NextResponse.json({ error: 'Nicht eingeloggt.' }, { status: 401 })
   }
   const userToken = authHeader.replace('Bearer ', '').trim()
 
-  // Token verifizieren — User aus Supabase Auth holen
   const authRes = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
-    headers: {
-      apikey: SERVICE_KEY,
-      Authorization: `Bearer ${userToken}`,
-    },
+    headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${userToken}` },
     cache: 'no-store',
   })
   if (!authRes.ok) {
@@ -162,7 +166,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Ungültige Session.' }, { status: 401 })
   }
 
-  // Input parsen
   let body: Record<string, unknown>
   try {
     body = await req.json()
@@ -177,7 +180,6 @@ export async function POST(req: NextRequest) {
     spend: number
   }
 
-  // Input validieren
   if (!marketId || typeof marketId !== 'string' || marketId.length > 100) {
     return NextResponse.json({ error: 'Ungültige market_id.' }, { status: 400 })
   }
@@ -193,7 +195,6 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Markt laden und prüfen
   const markets = await dbGet('markets', `id=eq.${marketId}&select=*`)
   const market = markets?.[0]
   if (!market) {
@@ -202,13 +203,11 @@ export async function POST(req: NextRequest) {
   if (market.resolved || market.status !== 'open') {
     return NextResponse.json({ error: 'Markt ist bereits geschlossen.' }, { status: 400 })
   }
-  // Markt-Ablauf serverseitig prüfen
   const closesAt = new Date(market.closes_at.endsWith('Z') ? market.closes_at : market.closes_at + 'Z')
   if (closesAt.getTime() < Date.now()) {
     return NextResponse.json({ error: 'Markt ist abgelaufen.' }, { status: 400 })
   }
 
-  // User laden
   const users = await dbGet('users', `id=eq.${userId}&select=balance`)
   const user = users?.[0]
   if (!user) {
@@ -217,7 +216,6 @@ export async function POST(req: NextRequest) {
 
   // ── KAUFEN ──
   if (action === 'buy') {
-    // Negativsaldo-Schutz — serverseitig
     if (user.balance < spend) {
       return NextResponse.json({ error: 'Nicht genug Guthaben.' }, { status: 400 })
     }
@@ -229,7 +227,6 @@ export async function POST(req: NextRequest) {
     const probAfter  = calcProb(newQYes, newQNo, market.b) / 100
     const newBalance = Math.round(user.balance - spend)
 
-    // Trade schreiben
     const tradeRes = await dbWrite('POST', 'trades', '', {
       market_id: marketId,
       user_id: userId,
@@ -243,13 +240,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Fehler beim Speichern des Trades.' }, { status: 500 })
     }
 
-    // Markt updaten
     await dbWrite('PATCH', 'markets', `id=eq.${marketId}`, { q_yes: newQYes, q_no: newQNo })
-
-    // Balance updaten
     await dbWrite('PATCH', 'users', `id=eq.${userId}`, { balance: newBalance })
 
-    // Position upsert
     const existingPos = await dbGet('positions', `user_id=eq.${userId}&market_id=eq.${marketId}&select=*`)
     if (existingPos?.[0]) {
       const pos = existingPos[0]
@@ -268,7 +261,6 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    // Progression: Trade-XP (+ ggf. neue-Kategorie-Bonus)
     await awardTradeXp(userId, marketId, market.category)
 
     return NextResponse.json({ success: true, newBalance, shares: Math.round(shares) })
@@ -312,7 +304,6 @@ export async function POST(req: NextRequest) {
     await dbWrite('PATCH', 'users', `id=eq.${userId}`, { balance: newBalance })
     await dbWrite('DELETE', 'positions', `user_id=eq.${userId}&market_id=eq.${marketId}`)
 
-    // Progression: Trade-XP (+ ggf. neue-Kategorie-Bonus)
     await awardTradeXp(userId, marketId, market.category)
 
     return NextResponse.json({ success: true, newBalance, returned: Math.round(returnAmt) })
