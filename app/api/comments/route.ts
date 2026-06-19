@@ -33,16 +33,16 @@ export async function GET(req: NextRequest) {
   const comments = await res.json()
   if (!Array.isArray(comments)) return NextResponse.json([], { status: 200 })
 
-  // Usernames laden
   const userIds = Array.from(new Set(comments.map((c: { user_id: string }) => c.user_id)))
-  let users: { id: string; username: string; avatar_url?: string }[] = []
+  let users: { id: string; username: string; avatar_url?: string; title?: string }[] = []
   if (userIds.length > 0) {
     const uRes = await fetch(
-      `${SUPABASE_URL}/rest/v1/users?id=in.(${userIds.join(',')})&select=id,username,avatar_url`,
+      `${SUPABASE_URL}/rest/v1/users?id=in.(${userIds.join(',')})&select=id,username,avatar_url,title`,
       { headers: adminHeaders(), cache: 'no-store' }
     )
     users = await uRes.json()
   }
+
   const userMap = Object.fromEntries(users.map(u => [u.id, u]))
 
   const result = comments.map((c: {
@@ -50,8 +50,9 @@ export async function GET(req: NextRequest) {
     content: string; likes: number; created_at: string
   }) => ({
     ...c,
-    username:   userMap[c.user_id]?.username  ?? 'Unbekannt',
+    username:   userMap[c.user_id]?.username   ?? 'Unbekannt',
     avatar_url: userMap[c.user_id]?.avatar_url ?? null,
+    title:      userMap[c.user_id]?.title      ?? null,
   }))
 
   return NextResponse.json(result)
@@ -74,13 +75,16 @@ export async function POST(req: NextRequest) {
   const data = await res.json()
   if (!res.ok) return NextResponse.json({ error: 'Fehler beim Speichern' }, { status: 500 })
 
-  // Username für Rückgabe
-  const uRes  = await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${userId}&select=username,avatar_url`, { headers: adminHeaders() })
+  const uRes  = await fetch(
+    `${SUPABASE_URL}/rest/v1/users?id=eq.${userId}&select=username,avatar_url,title`,
+    { headers: adminHeaders() }
+  )
   const uData = await uRes.json()
 
   return NextResponse.json({
     ...data[0],
-    username:   uData[0]?.username  ?? 'Unbekannt',
+    username:   uData[0]?.username   ?? 'Unbekannt',
     avatar_url: uData[0]?.avatar_url ?? null,
+    title:      uData[0]?.title      ?? null,
   })
 }
