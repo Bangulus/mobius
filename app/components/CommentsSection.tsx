@@ -12,6 +12,7 @@ interface Comment {
   created_at: string
   username: string
   avatar_url: string | null
+  title?: string | null
 }
 
 function getToken(): string | null {
@@ -200,12 +201,13 @@ export default function CommentsSection({ marketId }: { marketId: string }) {
             const isOwn  = c.user_id === currentUserId
             const liked  = likedIds.has(c.id)
             const isLast = i === comments.length - 1
+            const showTitle = c.title && c.title !== 'Nadir'
             return (
               <div key={c.id} style={{
                 display: 'flex', gap: 12, padding: '16px 0',
                 borderBottom: isLast ? 'none' : '1px solid var(--border)',
               }}>
-                {/* Avatar — klickbar */}
+                {/* Avatar */}
                 <div
                   onClick={() => router.push(`/profil/${encodeURIComponent(c.username)}`)}
                   style={{ cursor: 'pointer', flexShrink: 0 }}
@@ -214,22 +216,35 @@ export default function CommentsSection({ marketId }: { marketId: string }) {
                 </div>
 
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 4 }}>
-                    {/* Username — klickbar */}
-                    <span
-                      onClick={() => router.push(`/profil/${encodeURIComponent(c.username)}`)}
-                      style={{
-                        fontSize: 13, fontWeight: 700, color: 'var(--text)',
-                        cursor: 'pointer', transition: 'color 0.15s',
-                      }}
-                      onMouseEnter={e => (e.currentTarget.style.color = 'var(--accent)')}
-                      onMouseLeave={e => (e.currentTarget.style.color = 'var(--text)')}
-                    >
-                      {c.username}
-                    </span>
+                  {/* Username + Titel + Zeit */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                      <span
+                        onClick={() => router.push(`/profil/${encodeURIComponent(c.username)}`)}
+                        style={{
+                          fontSize: 13, fontWeight: 700, color: 'var(--text)',
+                          cursor: 'pointer', transition: 'color 0.15s', lineHeight: 1.2,
+                        }}
+                        onMouseEnter={e => (e.currentTarget.style.color = 'var(--accent)')}
+                        onMouseLeave={e => (e.currentTarget.style.color = 'var(--text)')}
+                      >
+                        {c.username}
+                      </span>
+                      {showTitle && (
+                        <span style={{
+                          fontSize: 11,
+                          color: 'var(--text-muted)',
+                          lineHeight: 1.2,
+                        }}>
+                          {c.title}
+                        </span>
+                      )}
+                    </div>
                     <span style={{ fontSize: 12, color: 'var(--text-subtle)' }}>{timeAgo(c.created_at)}</span>
                   </div>
+
                   <div style={{ fontSize: 14, color: 'var(--text)', lineHeight: 1.55, wordBreak: 'break-word' }}>{c.content}</div>
+
                   <div style={{ marginTop: 8 }}>
                     {isOwn ? (
                       <span style={{ fontSize: 12, color: 'var(--text-subtle)' }}>
