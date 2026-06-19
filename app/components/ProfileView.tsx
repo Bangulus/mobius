@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import PnLChart from './PnLChart';
 import { xpForLevel, cumulativeXpForLevel } from '@/lib/progression';
+import { BADGES, BadgeDef } from '@/lib/badges';
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -127,12 +128,9 @@ function avatarColor(str: string) {
   return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length];
 }
 
-// ── Titel-Farben (Platzhalter bis eigene Logos existieren) ──
-// Aktueller Titel (Karte 1) immer Bitcoin-Orange, unabhängig vom Rang.
 const CURRENT_TITLE_BG = 'rgba(247,147,26,0.12)';
 const CURRENT_TITLE_COLOR = '#c9740f';
 
-// Titel-Historie: feste Ramp pro Rang (50er-Hintergrund / 800er-Text)
 const TITLE_RAMP: Record<string, { bg: string; color: string }> = {
   Nadir:      { bg: '#F1EFE8', color: '#444441' },
   Initiat:    { bg: '#FAECE7', color: '#712B13' },
@@ -195,7 +193,6 @@ function useIsMobile() {
   return isMobile;
 }
 
-// Toggle Switch Komponente
 function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
   return (
     <button
@@ -218,7 +215,104 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean
   );
 }
 
-// ── PROGRESSIONS-SEKTION (Level/XP/RP + Titel-Historie) ──────
+// ── BADGE-SEKTION ─────────────────────────────────────────────
+
+const BADGE_CATEGORY_LABELS: Record<string, string> = {
+  trades: 'Trades',
+  wins:   'Korrekte Prognosen',
+  streak: 'Login-Streak',
+}
+
+function BadgeSection({ userId }: { userId: string }) {
+  const [earnedIds, setEarnedIds]   = useState<Set<string>>(new Set())
+  const [awardedAt, setAwardedAt]   = useState<Record<string, string>>({})
+  const [loading, setLoading]       = useState(true)
+
+  useEffect(() => {
+    dbGet('user_badges', `user_id=eq.${userId}&select=badge_id,awarded_at`).then(rows => {
+      const ids = new Set<string>()
+      const dates: Record<string, string> = {}
+      ;(rows ?? []).forEach((r: { badge_id: string; awarded_at: string }) => {
+        ids.add(r.badge_id)
+        dates[r.badge_id] = r.awarded_at
+      })
+      setEarnedIds(ids)
+      setAwardedAt(dates)
+      setLoading(false)
+    })
+  }, [userId])
+
+  const categories = ['trades', 'wins', 'streak'] as const
+
+  if (loading) return (
+    <div className="card" style={{ padding: '20px 18px', marginBottom: 24 }}>
+      <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--text)', marginBottom: 4 }}>Badges</div>
+      <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Lädt…</div>
+    </div>
+  )
+
+  const earnedCount = earnedIds.size
+  const totalCount  = BADGES.length
+
+  return (
+    <div className="card" style={{ padding: '20px 18px', marginBottom: 24 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+        <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--text)' }}>Badges</div>
+        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{earnedCount} / {totalCount} verdient</div>
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+        {categories.map(cat => {
+          const catBadges = BADGES.filter(b => b.category === cat)
+          return (
+            <div key={cat}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12 }}>
+                {BADGE_CATEGORY_LABELS[cat]}
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+                {catBadges.map(badge => {
+                  const earned = earnedIds.has(badge.id)
+                  const date   = awardedAt[badge.id]
+                  return (
+                    <div
+                      key={badge.id}
+                      title={earned && date ? `Verdient am ${new Date(date).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })}` : 'Noch nicht verdient'}
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        gap: 6,
+                        padding: '12px 14px',
+                        borderRadius: 12,
+                        border: earned ? '1px solid rgba(99,102,241,0.25)' : '1px solid var(--border)',
+                        background: earned ? 'rgba(99,102,241,0.06)' : 'var(--surface)',
+                        opacity: earned ? 1 : 0.4,
+                        minWidth: 80,
+                        transition: 'all 0.15s',
+                      }}
+                    >
+                      <span style={{ fontSize: 28, filter: earned ? 'none' : 'grayscale(1)' }}>{badge.icon}</span>
+                      <span style={{ fontSize: 11, fontWeight: earned ? 600 : 400, color: earned ? 'var(--text)' : 'var(--text-muted)', textAlign: 'center', lineHeight: 1.3 }}>
+                        {badge.label}
+                      </span>
+                      {earned && date && (
+                        <span style={{ fontSize: 10, color: 'var(--text-subtle)', textAlign: 'center' }}>
+                          {new Date(date).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit' })}
+                        </span>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// ── PROGRESSIONS-SEKTION ──────────────────────────────────────
 
 interface SeasonHistoryEntry {
   seasonId: string;
@@ -240,8 +334,8 @@ function ProgressionSection({ userId, xp, level, rp, title, peakTitle }: {
   title: string;
   peakTitle: string;
 }) {
-  const [historyOpen, setHistoryOpen]   = useState(false);
-  const [history, setHistory]           = useState<SeasonHistoryEntry[]>([]);
+  const [historyOpen, setHistoryOpen]       = useState(false);
+  const [history, setHistory]               = useState<SeasonHistoryEntry[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyLoaded, setHistoryLoaded]   = useState(false);
 
@@ -361,13 +455,11 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, x
   const trefferquote     = calcTrefferquote(allRows);
   const avgEinsatz       = allRows.length > 0 ? Math.round(totalEinsatz / allRows.length) : 0;
 
-  // last_seen_at updaten
   useEffect(() => {
     if (!userId) return;
     dbPatch('users', `id=eq.${userId}`, { last_seen_at: new Date().toISOString() });
   }, [userId]);
 
-  // Privacy Settings laden
   useEffect(() => {
     if (!userId) return;
     dbGet('users', `id=eq.${userId}&select=privacy_settings`).then(data => {
@@ -537,7 +629,6 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, x
         </div>
       </div>
 
-      {/* Stats-Grid */}
       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(3, 1fr)' : 'repeat(3, 1fr)', borderTop: '1px solid var(--border)', paddingTop: isMobile ? 16 : 20, gap: 8 }}>
         {[
           { label: 'Portfoliowert',  value: `${Math.round(balance ?? 0).toLocaleString('de')} ₫`, color: 'var(--text)' },
@@ -555,10 +646,7 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, x
 
   const rightCards = (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      {/* Gewinn/Verlust Diagramm */}
       <PnLChart userId={userId} displayName={displayName} avatarUrl={avatarUrl} />
-
-      {/* Streak + Trefferquote */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
         <div className="card" style={{ padding: '16px 18px' }}>
           <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>Streak</div>
@@ -593,7 +681,6 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, x
   return (
     <div style={{ maxWidth: 900, margin: '0 auto' }}>
 
-      {/* ── HEADER ── */}
       {isMobile ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 20 }}>
           {headerCard}
@@ -606,7 +693,6 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, x
         </div>
       )}
 
-      {/* ── PROGRESSION (Level/XP/RP + Titel-Historie) ── */}
       <ProgressionSection
         userId={userId}
         xp={xp ?? 0}
@@ -616,7 +702,8 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, x
         peakTitle={peakTitle ?? title ?? 'Nadir'}
       />
 
-      {/* ── TABS ── */}
+      <BadgeSection userId={userId} />
+
       <div style={{ borderBottom: '1px solid var(--border)', marginBottom: 20, display: 'flex', overflowX: 'auto' }}>
         {(['positionen', 'aktivitaet'] as TabType[]).map(t => (
           <button key={t} onClick={() => setTab(t)} style={{
@@ -632,7 +719,6 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, x
         ))}
       </div>
 
-      {/* ── POSITIONEN ── */}
       {tab === 'positionen' && (
         <>
           <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
@@ -763,15 +849,12 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, x
         </>
       )}
 
-      {/* ── AKTIVITÄT ── */}
       {tab === 'aktivitaet' && (
         <AktivitaetsFeed userId={userId} />
       )}
     </div>
   );
 }
-
-// ── AKTIVITÄTS-FEED ──────────────────────────────────────────
 
 interface FeedMarket {
   question: string;
