@@ -350,6 +350,19 @@ export default function Home() {
     if (cat) setCategory(cat)
   }, [])
 
+  // Deep-Link Support: ?view=portfolio|ranking|profil (z. B. von der Marktdetailseite aus)
+  useEffect(() => {
+    const viewParam = new URLSearchParams(window.location.search).get('view')
+    if (viewParam === 'portfolio') {
+      setView('portfolio'); setMobileTab('portfolio')
+    } else if (viewParam === 'profil') {
+      setView('profil'); setMobileTab('profil')
+    } else if (viewParam === 'ranking') {
+      setMobileTab('ranking'); loadWeeklyBoard(); setShowLeaderboard(true)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light')
     localStorage.setItem('mobius_darkmode', String(darkMode))
@@ -840,6 +853,14 @@ export default function Home() {
                 </button>
               </div>
             </>
+          )}
+          {view === 'profil' && !user && (
+            <div style={{ textAlign: 'center', padding: '48px 16px' }}>
+              <div style={{ fontSize: 32, marginBottom: 12 }}>👤</div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', marginBottom: 8 }}>Kein Konto</div>
+              <div style={{ fontSize: 14, color: 'var(--text-muted)', marginBottom: 20 }}>Melde dich an um dein Profil zu sehen.</div>
+              <button className="submit-btn yes" onClick={() => openAuth('login')} style={{ maxWidth: 200, margin: '0 auto' }}>Anmelden</button>
+            </div>
           )}
           {view === 'markets' && (
             <>
