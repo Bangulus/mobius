@@ -1765,6 +1765,25 @@ export default function MarketPage() {
         <CommentsSection marketId={marketId} />
       </div>
 
+      {/* Mobile Bottom Tab Bar */}
+      <nav className="mobile-tab-bar">
+        {[
+          { id: 'markets',   label: 'Märkte',    icon: '📊', href: '/' },
+          { id: 'portfolio', label: 'Portfolio', icon: '💼', href: '/?view=portfolio' },
+          { id: 'ranking',   label: 'Ranking',   icon: '🏆', href: '/?view=ranking' },
+          { id: 'profil',    label: 'Profil',    icon: '👤', href: '/?view=profil' },
+        ].map(tab => (
+          <button
+            key={tab.id}
+            className="mobile-tab-item"
+            onClick={() => router.push(tab.href)}
+          >
+            <span>{tab.icon}</span>
+            <span>{tab.label}</span>
+          </button>
+        ))}
+      </nav>
+
       <style>{`
         @keyframes slideInRight { from { transform: translateX(120%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
