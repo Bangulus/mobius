@@ -30,6 +30,23 @@ async function dbPatch(table: string, params: string, body: object) {
   });
 }
 
+// ─── Icon System (Tabler outline SVGs, inline — kein npm-Paket) ───────────────
+
+const ICON_PATHS: Record<string, string[]> = {
+  trophy: ['M8 21l8 0', 'M12 17l0 4', 'M7 4l10 0', 'M17 4v8a5 5 0 0 1 -10 0v-8', 'M3 9a2 2 0 1 0 4 0a2 2 0 1 0 -4 0', 'M17 9a2 2 0 1 0 4 0a2 2 0 1 0 -4 0'],
+  flame:  ['M12 10.941c2.333 -3.308 .167 -7.823 -1 -8.941c0 3.395 -2.235 5.299 -3.667 6.706c-1.43 1.408 -2.333 3.294 -2.333 5.588c0 3.704 3.134 6.706 7 6.706c3.866 0 7 -3.002 7 -6.706c0 -1.712 -1.232 -4.403 -2.333 -5.588c-2.084 3.353 -3.257 3.353 -4.667 2.235'],
+}
+
+function Icon({ name, size = 16 }: { name: string; size?: number }) {
+  const paths = ICON_PATHS[name]
+  if (!paths) return null
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={{ display: 'inline-block', verticalAlign: 'middle', flexShrink: 0 }}>
+      {paths.map((d, i) => <path key={i} d={d} />)}
+    </svg>
+  )
+}
+
 interface Props {
   userId: string;
   token: string;
@@ -669,8 +686,8 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, x
             <span style={{ fontSize: 28, fontWeight: 900, color: streak >= 3 ? '#f59e0b' : 'var(--text)', letterSpacing: '-1px', lineHeight: 1 }}>{streak}</span>
             <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 500 }}>{streak === 1 ? 'Tag' : 'Tage'}</span>
           </div>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6, lineHeight: 1.4 }}>
-            {streak === 0 ? 'Heute noch nicht aktiv' : streak >= 7 ? 'Serie läuft 🔥' : streak >= 3 ? 'Konstant aktiv' : 'Starte heute'}
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6, lineHeight: 1.4, display: 'flex', alignItems: 'center', gap: 4 }}>
+            {streak === 0 ? 'Heute noch nicht aktiv' : streak >= 7 ? (<>Serie läuft <Icon name="flame" size={12} /></>) : streak >= 3 ? 'Konstant aktiv' : 'Starte heute'}
           </div>
         </div>
         <div className="card" style={{ padding: '16px 18px' }}>
@@ -921,8 +938,8 @@ function AktivitaetsFeed({ userId }: { userId: string }) {
         const coinColor = !isWin && m?.is_auto && m.coin ? COIN_COLORS[m.coin] ?? '#f97316' : null;
         const marketLabel = m ? m.is_auto ? `${m.coin} · 3-Min-Markt` : (m.question.length > 52 ? m.question.slice(0, 52) + '…' : m.question) : 'Unbekannter Markt';
         const dirLabel = m?.is_auto ? (isYes ? 'Up ↑' : 'Down ↓') : (isYes ? 'Ja' : 'Nein');
-        let iconBg = 'rgba(99,102,241,0.12)'; let iconContent = '⇄';
-        if (isWin)      { iconBg = 'rgba(22,163,74,0.15)'; iconContent = '🏆'; }
+        let iconBg = 'rgba(99,102,241,0.12)'; let iconContent: React.ReactNode = '⇄';
+        if (isWin)      { iconBg = 'rgba(22,163,74,0.15)'; iconContent = <Icon name="trophy" size={17} />; }
         else if (isBuy) { iconBg = isYes ? 'rgba(22,163,74,0.12)' : 'rgba(220,38,38,0.12)'; iconContent = isYes ? '↑' : '↓'; }
         let subText = ''; let amountLabel = ''; let amountColor = 'var(--text)';
         if (isWin)       { const resLabel = m?.is_auto ? (m.resolution === 'yes' ? 'Up ↑' : 'Down ↓') : (m?.resolution === 'yes' ? 'Ja' : 'Nein'); subText = `Gewonnen · ${resLabel}`; amountLabel = `+${Math.round(item.cost).toLocaleString('de')} ₫`; amountColor = 'var(--yes)'; }
@@ -933,7 +950,7 @@ function AktivitaetsFeed({ userId }: { userId: string }) {
             {coinColor ? (
               <div style={{ width: 36, height: 36, borderRadius: 10, flexShrink: 0, background: coinColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, color: '#fff' }}>{m?.coin?.charAt(0)}</div>
             ) : (
-              <div style={{ width: 36, height: 36, borderRadius: 10, flexShrink: 0, background: iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: isWin ? 18 : 16 }}>{iconContent}</div>
+              <div style={{ width: 36, height: 36, borderRadius: 10, flexShrink: 0, background: iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>{iconContent}</div>
             )}
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 13, fontWeight: isWin ? 600 : 500, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{marketLabel}</div>
