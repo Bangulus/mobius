@@ -15,6 +15,30 @@ async function dbGet(table: string, params: string) {
   return res.json()
 }
 
+// ─── Icon System (Tabler outline SVGs, inline — kein npm-Paket) ───────────────
+
+const ICON_PATHS: Record<string, string[]> = {
+  confetti:        ['M4 5h2', 'M5 4v2', 'M11.5 4l-.5 2', 'M18 5h2', 'M19 4v2', 'M15 9l-1 1', 'M18 13l2 -.5', 'M18 19h2', 'M19 18v2', 'M14 16.518l-6.518 -6.518l-4.39 9.58a1 1 0 0 0 1.329 1.329l9.579 -4.39'],
+  'mood-sad':      ['M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0', 'M9 10l.01 0', 'M15 10l.01 0', 'M9.5 15.25a3.5 3.5 0 0 1 5 0'],
+  hourglass:       ['M6.5 7h11', 'M6.5 17h11', 'M6 20v-2a6 6 0 1 1 12 0v2a1 1 0 0 1 -1 1h-10a1 1 0 0 1 -1 -1', 'M6 4v2a6 6 0 1 0 12 0v-2a1 1 0 0 0 -1 -1h-10a1 1 0 0 0 -1 1'],
+  'steering-wheel': ['M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0', 'M10 12a2 2 0 1 0 4 0a2 2 0 1 0 -4 0', 'M12 14l0 7', 'M10 12l-6.75 -2', 'M14 12l6.75 -2'],
+  cloud:           ['M6.657 18c-2.572 0 -4.657 -2.007 -4.657 -4.483c0 -2.475 2.085 -4.482 4.657 -4.482c.393 -1.762 1.794 -3.2 3.675 -3.773c1.88 -.572 3.956 -.193 5.444 1c1.488 1.19 2.162 3.007 1.77 4.769h.99c1.913 0 3.464 1.56 3.464 3.486c0 1.927 -1.551 3.487 -3.465 3.487h-11.878'],
+  'chart-bar':     ['M3 13a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v6a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1l0 -6', 'M15 9a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v10a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1l0 -10', 'M9 5a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v14a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1l0 -14', 'M4 20h14'],
+  briefcase:       ['M3 9a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2v9a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2l0 -9', 'M8 7v-2a2 2 0 0 1 2 -2h4a2 2 0 0 1 2 2v2', 'M12 12l0 .01', 'M3 13a20 20 0 0 0 18 0'],
+  trophy:          ['M8 21l8 0', 'M12 17l0 4', 'M7 4l10 0', 'M17 4v8a5 5 0 0 1 -10 0v-8', 'M3 9a2 2 0 1 0 4 0a2 2 0 1 0 -4 0', 'M17 9a2 2 0 1 0 4 0a2 2 0 1 0 -4 0'],
+  user:            ['M8 7a4 4 0 1 0 8 0a4 4 0 0 0 -8 0', 'M6 21v-2a4 4 0 0 1 4 -4h4a4 4 0 0 1 4 4v2'],
+}
+
+function Icon({ name, size = 16 }: { name: string; size?: number }) {
+  const paths = ICON_PATHS[name]
+  if (!paths) return null
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={{ display: 'inline-block', verticalAlign: 'middle', flexShrink: 0 }}>
+      {paths.map((d, i) => <path key={i} d={d} />)}
+    </svg>
+  )
+}
+
 interface Market {
   id: string
   question: string
@@ -1076,7 +1100,9 @@ export default function MarketPage() {
     <div className="card" style={{ position: isMobile ? 'static' : 'sticky', top: 'calc(var(--nav-height) + 16px)', padding: 0, overflow: 'hidden' }}>
       {(market.resolved || closesAtMs < Date.now()) ? (
         <div style={{ padding: '24px 16px', textAlign: 'center' }}>
-          <div style={{ fontSize: 28, marginBottom: 4 }}>{userWon ? '🎉' : hasPosition ? '😔' : '✓'}</div>
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 4, color: userWon ? '#16a34a' : hasPosition ? 'var(--text-muted)' : 'var(--text-muted)' }}>
+            {userWon ? <Icon name="confetti" size={26} /> : hasPosition ? <Icon name="mood-sad" size={26} /> : <span style={{ fontSize: 26 }}>✓</span>}
+          </div>
           <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', marginBottom: 4 }}>{userWon ? 'Gewonnen!' : hasPosition ? 'Verloren' : 'Markt beendet'}</div>
           {resolvedLabel && <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 8 }}>{resolvedLabel}</div>}
           <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
@@ -1461,7 +1487,7 @@ export default function MarketPage() {
             {financeIsEnded && (
               <div style={{ marginBottom: 20, padding: '16px 20px', borderRadius: 12, background: market.resolved ? (market.resolution === 'yes' ? 'rgba(22,163,74,0.1)' : 'rgba(220,38,38,0.1)') : 'rgba(245,158,11,0.1)', border: `1px solid ${market.resolved ? (market.resolution === 'yes' ? 'rgba(22,163,74,0.3)' : 'rgba(220,38,38,0.3)') : 'rgba(245,158,11,0.3)'}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span style={{ fontSize: 24 }}>{market.resolved ? (market.resolution === 'yes' ? '↑' : '↓') : '⏳'}</span>
+                  <span style={{ fontSize: 24, display: 'flex', color: market.resolved ? (market.resolution === 'yes' ? '#16a34a' : '#dc2626') : '#b45309' }}>{market.resolved ? (market.resolution === 'yes' ? '↑' : '↓') : <Icon name="hourglass" size={22} />}</span>
                   <div>
                     <div style={{ fontSize: 15, fontWeight: 800, color: market.resolved ? (market.resolution === 'yes' ? '#16a34a' : '#dc2626') : '#b45309' }}>{market.resolved ? `Ergebnis: ${market.resolution === 'yes' ? 'Höher ↑' : 'Tiefer ↓'}` : 'Markt läuft ab…'}</div>
                     {market.resolved && market.start_price && market.end_price && (<div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>${market.start_price.toFixed(2)} → ${market.end_price.toFixed(2)}</div>)}
@@ -1498,7 +1524,9 @@ export default function MarketPage() {
               financeIsEnded ? (
                 <div className="card" style={{ padding: '24px 16px' }}>
                   <div style={{ textAlign: 'center', marginBottom: 16 }}>
-                    <div style={{ fontSize: 28, marginBottom: 4 }}>{userWon ? '🎉' : hasPosition ? '😔' : '✓'}</div>
+                    <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 4, color: userWon ? '#16a34a' : hasPosition ? 'var(--text-muted)' : 'var(--text-muted)' }}>
+                      {userWon ? <Icon name="confetti" size={26} /> : hasPosition ? <Icon name="mood-sad" size={26} /> : <span style={{ fontSize: 26 }}>✓</span>}
+                    </div>
                     <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', marginBottom: 4 }}>{userWon ? 'Gewonnen!' : hasPosition ? 'Verloren' : 'Markt beendet'}</div>
                     <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Ergebnis: <strong style={{ color: market.resolution === 'yes' ? '#16a34a' : '#dc2626', fontSize: 15 }}>{market.resolution === 'yes' ? '↑ Höher' : '↓ Tiefer'}</strong></div>
                   </div>
@@ -1552,7 +1580,7 @@ export default function MarketPage() {
         {isKrypto && showEndedBanner && (
           <div style={{ marginBottom: 20, padding: '16px 20px', borderRadius: 14, background: market.resolved ? (market.resolution === 'yes' ? 'rgba(22,163,74,0.12)' : 'rgba(220,38,38,0.12)') : 'rgba(245,158,11,0.12)', border: `1px solid ${market.resolved ? (market.resolution === 'yes' ? 'rgba(22,163,74,0.3)' : 'rgba(220,38,38,0.3)') : 'rgba(245,158,11,0.3)'}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <span style={{ fontSize: 28 }}>{market.resolved ? (market.resolution === 'yes' ? '↑' : '↓') : '⏳'}</span>
+              <span style={{ fontSize: 28, display: 'flex', color: market.resolved ? (market.resolution === 'yes' ? '#16a34a' : '#dc2626') : '#b45309' }}>{market.resolved ? (market.resolution === 'yes' ? '↑' : '↓') : <Icon name="hourglass" size={26} />}</span>
               <div>
                 <div style={{ fontSize: 16, fontWeight: 800, color: market.resolved ? (market.resolution === 'yes' ? '#16a34a' : '#dc2626') : '#b45309' }}>{market.resolved ? `Ergebnis: ${market.resolution === 'yes' ? 'Up ↑' : 'Down ↓'}` : 'Markt läuft ab — Auflösung folgt…'}</div>
                 {market.resolved && market.start_price && market.end_price && (<div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 2 }}>{market.short_label ?? market.coin}: ${market.start_price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} → ${market.end_price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>)}
@@ -1591,7 +1619,9 @@ export default function MarketPage() {
           <div className="card" style={{ position: isMobile ? 'static' : 'sticky', top: 'calc(var(--nav-height) + 16px)', padding: 0, overflow: 'hidden' }}>
             {(market.resolved || closesAtMs < Date.now()) ? (
               <div style={{ padding: '24px 16px', textAlign: 'center' }}>
-                <div style={{ fontSize: 28, marginBottom: 4 }}>{userWon ? '🎉' : hasPosition ? '😔' : '✓'}</div>
+                <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 4, color: userWon ? '#16a34a' : hasPosition ? 'var(--text-muted)' : 'var(--text-muted)' }}>
+                  {userWon ? <Icon name="confetti" size={26} /> : hasPosition ? <Icon name="mood-sad" size={26} /> : <span style={{ fontSize: 26 }}>✓</span>}
+                </div>
                 <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', marginBottom: 4 }}>{userWon ? 'Gewonnen!' : hasPosition ? 'Verloren' : 'Markt beendet'}</div>
                 <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Ergebnis: <strong style={{ color: market.resolution === 'yes' ? '#16a34a' : '#dc2626', fontSize: 15 }}>{market.resolution === 'yes' ? 'Up ↑' : 'Down ↓'}</strong></div>
                 {hasPosition && (
@@ -1683,8 +1713,8 @@ export default function MarketPage() {
           <>
             <div style={{ marginBottom: 20 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
-                {isFormula1 && (<span style={{ fontSize: 12, fontWeight: 700, padding: '2px 10px', borderRadius: 20, background: 'rgba(220,38,38,0.1)', color: '#dc2626' }}>🏎 Formel 1</span>)}
-                {isWeather && (<span style={{ fontSize: 12, fontWeight: 700, padding: '2px 10px', borderRadius: 20, background: 'rgba(14,165,233,0.1)', color: '#0ea5e9' }}>🌤 Wetter</span>)}
+                {isFormula1 && (<span style={{ fontSize: 12, fontWeight: 700, padding: '2px 10px', borderRadius: 20, background: 'rgba(220,38,38,0.1)', color: '#dc2626', display: 'inline-flex', alignItems: 'center', gap: 5 }}><Icon name="steering-wheel" size={13} /> Formel 1</span>)}
+                {isWeather && (<span style={{ fontSize: 12, fontWeight: 700, padding: '2px 10px', borderRadius: 20, background: 'rgba(14,165,233,0.1)', color: '#0ea5e9', display: 'inline-flex', alignItems: 'center', gap: 5 }}><Icon name="cloud" size={13} /> Wetter</span>)}
                 {!isFormula1 && !isWeather && market.category && <span className={`cat-badge ${catClass}`}>{market.category}</span>}
                 {market.group_title && !isWeather && (<span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 500 }}>{market.group_title}</span>)}
                 {market.resolved && (
@@ -1768,17 +1798,17 @@ export default function MarketPage() {
       {/* Mobile Bottom Tab Bar */}
       <nav className="mobile-tab-bar">
         {[
-          { id: 'markets',   label: 'Märkte',    icon: '📊', href: '/' },
-          { id: 'portfolio', label: 'Portfolio', icon: '💼', href: '/?view=portfolio' },
-          { id: 'ranking',   label: 'Ranking',   icon: '🏆', href: '/?view=ranking' },
-          { id: 'profil',    label: 'Profil',    icon: '👤', href: '/?view=profil' },
+          { id: 'markets',   label: 'Märkte',    icon: 'chart-bar', href: '/' },
+          { id: 'portfolio', label: 'Portfolio', icon: 'briefcase', href: '/?view=portfolio' },
+          { id: 'ranking',   label: 'Ranking',   icon: 'trophy',    href: '/?view=ranking' },
+          { id: 'profil',    label: 'Profil',    icon: 'user',      href: '/?view=profil' },
         ].map(tab => (
           <button
             key={tab.id}
             className="mobile-tab-item"
             onClick={() => router.push(tab.href)}
           >
-            <span>{tab.icon}</span>
+            <Icon name={tab.icon} size={20} />
             <span>{tab.label}</span>
           </button>
         ))}
