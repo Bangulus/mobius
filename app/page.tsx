@@ -74,6 +74,7 @@ interface User {
   rp?: number
   title?: string
   peak_title?: string
+  created_at?: string
 }
 
 interface LeaderboardEntry {
@@ -902,6 +903,7 @@ export default function Home() {
                 rp={user.rp}
                 title={user.title}
                 peakTitle={user.peak_title}
+                createdAt={user.created_at}
                 onUsernameChange={(name) => setUser({ ...user, username: name })}
                 onAvatarChange={(url) => setUser({ ...user, avatar_url: url })}
               />
@@ -910,7 +912,7 @@ export default function Home() {
                   onClick={() => setDarkMode(!darkMode)}
                   style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', background: 'var(--surface)', border: '0.5px solid var(--border)', borderRadius: 12, cursor: 'pointer', fontSize: 14, color: 'var(--text)', width: '100%' }}
                 >
-                  <Icon name={darkMode ? 'sun' : 'moon'} size={20} />
+                  <span style={{ fontSize: 20 }}>{darkMode ? '☀️' : '🌙'}</span>
                   <span>{darkMode ? 'Light Mode aktivieren' : 'Dark Mode aktivieren'}</span>
                 </button>
                 <button
