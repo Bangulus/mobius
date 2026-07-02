@@ -30,6 +30,13 @@ async function dbPatch(table: string, params: string, body: object) {
   });
 }
 
+function parseUTC(raw: string): Date {
+  if (!raw) return new Date(0)
+  if (raw.endsWith('Z') || raw.match(/[+-]\d{2}:\d{2}$/)) return new Date(raw)
+  if (raw.match(/[+-]\d{2}$/)) return new Date(raw + ':00')
+  return new Date(raw.replace(' ', 'T') + 'Z')
+}
+
 // ─── Icon System (Tabler outline SVGs, inline — kein npm-Paket) ───────────────
 
 const ICON_PATHS: Record<string, string[]> = {
@@ -165,7 +172,7 @@ function titleRampColors(title: string | null | undefined) {
 function calcStreak(trades: TradeRow[]): number {
   if (trades.length === 0) return 0;
   const days = new Set(trades.map(t => {
-    const d = new Date(t.created_at);
+    const d = parseUTC(t.created_at);
     return `${d.getUTCFullYear()}-${d.getUTCMonth()}-${d.getUTCDate()}`;
   }));
   let streak = 0;
@@ -188,7 +195,7 @@ function calcTrefferquote(entries: PortfolioEntry[]): number | null {
 }
 
 function formatDateTime(iso: string): { date: string; time: string } {
-  const d = new Date(iso);
+  const d = parseUTC(iso);
   return {
     date: d.toLocaleDateString('de-DE',  { day: '2-digit', month: '2-digit', year: '2-digit' }),
     time: d.toLocaleTimeString('de-DE',  { hour: '2-digit', minute: '2-digit' }),
@@ -362,7 +369,7 @@ function BadgeSection({ userId }: { userId: string }) {
                         return (
                           <div
                             key={badge.id}
-                            title={earned && date ? `Verdient am ${new Date(date).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })}` : 'Noch nicht verdient'}
+                            title={earned && date ? `Verdient am ${parseUTC(date).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })}` : 'Noch nicht verdient'}
                             style={{
                               display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
                               padding: '12px 14px', borderRadius: 12, minWidth: 80,
@@ -378,7 +385,7 @@ function BadgeSection({ userId }: { userId: string }) {
                             </span>
                             {earned && date && (
                               <span style={{ fontSize: 10, color: 'var(--text-subtle)', textAlign: 'center' }}>
-                                {new Date(date).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit' })}
+                                {parseUTC(date).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit' })}
                               </span>
                             )}
                           </div>
@@ -406,7 +413,7 @@ interface SeasonHistoryEntry {
 }
 
 function monthLabel(isoDate: string): string {
-  return new Date(isoDate).toLocaleDateString('de-DE', { month: 'long', year: 'numeric', timeZone: 'Europe/Berlin' });
+  return parseUTC(isoDate).toLocaleDateString('de-DE', { month: 'long', year: 'numeric', timeZone: 'Europe/Berlin' });
 }
 
 function ProgressionSection({ userId, xp, level, rp, title, peakTitle }: {
@@ -436,7 +443,7 @@ function ProgressionSection({ userId, xp, level, rp, title, peakTitle }: {
       seasonRows
         .filter(r => seasonMap[r.season_id])
         .map(r => ({ seasonId: r.season_id, startDate: seasonMap[r.season_id], rp: r.rp, peakTitle: r.peak_title }))
-        .sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime())
+        .sort((a, b) => parseUTC(b.startDate).getTime() - parseUTC(a.startDate).getTime())
     );
     setHistoryLoading(false);
     setHistoryLoaded(true);
@@ -901,18 +908,18 @@ function AktivitaetsFeed({ userId }: { userId: string }) {
         if (!won) continue;
         const totalShares = myBuys.reduce((s, x) => s + (x.shares ?? 0), 0);
         if (totalShares <= 0) continue;
-        const firstBuyTime = new Date(myBuys[myBuys.length - 1].created_at).getTime();
+        const firstBuyTime = parseUTC(myBuys[myBuys.length - 1].created_at).getTime();
         winItems.push({ id: `win_${t.market_id}`, market_id: t.market_id, type: 'win', shares: totalShares, cost: totalShares, created_at: new Date(firstBuyTime + 3 * 60 * 1000).toISOString(), market: m });
       }
 
-      setItems([...withMarkets, ...winItems].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()));
+      setItems([...withMarkets, ...winItems].sort((a, b) => parseUTC(b.created_at).getTime() - parseUTC(a.created_at).getTime()));
       setLoading(false);
     }
     load();
   }, [userId]);
 
   function formatTime(iso: string) {
-    const d    = new Date(iso);
+    const d    = parseUTC(iso);
     const diff = Date.now() - d.getTime();
     const min  = Math.floor(diff / 60000);
     const h    = Math.floor(diff / 3600000);
