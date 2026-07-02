@@ -66,11 +66,10 @@ export default function PnLChart({ userId, displayName }: Props) {
     return () => clearInterval(id)
   }, [loadTrades])
 
-  // ── Datenpunkte berechnen ────────────────────────────────
+  // ── Datenpunkte berechnen (nur für Anzeige-Werte, nicht fürs Zeichnen) ──
   const cutoff  = filterCutoff(filter)
   const now     = Date.now()
 
-  // Gesamte kumulative Basis vor dem Filterfenster
   const baseCum = cutoff
     ? trades.filter(t => new Date(t.created_at).getTime() < cutoff.getTime()).reduce((s, t) => s + t.cost, 0)
     : 0
@@ -79,28 +78,16 @@ export default function PnLChart({ userId, displayName }: Props) {
     ? trades.filter(t => new Date(t.created_at) >= cutoff)
     : trades
 
-  // Punkte bauen — immer Startpunkt + Endpunkt damit nie nur ein Punkt
-  const rawPoints: { x: number; y: number }[] = []
   let cum = baseCum
   for (const t of filtered) {
-    rawPoints.push({ x: new Date(t.created_at).getTime(), y: cum })
     cum += t.cost
-    rawPoints.push({ x: new Date(t.created_at).getTime(), y: cum })
   }
 
-  // Immer Startpunkt (linker Rand des Zeitfensters) und Endpunkt (jetzt)
-  const windowStart = cutoff ? cutoff.getTime() : (trades.length > 0 ? new Date(trades[0].created_at).getTime() : now - 86400000)
-  const startY      = baseCum
-  const endY        = cum
+  const startY = baseCum
+  const endY   = cum
 
-  const points: { x: number; y: number }[] = [
-    { x: windowStart, y: startY },
-    ...rawPoints,
-    { x: now, y: endY },
-  ]
-
-  const currentPnL = endY - baseCum  // PnL innerhalb des Fensters
-  const totalPnL   = endY             // Gesamter kumulativer Gewinn
+  const currentPnL = endY - baseCum
+  const totalPnL   = endY
   const displayPnL = filter === 'ALLE' ? totalPnL : currentPnL
   const isPositive = displayPnL >= 0
 
@@ -110,6 +97,36 @@ export default function PnLChart({ userId, displayName }: Props) {
     if (!canvas || loading) return
     const ctx = canvas.getContext('2d')
     if (!ctx) return
+
+    // Punkte werden hier neu gebaut, damit sie nicht als externe Dependency instabil sind
+    const cutoffInner = filterCutoff(filter)
+    const nowInner = Date.now()
+
+    const baseCumInner = cutoffInner
+      ? trades.filter(t => new Date(t.created_at).getTime() < cutoffInner.getTime()).reduce((s, t) => s + t.cost, 0)
+      : 0
+
+    const filteredInner = cutoffInner
+      ? trades.filter(t => new Date(t.created_at) >= cutoffInner)
+      : trades
+
+    const rawPoints: { x: number; y: number }[] = []
+    let cumInner = baseCumInner
+    for (const t of filteredInner) {
+      rawPoints.push({ x: new Date(t.created_at).getTime(), y: cumInner })
+      cumInner += t.cost
+      rawPoints.push({ x: new Date(t.created_at).getTime(), y: cumInner })
+    }
+
+    const windowStart = cutoffInner ? cutoffInner.getTime() : (trades.length > 0 ? new Date(trades[0].created_at).getTime() : nowInner - 86400000)
+    const startYInner  = baseCumInner
+    const endYInner     = cumInner
+
+    const points: { x: number; y: number }[] = [
+      { x: windowStart, y: startYInner },
+      ...rawPoints,
+      { x: nowInner, y: endYInner },
+    ]
 
     const W = canvas.width
     const H = canvas.height
@@ -126,15 +143,15 @@ export default function PnLChart({ userId, displayName }: Props) {
     const minX = points[0].x
     const maxX = points[points.length - 1].x
     const allY  = points.map(p => p.y)
-    const maxY  = Math.max(...allY, startY + 1)
-    const minY  = Math.min(...allY, startY - 1)
+    const maxY  = Math.max(...allY, startYInner + 1)
+    const minY  = Math.min(...allY, startYInner - 1)
     const rangeY = maxY - minY || 1
     const rangeX = maxX - minX || 1
 
     const toX = (x: number) => PAD.left + ((x - minX) / rangeX) * chartW
     const toY = (y: number) => PAD.top + chartH - ((y - minY) / rangeY) * chartH
 
-    const color = isPositive ? '#12b76a' : '#f04438'
+    const colorInner = endYInner - baseCumInner >= 0 ? '#12b76a' : '#f04438'
 
     // Grid
     ctx.strokeStyle = 'rgba(0,0,0,0.05)'
@@ -145,7 +162,7 @@ export default function PnLChart({ userId, displayName }: Props) {
     }
 
     // Nulllinie
-    const zeroY = toY(startY)
+    const zeroY = toY(startYInner)
     if (zeroY > PAD.top && zeroY < PAD.top + chartH) {
       ctx.strokeStyle = 'rgba(0,0,0,0.15)'
       ctx.setLineDash([4, 4])
@@ -155,19 +172,19 @@ export default function PnLChart({ userId, displayName }: Props) {
 
     // Gradient fill
     const grad = ctx.createLinearGradient(0, PAD.top, 0, PAD.top + chartH)
-    grad.addColorStop(0, isPositive ? 'rgba(18,183,106,0.2)' : 'rgba(240,68,56,0.2)')
+    grad.addColorStop(0, colorInner === '#12b76a' ? 'rgba(18,183,106,0.2)' : 'rgba(240,68,56,0.2)')
     grad.addColorStop(1, 'rgba(255,255,255,0)')
     ctx.beginPath()
-    ctx.moveTo(toX(points[0].x), toY(startY))
+    ctx.moveTo(toX(points[0].x), toY(startYInner))
     points.forEach(p => ctx.lineTo(toX(p.x), toY(p.y)))
-    ctx.lineTo(toX(points[points.length - 1].x), toY(startY))
+    ctx.lineTo(toX(points[points.length - 1].x), toY(startYInner))
     ctx.closePath()
     ctx.fillStyle = grad
     ctx.fill()
 
     // Linie
     ctx.beginPath()
-    ctx.strokeStyle = color
+    ctx.strokeStyle = colorInner
     ctx.lineWidth = 2
     ctx.lineJoin = 'round'
     ctx.lineCap = 'round'
@@ -191,10 +208,10 @@ export default function PnLChart({ userId, displayName }: Props) {
     const lastP = points[points.length - 1]
     ctx.beginPath()
     ctx.arc(toX(lastP.x), toY(lastP.y), 4, 0, Math.PI * 2)
-    ctx.fillStyle = color; ctx.fill()
+    ctx.fillStyle = colorInner; ctx.fill()
     ctx.strokeStyle = bgColor; ctx.lineWidth = 1.5; ctx.stroke()
 
-  }, [points, isPositive, loading, startY, filter])
+  }, [trades, filter, loading])
 
   // ── Share: URL kopieren ──────────────────────────────────
   function handleShare() {
