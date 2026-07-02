@@ -42,6 +42,7 @@ function parseUTC(raw: string): Date {
 const ICON_PATHS: Record<string, string[]> = {
   trophy: ['M8 21l8 0', 'M12 17l0 4', 'M7 4l10 0', 'M17 4v8a5 5 0 0 1 -10 0v-8', 'M3 9a2 2 0 1 0 4 0a2 2 0 1 0 -4 0', 'M17 9a2 2 0 1 0 4 0a2 2 0 1 0 -4 0'],
   flame:  ['M12 10.941c2.333 -3.308 .167 -7.823 -1 -8.941c0 3.395 -2.235 5.299 -3.667 6.706c-1.43 1.408 -2.333 3.294 -2.333 5.588c0 3.704 3.134 6.706 7 6.706c3.866 0 7 -3.002 7 -6.706c0 -1.712 -1.232 -4.403 -2.333 -5.588c-2.084 3.353 -3.257 3.353 -4.667 2.235'],
+  chevron: ['M6 9l6 6l6 -6'],
 }
 
 function Icon({ name, size = 16 }: { name: string; size?: number }) {
@@ -65,6 +66,7 @@ interface Props {
   rp?: number | null;
   title?: string | null;
   peakTitle?: string | null;
+  createdAt?: string | null;
   onUsernameChange: (name: string) => void;
   onAvatarChange: (url: string) => void;
 }
@@ -232,6 +234,131 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean
         transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
       }} />
     </button>
+  );
+}
+
+// ── AKTIVITÄTSGRID ────────────────────────────────────────────
+
+const GRID_COLORS = ['transparent', '#9FE1CB', '#5DCAA5', '#1D9E75', '#0F6E56'];
+const MONTH_NAMES = ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
+
+function levelForCount(count: number): number {
+  if (count <= 0) return 0;
+  if (count === 1) return 1;
+  if (count === 2) return 2;
+  if (count <= 4) return 3;
+  return 4;
+}
+
+function ActivityGrid({ trades, createdAt }: { trades: TradeRow[]; createdAt?: string | null }) {
+  const today = new Date();
+  const todayUTC = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+
+  const sixMonthsAgo = new Date(todayUTC);
+  sixMonthsAgo.setUTCDate(sixMonthsAgo.getUTCDate() - 183);
+
+  const accountStart = createdAt ? parseUTC(createdAt) : todayUTC;
+  const accountStartUTC = new Date(Date.UTC(accountStart.getUTCFullYear(), accountStart.getUTCMonth(), accountStart.getUTCDate()));
+
+  const rangeStart = accountStartUTC > sixMonthsAgo ? accountStartUTC : sixMonthsAgo;
+
+  // Auf Montag ausrichten
+  const dow = rangeStart.getUTCDay();
+  const offset = dow === 0 ? 6 : dow - 1;
+  const gridStart = new Date(rangeStart);
+  gridStart.setUTCDate(gridStart.getUTCDate() - offset);
+
+  const countByDay: Record<string, number> = {};
+  trades.forEach(t => {
+    const d = parseUTC(t.created_at);
+    const key = `${d.getUTCFullYear()}-${d.getUTCMonth()}-${d.getUTCDate()}`;
+    countByDay[key] = (countByDay[key] ?? 0) + 1;
+  });
+
+  const days: { date: Date; count: number; isBeforeStart: boolean }[] = [];
+  const cursor = new Date(gridStart);
+  while (cursor <= todayUTC) {
+    const key = `${cursor.getUTCFullYear()}-${cursor.getUTCMonth()}-${cursor.getUTCDate()}`;
+    days.push({
+      date: new Date(cursor),
+      count: countByDay[key] ?? 0,
+      isBeforeStart: cursor < accountStartUTC,
+    });
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+
+  const weeks: typeof days[] = [];
+  for (let i = 0; i < days.length; i += 7) {
+    weeks.push(days.slice(i, i + 7));
+  }
+
+  let lastMonth = -1;
+  const activeDaysCount = days.filter(d => d.count > 0).length;
+
+  return (
+    <div style={{ marginTop: 14, paddingTop: 14, borderTop: '0.5px solid var(--border)' }}>
+      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 10 }}>
+        {activeDaysCount} aktive Tage seit {accountStartUTC.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+      </div>
+      <div style={{ overflowX: 'auto', paddingBottom: 4 }}>
+        <div style={{ display: 'inline-flex', flexDirection: 'column', gap: 3 }}>
+          <div style={{ display: 'grid', gridAutoFlow: 'column', gridAutoColumns: '11px', gap: 3, marginLeft: 16 }}>
+            {weeks.map((week, i) => {
+              const m = week[0].date.getUTCMonth();
+              const showLabel = m !== lastMonth;
+              lastMonth = m;
+              return (
+                <div key={i} style={{ fontSize: 9, color: 'var(--text-muted)' }}>
+                  {showLabel ? MONTH_NAMES[m] : ''}
+                </div>
+              );
+            })}
+          </div>
+          <div style={{ display: 'flex', gap: 3 }}>
+            <div style={{ display: 'grid', gridTemplateRows: 'repeat(7, 11px)', gap: 3, marginRight: 3 }}>
+              {['', 'Mo', '', 'Mi', '', 'Fr', ''].map((label, i) => (
+                <div key={i} style={{ fontSize: 9, color: 'var(--text-muted)', lineHeight: '11px' }}>{label}</div>
+              ))}
+            </div>
+            <div style={{ display: 'grid', gridAutoFlow: 'column', gridTemplateRows: 'repeat(7, 11px)', gap: 3 }}>
+              {weeks.map((week, wi) => (
+                week.map((day, di) => {
+                  const isFuture = day.date > todayUTC;
+                  const level = day.isBeforeStart || isFuture ? -1 : levelForCount(day.count);
+                  return (
+                    <div
+                      key={`${wi}-${di}`}
+                      title={
+                        day.isBeforeStart || isFuture
+                          ? ''
+                          : `${day.date.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })} · ${day.count} Trade${day.count === 1 ? '' : 's'}`
+                      }
+                      style={{
+                        width: 11, height: 11, borderRadius: 3,
+                        background: level <= 0 ? 'var(--surface)' : GRID_COLORS[level],
+                        border: level <= 0 ? '0.5px solid var(--border)' : 'none',
+                        opacity: level === -1 ? 0.3 : 1,
+                      }}
+                    />
+                  );
+                })
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 5, marginTop: 10 }}>
+        <span style={{ fontSize: 9, color: 'var(--text-muted)' }}>Weniger</span>
+        {[0, 1, 2, 3, 4].map(l => (
+          <div key={l} style={{
+            width: 10, height: 10, borderRadius: 3,
+            background: l === 0 ? 'var(--surface)' : GRID_COLORS[l],
+            border: l === 0 ? '0.5px solid var(--border)' : 'none',
+          }} />
+        ))}
+        <span style={{ fontSize: 9, color: 'var(--text-muted)' }}>Mehr</span>
+      </div>
+    </div>
   );
 }
 
@@ -500,7 +627,7 @@ function ProgressionSection({ userId, xp, level, rp, title, peakTitle }: {
   );
 }
 
-export default function ProfileView({ userId, displayName, avatarUrl, balance, xp, level, rp, title, peakTitle, onUsernameChange, onAvatarChange }: Props) {
+export default function ProfileView({ userId, displayName, avatarUrl, balance, xp, level, rp, title, peakTitle, createdAt, onUsernameChange, onAvatarChange }: Props) {
   const router = useRouter();
   const [newUsername, setNewUsername]         = useState(displayName);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
@@ -512,6 +639,7 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, x
   const [allRows, setAllRows]                 = useState<PortfolioEntry[]>([]);
   const [allTrades, setAllTrades]             = useState<TradeRow[]>([]);
   const [portfolioLoading, setPortfolioLoading] = useState(true);
+  const [streakGridOpen, setStreakGridOpen]   = useState(false);
   const isMobile                              = useIsMobile();
 
   const gewonnen        = allRows.filter(r => r.market.resolved && r.auszahlung !== null && r.auszahlung > 0);
@@ -687,8 +815,15 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, x
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <PnLChart userId={userId} displayName={displayName} avatarUrl={avatarUrl} />
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-        <div className="card" style={{ padding: '16px 18px' }}>
-          <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>Streak</div>
+        <div
+          className="card"
+          onClick={() => setStreakGridOpen(o => !o)}
+          style={{ padding: '16px 18px', cursor: 'pointer', gridColumn: streakGridOpen ? '1 / -1' : 'auto' }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Streak</div>
+            <Icon name="chevron" size={12} />
+          </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
             <span style={{ fontSize: 28, fontWeight: 900, color: streak >= 3 ? '#f59e0b' : 'var(--text)', letterSpacing: '-1px', lineHeight: 1 }}>{streak}</span>
             <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 500 }}>{streak === 1 ? 'Tag' : 'Tage'}</span>
@@ -696,23 +831,26 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, x
           <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6, lineHeight: 1.4, display: 'flex', alignItems: 'center', gap: 4 }}>
             {streak === 0 ? 'Heute noch nicht aktiv' : streak >= 7 ? (<>Serie läuft <Icon name="flame" size={12} /></>) : streak >= 3 ? 'Konstant aktiv' : 'Starte heute'}
           </div>
+          {streakGridOpen && <ActivityGrid trades={allTrades} createdAt={createdAt} />}
         </div>
-        <div className="card" style={{ padding: '16px 18px' }}>
-          <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>Trefferquote</div>
-          {trefferquote === null ? (
-            <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>Noch keine Daten</div>
-          ) : (
-            <>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
-                <span style={{ fontSize: 28, fontWeight: 900, letterSpacing: '-1px', lineHeight: 1, color: trefferquote >= 60 ? 'var(--yes)' : trefferquote >= 40 ? 'var(--text)' : 'var(--no)' }}>{trefferquote}</span>
-                <span style={{ fontSize: 14, color: 'var(--text-muted)', fontWeight: 600 }}>%</span>
-              </div>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6 }}>
-                {trefferquote >= 60 ? 'Überdurchschnittlich' : trefferquote >= 40 ? 'Solide' : 'Noch Luft nach oben'}
-              </div>
-            </>
-          )}
-        </div>
+        {!streakGridOpen && (
+          <div className="card" style={{ padding: '16px 18px' }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>Trefferquote</div>
+            {trefferquote === null ? (
+              <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>Noch keine Daten</div>
+            ) : (
+              <>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
+                  <span style={{ fontSize: 28, fontWeight: 900, letterSpacing: '-1px', lineHeight: 1, color: trefferquote >= 60 ? 'var(--yes)' : trefferquote >= 40 ? 'var(--text)' : 'var(--no)' }}>{trefferquote}</span>
+                  <span style={{ fontSize: 14, color: 'var(--text-muted)', fontWeight: 600 }}>%</span>
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6 }}>
+                  {trefferquote >= 60 ? 'Überdurchschnittlich' : trefferquote >= 40 ? 'Solide' : 'Noch Luft nach oben'}
+                </div>
+              </>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
