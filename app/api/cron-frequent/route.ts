@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY!
 const COINS = ['BTC', 'ETH', 'SOL', 'XRP']
+const WEATHER_CITY_COUNT = 8
 
 async function cleanupZombieMarkets() {
   const now = new Date().toISOString()
@@ -69,6 +70,33 @@ export async function GET(request: Request) {
     results.cryptoResolve = await cryptoResolve.json()
   } catch (e) {
     results.cryptoResolveError = String(e)
+  }
+
+  // --- WETTER SICHERHEITSNETZ ---
+  // cron-daily läuft nur ~alle 12h. Fällt dort ein Lauf aus (z. B. Open-Meteo
+  // kurzzeitig nicht erreichbar), fehlen Wetter-Märkte bis zu 12h lang.
+  // Hier: minütlicher Check, ob weniger als 8 offene Wetter-Märkte existieren,
+  // und Nachtriggern von create-weather-market falls nötig.
+  try {
+    const now = new Date().toISOString()
+    const openWeatherRes = await fetch(
+      `${SUPABASE_URL}/rest/v1/markets?category=eq.weather&status=eq.open&resolved=eq.false&closes_at=gt.${now}&select=id`,
+      { headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` }, cache: 'no-store' }
+    )
+    const openWeather = await openWeatherRes.json()
+    const openCount = Array.isArray(openWeather) ? openWeather.length : 0
+
+    if (openCount < WEATHER_CITY_COUNT) {
+      const weatherCreate = await fetch(`${base}/api/create-weather-market`, {
+        method: 'POST',
+        cache: 'no-store',
+      })
+      results.weatherSafetyNet = { triggered: true, openCountBefore: openCount, result: await weatherCreate.json() }
+    } else {
+      results.weatherSafetyNet = { triggered: false, openCount }
+    }
+  } catch (e) {
+    results.weatherSafetyNetError = String(e)
   }
 
   // --- LIMIT ORDERS ---
