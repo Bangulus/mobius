@@ -311,13 +311,18 @@ function NewsSection({ items }: { items: NewsItem[] }) {
             target="_blank"
             rel="noopener noreferrer"
             style={{
-              display: 'block', padding: '10px 12px', borderRadius: 8,
-              border: '1px solid var(--border)', background: 'var(--surface)',
-              textDecoration: 'none', color: 'var(--text)', fontSize: 13,
-              fontWeight: 500, lineHeight: 1.4, transition: 'background 0.1s',
+              display: 'block',
+              padding: '10px 12px',
+              borderRadius: 8,
+              border: '1px solid var(--border)',
+              background: 'var(--surface)',
+              textDecoration: 'none',
+              color: 'var(--text)',
+              fontSize: 13,
+              fontWeight: 500,
+              lineHeight: 1.4,
+              transition: 'background 0.1s',
             }}
-            onMouseEnter={e => (e.currentTarget.style.background = 'var(--card)')}
-            onMouseLeave={e => (e.currentTarget.style.background = 'var(--surface)')}
           >
             {n.title}
             <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
