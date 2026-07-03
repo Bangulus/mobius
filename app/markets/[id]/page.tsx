@@ -271,10 +271,11 @@ const NEWS_STOPWORDS = new Set([
 ])
 
 function extractKeywords(question: string): string[] {
-  const rawWords = question.split(/\s+/).map(w => w.replace(/[.,!?():;„"«»?]/g, ''))
+  const cleaned = question.replace(/[.,!?():;"]/g, ' ')
+  const rawWords = cleaned.split(/\s+/)
   const keywords: string[] = []
   rawWords.forEach((w, i) => {
-    if (i === 0) return // Satzanfang ausschließen (Großschreibung ist dort nicht aussagekräftig)
+    if (i === 0) return
     if (w.length < 3) return
     if (!/^[A-ZÄÖÜ]/.test(w)) return
     if (NEWS_STOPWORDS.has(w)) return
