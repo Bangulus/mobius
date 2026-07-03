@@ -27,6 +27,7 @@ const ICON_PATHS: Record<string, string[]> = {
   briefcase:       ['M3 9a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2v9a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2l0 -9', 'M8 7v-2a2 2 0 0 1 2 -2h4a2 2 0 0 1 2 2v2', 'M12 12l0 .01', 'M3 13a20 20 0 0 0 18 0'],
   trophy:          ['M8 21l8 0', 'M12 17l0 4', 'M7 4l10 0', 'M17 4v8a5 5 0 0 1 -10 0v-8', 'M3 9a2 2 0 1 0 4 0a2 2 0 1 0 -4 0', 'M17 9a2 2 0 1 0 4 0a2 2 0 1 0 -4 0'],
   user:            ['M8 7a4 4 0 1 0 8 0a4 4 0 0 0 -8 0', 'M6 21v-2a4 4 0 0 1 4 -4h4a4 4 0 0 1 4 4v2'],
+  news:            ['M14 4h6a1 1 0 0 1 1 1v14a2 2 0 0 1 -2 2h-13a2 2 0 0 1 -2 -2v-11a1 1 0 0 1 1 -1h4', 'M14 4v4a1 1 0 0 0 1 1h4', 'M14 4l6 6', 'M8 12l8 0', 'M8 16l8 0', 'M8 8l3 0'],
 }
 
 function Icon({ name, size = 16 }: { name: string; size?: number }) {
@@ -102,6 +103,14 @@ interface ResultToast {
   resolution: string
   coin?: string
   nextMarketId?: string
+}
+
+interface NewsItem {
+  id: string
+  title: string
+  link: string
+  published_at: string
+  source_category: string
 }
 
 function calcProb(qYes: number, qNo: number, b: number): number {
@@ -235,6 +244,90 @@ const CAT_CLASS: Record<string, string> = {
   weather: 'cat-sport', Wetter: 'cat-sport',
 }
 const COIN_COLORS: Record<string, string> = { BTC: '#f59e0b', ETH: '#6366f1', SOL: '#9945ff', XRP: '#00aae4' }
+
+// ─── News-Matching ─────────────────────────────────────────────────────────
+// Ordnet eine Marktkategorie einer news_items.source_category zu.
+// Nur Politik/Geopolitik/Wirtschaft(inkl. Finanzen)/Tech bekommen News —
+// Krypto, Sport, Wetter, F1, Entertainment, Kultur bewusst ausgeschlossen
+// (keine passende RSS-Quelle vorhanden, sonst Fehlzuordnungsgefahr).
+function getNewsCategory(market: Market): string | null {
+  const cat = market.category ?? ''
+  if (cat.startsWith('Politik')) return 'politik'
+  if (cat === 'Geopolitik') return 'geopolitik'
+  if (cat === 'Tech') return 'tech'
+  if (cat === 'Wirtschaft' || cat === 'finance' || cat === 'Finanzen') return 'wirtschaft'
+  return null
+}
+
+const NEWS_STOPWORDS = new Set([
+  'Wird', 'Ist', 'Sind', 'Der', 'Die', 'Das', 'Und', 'Oder', 'Für', 'Mit', 'Von',
+  'Zu', 'Zum', 'Zur', 'Im', 'In', 'Am', 'An', 'Auf', 'Bei', 'Nach', 'Vor', 'Über',
+  'Unter', 'Ein', 'Eine', 'Einen', 'Einem', 'Wie', 'Was', 'Wer', 'Wo', 'Wann',
+  'Bis', 'Als', 'Noch', 'Schon', 'Sein', 'Ihre', 'Ihr', 'Sie', 'Er', 'Es', 'Wir',
+  'Ich', 'Du', 'Kommt', 'Geht', 'Gibt', 'Hat', 'Haben', 'Werden', 'Kann',
+  'Können', 'Muss', 'Müssen', 'Soll', 'Sollen', 'Diese', 'Dieser', 'Dieses',
+  'Wegen', 'Ohne', 'Durch', 'Beim', 'Aus', 'So', 'Nur', 'Auch', 'Mehr', 'Neue',
+  'Neuer', 'Neues',
+])
+
+function extractKeywords(question: string): string[] {
+  const rawWords = question.split(/\s+/).map(w => w.replace(/[.,!?():;„"«»?]/g, ''))
+  const keywords: string[] = []
+  rawWords.forEach((w, i) => {
+    if (i === 0) return // Satzanfang ausschließen (Großschreibung ist dort nicht aussagekräftig)
+    if (w.length < 3) return
+    if (!/^[A-ZÄÖÜ]/.test(w)) return
+    if (NEWS_STOPWORDS.has(w)) return
+    keywords.push(w)
+  })
+  return Array.from(new Set(keywords))
+}
+
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function matchNews(items: NewsItem[], keywords: string[]): NewsItem[] {
+  if (keywords.length === 0) return []
+  return items.filter(item =>
+    keywords.some(kw => new RegExp(`\\b${escapeRegex(kw)}\\b`, 'i').test(item.title))
+  )
+}
+
+function NewsSection({ items }: { items: NewsItem[] }) {
+  if (items.length === 0) return null
+  return (
+    <div className="card" style={{ marginTop: 20 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+        <Icon name="news" size={16} />
+        <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>Relevante News</div>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {items.slice(0, 5).map(n => (
+          
+            key={n.id}
+            href={n.link}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              display: 'block', padding: '10px 12px', borderRadius: 8,
+              border: '1px solid var(--border)', background: 'var(--surface)',
+              textDecoration: 'none', color: 'var(--text)', fontSize: 13,
+              fontWeight: 500, lineHeight: 1.4, transition: 'background 0.1s',
+            }}
+            onMouseEnter={e => (e.currentTarget.style.background = 'var(--card)')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'var(--surface)')}
+          >
+            {n.title}
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+              {new Date(n.published_at).toLocaleDateString('de', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+            </div>
+          </a>
+        ))}
+      </div>
+    </div>
+  )
+}
 
 function normalizeTeamName(name: string): string {
   return name.toLowerCase()
@@ -588,6 +681,7 @@ export default function MarketPage() {
   const [loading, setLoading]         = useState(true)
   const [liveMarkets, setLiveMarkets] = useState<Market[]>([])
   const [siblingMarkets, setSiblingMarkets] = useState<Market[]>([])
+  const [matchedNews, setMatchedNews] = useState<NewsItem[]>([])
 
   const [tradeTab, setTradeTab]     = useState<TradeTab>('kaufen')
   const [orderType, setOrderType]   = useState<OrderType>('markt')
@@ -680,6 +774,18 @@ export default function MarketPage() {
   useEffect(() => {
     if (market?.match_id) loadSiblingMarkets(market.match_id)
   }, [market?.match_id, loadSiblingMarkets])
+
+  // News-Matching: nur laden wenn Kategorie gemappt ist und Keywords extrahierbar sind
+  useEffect(() => {
+    if (!market) { setMatchedNews([]); return }
+    const newsCat = getNewsCategory(market)
+    if (!newsCat) { setMatchedNews([]); return }
+    const keywords = extractKeywords(market.question)
+    if (keywords.length === 0) { setMatchedNews([]); return }
+    dbGet('news_items', `source_category=eq.${newsCat}&select=*&order=published_at.desc&limit=100`).then((items: NewsItem[]) => {
+      setMatchedNews(matchNews(items ?? [], keywords))
+    })
+  }, [market?.id, market?.category, market?.question])
 
   useEffect(() => {
     if (!market?.resolved || toastShownRef.current) return
@@ -1520,6 +1626,9 @@ export default function MarketPage() {
                     </div>
                   </div>
                 )}
+                <div style={{ padding: 16 }}>
+                  <NewsSection items={matchedNews} />
+                </div>
               </div>,
               financeIsEnded ? (
                 <div className="card" style={{ padding: '24px 16px' }}>
@@ -1785,6 +1894,7 @@ export default function MarketPage() {
                     </div>
                   </div>
                 )}
+                <NewsSection items={matchedNews} />
               </div>,
               renderTradePanel()
             )}
