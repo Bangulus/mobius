@@ -674,6 +674,7 @@ function OrderTypeToggle({ orderType, setOrderType }: { orderType: OrderType; se
 type Tab       = '7T' | '1M' | 'Gesamt'
 type TradeTab  = 'kaufen' | 'verkaufen'
 type OrderType = 'markt' | 'limit'
+type LayoutMode = 'phone' | 'tablet-portrait' | 'tablet-landscape' | 'desktop'
 
 export default function MarketPage() {
   const params   = useParams()
@@ -720,14 +721,28 @@ export default function MarketPage() {
   const currentIntervalMs = useRef(10000)
   const intervalRef       = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  // Mobile: is screen narrow?
+  // Layout: Phone / Tablet-Portrait / Tablet-Landscape / Desktop
+  // Phone & Tablet-Portrait = 1 Spalte (isSingleColumn). Tablet-Landscape & Desktop = 2 Spalten.
   const [isMobile, setIsMobile] = useState(false)
+  const [layoutMode, setLayoutMode] = useState<LayoutMode>('desktop')
   useEffect(() => {
-    const check = () => setIsMobile(window.innerWidth <= 768)
+    const check = () => {
+      const w = window.innerWidth
+      const h = window.innerHeight
+      setIsMobile(w <= 768)
+      if (w <= 768) setLayoutMode('phone')
+      else if (w <= 1180) setLayoutMode(w > h ? 'tablet-landscape' : 'tablet-portrait')
+      else setLayoutMode('desktop')
+    }
     check()
     window.addEventListener('resize', check)
-    return () => window.removeEventListener('resize', check)
+    window.addEventListener('orientationchange', check)
+    return () => {
+      window.removeEventListener('resize', check)
+      window.removeEventListener('orientationchange', check)
+    }
   }, [])
+  const isSingleColumn = layoutMode === 'phone' || layoutMode === 'tablet-portrait'
 
   const isFinance  = !!(market?.category === 'finance' || market?.category === 'Finanzen')
   const isFormula1 = market?.category === 'formula1'
@@ -1209,7 +1224,7 @@ export default function MarketPage() {
 
   // Wiederverwendbares Trade-Panel
   const renderTradePanel = (resolvedLabel?: string) => (
-    <div className="card" style={{ position: isMobile ? 'static' : 'sticky', top: 'calc(var(--nav-height) + 16px)', padding: 0, overflow: 'hidden' }}>
+    <div className="card" style={{ position: isSingleColumn ? 'static' : 'sticky', top: 'calc(var(--nav-height) + 16px)', padding: 0, overflow: 'hidden' }}>
       {(market.resolved || closesAtMs < Date.now()) ? (
         <div style={{ padding: '24px 16px', textAlign: 'center' }}>
           <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 4, color: userWon ? '#16a34a' : hasPosition ? 'var(--text-muted)' : 'var(--text-muted)' }}>
@@ -1317,13 +1332,22 @@ export default function MarketPage() {
     </div>
   )
 
-  // Responsive 2-Spalten-Layout Helper
-  const twoCol = (left: React.ReactNode, right: React.ReactNode) => (
-    <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 300px', gap: 20, alignItems: 'start' }}>
-      <div>{left}</div>
-      <div>{right}</div>
-    </div>
-  )
+  // Responsive Layout-Helper: Phone/Tablet-Portrait = 1 Spalte, Tablet-Landscape = 760px/340px, Desktop = 1fr/300px
+  const twoCol = (left: React.ReactNode, right: React.ReactNode) => {
+    const gridCols = isSingleColumn
+      ? '1fr'
+      : layoutMode === 'tablet-landscape'
+      ? 'minmax(0, 760px) 340px'
+      : '1fr 300px'
+    return (
+      <div style={{ display: 'grid', gridTemplateColumns: gridCols, gap: 20, alignItems: 'start', justifyContent: layoutMode === 'tablet-landscape' ? 'center' : 'stretch' }}>
+        <div>{left}</div>
+        <div>{right}</div>
+      </div>
+    )
+  }
+
+  const containerMaxWidth = layoutMode === 'tablet-portrait' ? 760 : layoutMode === 'tablet-landscape' ? 1120 : 980
 
   return (
     <>
@@ -1381,7 +1405,7 @@ export default function MarketPage() {
         </div>
       </nav>
 
-      <div style={{ maxWidth: 980, margin: '0 auto', padding: isMobile ? '16px 12px 80px' : '24px 16px' }}>
+      <div style={{ maxWidth: containerMaxWidth, margin: '0 auto', padding: isMobile ? '16px 12px 80px' : '24px 16px' }}>
 
         {/* ── SOCCER ── */}
         {isSoccer && (
@@ -1483,7 +1507,7 @@ export default function MarketPage() {
                   <button onClick={() => router.push('/')} style={{ width: '100%', padding: '12px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 10, cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>Weitere Möbius-Märkte →</button>
                 </div>
               ) : (
-                <div className="card" style={{ position: isMobile ? 'static' : 'sticky', top: 'calc(var(--nav-height) + 16px)', padding: 0, overflow: 'hidden' }}>
+                <div className="card" style={{ position: isSingleColumn ? 'static' : 'sticky', top: 'calc(var(--nav-height) + 16px)', padding: 0, overflow: 'hidden' }}>
                   {!user ? (
                     <div style={{ textAlign: 'center', padding: '24px 16px' }}>
                       <div style={{ fontSize: 14, color: 'var(--text-muted)', marginBottom: 12 }}>Anmelden um zu tippen</div>
@@ -1651,7 +1675,7 @@ export default function MarketPage() {
               ) : !user ? (
                 <div className="card" style={{ textAlign: 'center', padding: '24px 16px' }}><div style={{ fontSize: 14, color: 'var(--text-muted)', marginBottom: 12 }}>Anmelden um zu handeln</div><button className="submit-btn yes" onClick={() => router.push('/')}>Zur Anmeldung</button></div>
               ) : (
-                <div className="card" style={{ position: isMobile ? 'static' : 'sticky', top: 'calc(var(--nav-height) + 16px)', padding: 0, overflow: 'hidden' }}>
+                <div className="card" style={{ position: isSingleColumn ? 'static' : 'sticky', top: 'calc(var(--nav-height) + 16px)', padding: 0, overflow: 'hidden' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border)', padding: '0 16px' }}>
                     <div style={{ display: 'flex' }}>
                       {(['kaufen', 'verkaufen'] as TradeTab[]).map(t => (<button key={t} onClick={() => { setTradeTab(t); setBetError(''); setBetSuccess('') }} style={{ padding: '12px 14px', fontSize: 13, fontWeight: 600, border: 'none', cursor: 'pointer', background: 'transparent', color: tradeTab === t ? 'var(--text)' : 'var(--text-muted)', borderBottom: tradeTab === t ? '2px solid var(--accent)' : '2px solid transparent', marginBottom: -1 }}>{t.charAt(0).toUpperCase() + t.slice(1)}</button>))}
@@ -1731,7 +1755,7 @@ export default function MarketPage() {
               {priceHistory.length < 1 && !market.resolved && (<div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: 13 }}>Chart wird aufgebaut…</div>)}
             </div>
           </div>,
-          <div className="card" style={{ position: isMobile ? 'static' : 'sticky', top: 'calc(var(--nav-height) + 16px)', padding: 0, overflow: 'hidden' }}>
+          <div className="card" style={{ position: isSingleColumn ? 'static' : 'sticky', top: 'calc(var(--nav-height) + 16px)', padding: 0, overflow: 'hidden' }}>
             {(market.resolved || closesAtMs < Date.now()) ? (
               <div style={{ padding: '24px 16px', textAlign: 'center' }}>
                 <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 4, color: userWon ? '#16a34a' : hasPosition ? 'var(--text-muted)' : 'var(--text-muted)' }}>
