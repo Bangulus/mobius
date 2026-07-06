@@ -304,7 +304,7 @@ function NewsSection({ items }: { items: NewsItem[] }) {
         <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>Relevante News</div>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {items.slice(0, 5).map(n => (
+        {items.slice(0, 5).map(n => (<a
           
             key={n.id}
             href={n.link}
