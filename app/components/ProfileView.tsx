@@ -37,6 +37,34 @@ function parseUTC(raw: string): Date {
   return new Date(raw.replace(' ', 'T') + 'Z')
 }
 
+// ─── Avatar-Resize vor Upload (Canvas, zentrierter Square-Crop, 256px) ────────
+
+function resizeAvatarImage(file: File, targetSize = 256): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    const objectUrl = URL.createObjectURL(file)
+    img.onload = () => {
+      const canvas = document.createElement('canvas')
+      canvas.width = targetSize
+      canvas.height = targetSize
+      const ctx = canvas.getContext('2d')
+      if (!ctx) { URL.revokeObjectURL(objectUrl); reject(new Error('Canvas nicht verfügbar')); return }
+      const minSide = Math.min(img.width, img.height)
+      const sx = (img.width - minSide) / 2
+      const sy = (img.height - minSide) / 2
+      ctx.drawImage(img, sx, sy, minSide, minSide, 0, 0, targetSize, targetSize)
+      URL.revokeObjectURL(objectUrl)
+      canvas.toBlob(
+        (blob) => { if (blob) resolve(blob); else reject(new Error('Resize fehlgeschlagen')) },
+        'image/jpeg',
+        0.9
+      )
+    }
+    img.onerror = () => { URL.revokeObjectURL(objectUrl); reject(new Error('Bild konnte nicht geladen werden')) }
+    img.src = objectUrl
+  })
+}
+
 // ─── Icon System (Tabler outline SVGs, inline — kein npm-Paket) ───────────────
 
 const ICON_PATHS: Record<string, string[]> = {
@@ -733,21 +761,26 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, x
 
   async function uploadAvatar(file: File) {
     setUploadingAvatar(true);
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('userId', userId);
-    const res = await fetch('/api/upload-avatar', { method: 'POST', body: formData });
-    if (res.ok) {
-      const { url } = await res.json();
-      await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${userId}`, {
-        method: 'PATCH',
-        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-        body: JSON.stringify({ avatar_url: url }),
-      });
-      onAvatarChange(url);
-      setProfileMessage('Profilbild gespeichert ✓');
-    } else {
-      setProfileMessage('Fehler beim Upload.');
+    try {
+      const resizedBlob = await resizeAvatarImage(file, 256);
+      const formData = new FormData();
+      formData.append('file', resizedBlob, 'avatar.jpg');
+      formData.append('userId', userId);
+      const res = await fetch('/api/upload-avatar', { method: 'POST', body: formData });
+      if (res.ok) {
+        const { url } = await res.json();
+        await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${userId}`, {
+          method: 'PATCH',
+          headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+          body: JSON.stringify({ avatar_url: url }),
+        });
+        onAvatarChange(url);
+        setProfileMessage('Profilbild gespeichert ✓');
+      } else {
+        setProfileMessage('Fehler beim Upload.');
+      }
+    } catch {
+      setProfileMessage('Fehler beim Verarbeiten des Bildes.');
     }
     setUploadingAvatar(false);
     setTimeout(() => setProfileMessage(''), 4000);
