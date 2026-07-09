@@ -912,7 +912,7 @@ export default function Home() {
                   onClick={() => setDarkMode(!darkMode)}
                   style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', background: 'var(--surface)', border: '0.5px solid var(--border)', borderRadius: 12, cursor: 'pointer', fontSize: 14, color: 'var(--text)', width: '100%' }}
                 >
-                  <span style={{ fontSize: 20 }}>{darkMode ? '☀️' : '🌙'}</span>
+                  <Icon name={darkMode ? 'sun' : 'moon'} size={20} />
                   <span>{darkMode ? 'Light Mode aktivieren' : 'Dark Mode aktivieren'}</span>
                 </button>
                 <button
