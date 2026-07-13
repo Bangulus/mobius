@@ -201,6 +201,22 @@ function titleRampColors(title: string | null | undefined) {
   return TITLE_RAMP[title ?? ''] ?? TITLE_RAMP.Nadir;
 }
 
+// ─── Rang-Emblem-Dateien (public/, keine Umlaute im Dateinamen) ───────────────
+
+const RANK_EMBLEM_FILES: Record<string, string> = {
+  Nadir:      '/nadir.png',
+  Initiat:    '/initiat.png',
+  Bayes:      '/bayes.png',
+  Indigator:  '/indigator.png',
+  Mantiker:   '/mantiker.png',
+  Theoros:    '/theoros.png',
+  Heliomant:  '/heliomant.png',
+  Praesagium: '/praesagium.png',
+};
+function rankEmblemSrc(title: string | null | undefined) {
+  return RANK_EMBLEM_FILES[title ?? ''] ?? RANK_EMBLEM_FILES.Nadir;
+}
+
 function calcStreak(trades: TradeRow[]): number {
   if (trades.length === 0) return 0;
   const days = new Set(trades.map(t => {
@@ -800,6 +816,15 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, x
               {displayName.slice(0, 2).toUpperCase()}
             </div>
           )}
+        </div>
+        <div style={{ flexShrink: 0 }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={rankEmblemSrc(title)}
+            alt={`Rang: ${title ?? 'Nadir'}`}
+            title={title ?? 'Nadir'}
+            style={{ width: isMobile ? 64 : 80, height: isMobile ? 64 : 80, objectFit: 'contain' }}
+          />
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
