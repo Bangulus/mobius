@@ -87,7 +87,7 @@ export default function RaengePage() {
             Vom Nadir zum Möbius.
           </h1>
           <p style={{ fontSize: 17, color: 'var(--text-muted, #64748b)', lineHeight: 1.7, margin: 0 }}>
-            Neun Ränge, die deinen Fortschritt als Prognostiker markieren. Jede Saison neu erspielt — bis auf einen.
+            Neun Ränge, die deinen Fortschritt als Prognostiker markieren. Jede Saison wird neu angetreten; außer man hat es einmal auf das Möbius-Level geschafft.
           </p>
         </div>
 
