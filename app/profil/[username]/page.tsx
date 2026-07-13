@@ -36,6 +36,11 @@ interface ProfileUser {
   created_at?: string
   last_seen_at?: string
   privacy_settings?: PrivacySettings
+  xp?: number
+  level?: number
+  rp?: number
+  title?: string
+  peak_title?: string
 }
 
 interface PrivacySettings {
@@ -99,6 +104,22 @@ function avatarColor(str: string) {
   let h = 0
   for (let i = 0; i < str.length; i++) h = str.charCodeAt(i) + ((h << 5) - h)
   return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length]
+}
+
+// ─── Rang-Emblem-Dateien (public/, keine Umlaute im Dateinamen) ───────────────
+
+const RANK_EMBLEM_FILES: Record<string, string> = {
+  Nadir:      '/nadir.png',
+  Initiat:    '/initiat.png',
+  Bayes:      '/bayes.png',
+  Indigator:  '/indigator.png',
+  Mantiker:   '/mantiker.png',
+  Theoros:    '/theoros.png',
+  Heliomant:  '/heliomant.png',
+  Praesagium: '/praesagium.png',
+}
+function rankEmblemSrc(title: string | null | undefined) {
+  return RANK_EMBLEM_FILES[title ?? ''] ?? RANK_EMBLEM_FILES.Nadir
 }
 
 function formatLastSeen(iso?: string): string {
@@ -318,6 +339,17 @@ export default function PublicProfilePage() {
               )}
             </div>
 
+            {/* Rang-Emblem — gleiche Größe wie Avatar */}
+            <div style={{ flexShrink: 0 }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={rankEmblemSrc(profileUser.title)}
+                alt={`Rang: ${profileUser.title ?? 'Nadir'}`}
+                title={profileUser.title ?? 'Nadir'}
+                style={{ width: 72, height: 72, objectFit: 'contain' }}
+              />
+            </div>
+
             {/* Name + Meta */}
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--text)', marginBottom: 4, letterSpacing: '-0.5px' }}>
@@ -329,10 +361,12 @@ export default function PublicProfilePage() {
                 <span>Zuletzt online: {formatLastSeen(profileUser.last_seen_at)}</span>
               </div>
 
-              {/* Platzhalter Badge/Rang */}
-              <div style={{ marginTop: 10, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 20, background: 'var(--accent-light)', border: '1px solid rgba(99,102,241,0.2)' }}>
-                <span style={{ fontSize: 14 }}>🏅</span>
-                <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--accent)' }}>Rang folgt bald</span>
+              {/* Titel-Pill */}
+              <div style={{ marginTop: 10, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 20, background: 'rgba(247,147,26,0.12)', border: '1px solid rgba(247,147,26,0.2)' }}>
+                <span style={{ fontSize: 12, fontWeight: 600, color: '#c9740f' }}>{profileUser.title ?? 'Nadir'}</span>
+                {profileUser.level != null && (
+                  <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>· Level {profileUser.level}</span>
+                )}
               </div>
             </div>
 
@@ -566,4 +600,3 @@ function PublicAktivitaetsFeed({ trades, entries }: { trades: TradeRow[]; entrie
     </div>
   )
 }
-
