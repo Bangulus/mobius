@@ -885,6 +885,10 @@ export default function Home() {
               <Icon name="help" size={16} />
               <span>FAQ</span>
             </a>
+            <a href="/raenge" className="nav-item-btn" style={{ display: 'flex', alignItems: 'center', gap: 8, textDecoration: 'none', fontSize: 13, fontWeight: 500, color: 'var(--text-muted)', padding: '8px 12px', borderRadius: 8 }}>
+              <Icon name="star" size={16} />
+              <span>Ränge</span>
+            </a>
           </div>
         </aside>
 
