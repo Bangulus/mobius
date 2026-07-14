@@ -365,7 +365,7 @@ export default function PublicProfilePage() {
               <div style={{ marginTop: 10, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 20, background: 'rgba(247,147,26,0.12)', border: '1px solid rgba(247,147,26,0.2)' }}>
                 <span style={{ fontSize: 12, fontWeight: 600, color: '#c9740f' }}>{profileUser.title ?? 'Nadir'}</span>
                 {profileUser.level != null && (
-                  <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>· Level {profileUser.level}</span>
+                  <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>· Erfahrungslevel {profileUser.level}</span>
                 )}
               </div>
             </div>
