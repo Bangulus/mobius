@@ -806,7 +806,7 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, x
 
   const headerCard = (
     <div className="card" style={{ padding: isMobile ? '20px 16px' : '28px 28px 24px', marginBottom: 16 }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: isMobile ? 14 : 20, marginBottom: 20 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: isMobile ? 14 : 20, marginBottom: isMobile ? 16 : 20 }}>
         <div style={{ flexShrink: 0 }}>
           {avatarUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -827,7 +827,7 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, x
           />
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             {editingUsername ? (
               <div style={{ display: 'flex', gap: 6, alignItems: 'center', width: '100%' }}>
                 <input type="text" value={newUsername} onChange={e => setNewUsername(e.target.value)} autoFocus
@@ -843,11 +843,6 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, x
               </>
             )}
           </div>
-          <div style={{ fontSize: 12, color: 'var(--text-muted)', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <span>Guthaben: <strong style={{ color: 'var(--yes)' }}>{(balance ?? 0).toLocaleString('de')} ₫</strong></span>
-            <span>·</span>
-            <span>{allRows.length} Prognosen</span>
-          </div>
           {profileMessage && (
             <div style={{ marginTop: 6, fontSize: 12, color: profileMessage.startsWith('Fehler') ? 'var(--no)' : 'var(--yes)' }}>{profileMessage}</div>
           )}
@@ -861,6 +856,12 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, x
             Mein vollständiges Profil →
           </button>
         </div>
+      </div>
+
+      <div style={{ fontSize: 13, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 8, marginBottom: isMobile ? 16 : 20 }}>
+        <span>Guthaben: <strong style={{ color: 'var(--yes)' }}>{(balance ?? 0).toLocaleString('de')} ₫</strong></span>
+        <span>·</span>
+        <span>{allRows.length} Prognosen</span>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', borderTop: '1px solid var(--border)', paddingTop: isMobile ? 16 : 20, gap: 8 }}>
