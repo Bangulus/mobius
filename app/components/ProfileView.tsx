@@ -636,7 +636,7 @@ function ProgressionSection({ userId, xp, level, rp, title, peakTitle }: {
       <div className="card" style={{ padding: '1.25rem 1.5rem', marginBottom: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, flexWrap: 'wrap', gap: 8 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ fontSize: 16, fontWeight: 500, color: 'var(--text)' }}>Level {level}</span>
+            <span style={{ fontSize: 16, fontWeight: 500, color: 'var(--text)' }}>Erfahrungslevel {level}</span>
             <span style={{ fontSize: 12, padding: '3px 10px', borderRadius: 8, background: CURRENT_TITLE_BG, color: CURRENT_TITLE_COLOR, fontWeight: 500 }}>{title}</span>
           </div>
           <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{xpInto.toLocaleString('de')} / {xpForThis.toLocaleString('de')} XP bis Level {level + 1}</span>
