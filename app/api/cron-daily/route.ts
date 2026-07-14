@@ -1,5 +1,13 @@
 import { NextResponse } from 'next/server'
-import { rpDecay, titleFromRp } from '@/lib/progression'
+import {
+  rpDecay,
+  titleFromRp,
+  titleRank,
+  judgmentFromTrades,
+  MOEBIUS_MIN_TITLE,
+  MOEBIUS_MIN_JUDGMENT,
+  MOEBIUS_MIN_TRADES,
+} from '@/lib/progression'
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -54,6 +62,31 @@ function monthBounds(today: string): { start: string; end: string } {
   const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate() // Tag 0 des Folgemonats = letzter Tag dieses Monats
   const end = `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
   return { start, end }
+}
+
+// ── Peak-Title fortschreiben ──────────────────────────────────
+// users.peak_title (Lebenszeit-Bestwert, nie saisonal zurückgesetzt) wurde bisher
+// nirgends im Code geschrieben — verifiziert per SQL-Stichprobe (13. Juli 2026,
+// alle User auf 'Nadir'). Hebt peak_title an, wenn der aktuelle title-Rang höher
+// ist als der gespeicherte peak_title-Rang. Läuft VOR dem RP-Verfall, damit ein
+// durch Verfall in dieser Ausführung sinkender title den gerade erreichten
+// Bestwert nicht verpasst.
+async function updatePeakTitles() {
+  const users: { id: string; title: string | null; peak_title: string | null }[] =
+    await dbGet('users', `select=id,title,peak_title`)
+
+  if (!users || users.length === 0) return { checked: 0, updated: 0 }
+
+  let updated = 0
+  for (const u of users) {
+    const currentTitle = u.title ?? 'Nadir'
+    const currentPeak  = u.peak_title ?? 'Nadir'
+    if (titleRank(currentTitle) > titleRank(currentPeak)) {
+      await dbWrite('PATCH', 'users', `id=eq.${u.id}`, { peak_title: currentTitle })
+      updated++
+    }
+  }
+  return { checked: users.length, updated }
 }
 
 // ── RP-Verfall: täglich nur das Delta abziehen ───────────────
@@ -138,6 +171,49 @@ async function checkSeasonReset(today: string) {
   await dbWrite('POST', 'seasons', '', { start_date: start, end_date: end, is_active: true })
 
   return { action: 'reset_performed', closedSeasonId: active.id, snapshotted, newStart: start, newEnd: end }
+}
+
+// ── Möbius-Sondertitel prüfen ──────────────────────────────────
+// Kandidaten: peak_title bereits Praesagium (Lebenszeit-Bestwert, nicht saisonal),
+// total_trades >= 500, is_moebius noch false. Für jeden Kandidaten wird das
+// Urteilsvermögen aus allen buy_yes/buy_no-Trades auf aufgelösten Märkten
+// berechnet (Brier Score, siehe lib/progression.ts). Bei >= 60 wird is_moebius
+// dauerhaft auf true gesetzt — kein erneuter Check nötig, da nie wieder verlierbar.
+async function checkMoebiusEligibility() {
+  const candidates: { id: string; peak_title: string | null; total_trades: number | null }[] =
+    await dbGet(
+      'users',
+      `is_moebius=eq.false&peak_title=eq.${MOEBIUS_MIN_TITLE}&total_trades=gte.${MOEBIUS_MIN_TRADES}&select=id,peak_title,total_trades`
+    )
+
+  if (!candidates || candidates.length === 0) return { checked: 0, awarded: 0 }
+
+  let awarded = 0
+  for (const c of candidates) {
+    const trades: { market_id: string; type: string; price_before: number }[] =
+      await dbGet('trades', `user_id=eq.${c.id}&type=in.(buy_yes,buy_no)&select=market_id,type,price_before`)
+
+    if (!trades || trades.length === 0) continue
+
+    const seen: Record<string, boolean> = {}
+    const marketIds: string[] = []
+    trades.forEach(t => { if (!seen[t.market_id]) { seen[t.market_id] = true; marketIds.push(t.market_id) } })
+
+    const markets: { id: string; resolution: string | null }[] =
+      await dbGet('markets', `id=in.(${marketIds.join(',')})&resolved=eq.true&select=id,resolution`)
+
+    const resolutions: Record<string, 'yes' | 'no'> = {}
+    markets?.forEach(m => {
+      if (m.resolution === 'yes' || m.resolution === 'no') resolutions[m.id] = m.resolution
+    })
+
+    const judgment = judgmentFromTrades(trades, resolutions)
+    if (judgment === null || judgment < MOEBIUS_MIN_JUDGMENT) continue
+
+    await dbWrite('PATCH', 'users', `id=eq.${c.id}`, { is_moebius: true })
+    awarded++
+  }
+  return { checked: candidates.length, awarded }
 }
 
 export async function GET(request: Request) {
@@ -228,6 +304,13 @@ export async function GET(request: Request) {
     results.weatherCreateError = String(e)
   }
 
+  // --- PROGRESSION: PEAK-TITLE FORTSCHREIBEN ---
+  try {
+    results.peakTitleUpdate = await updatePeakTitles()
+  } catch (e) {
+    results.peakTitleUpdateError = String(e)
+  }
+
   // --- PROGRESSION: RP-VERFALL ---
   try {
     results.rpDecay = await applyRpDecay(today)
@@ -240,6 +323,13 @@ export async function GET(request: Request) {
     results.seasonCheck = await checkSeasonReset(today)
   } catch (e) {
     results.seasonCheckError = String(e)
+  }
+
+  // --- PROGRESSION: MÖBIUS-SONDERTITEL PRÜFEN ---
+  try {
+    results.moebiusCheck = await checkMoebiusEligibility()
+  } catch (e) {
+    results.moebiusCheckError = String(e)
   }
 
   // --- CRON LOG ---
