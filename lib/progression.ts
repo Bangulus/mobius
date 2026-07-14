@@ -52,6 +52,15 @@ export function titleFromRp(rp: number): string {
   return result
 }
 
+// Rang eines Titels innerhalb der RP_THRESHOLDS-Reihenfolge (0 = Nadir, 7 = Praesagium).
+// Dient dem Vergleich "ist Titel A höher als Titel B" (z.B. für peak_title-Fortschreibung).
+const TITLE_ORDER = RP_THRESHOLDS.map(t => t.title)
+
+export function titleRank(title: string): number {
+  const idx = TITLE_ORDER.indexOf(title)
+  return idx === -1 ? 0 : idx
+}
+
 // ── XP/RP-Beträge pro Aktion ─────────────────────────────────
 
 export const XP_TRADE = 10
@@ -79,4 +88,45 @@ export const RP_DECAY_GRACE_DAYS = 2 // Verfall beginnt ab Tag 3 Inaktivität
 export function rpDecay(daysInactive: number): number {
   const decayDays = Math.max(0, daysInactive - RP_DECAY_GRACE_DAYS)
   return decayDays * RP_DECAY_PER_DAY
+}
+
+// ── Möbius-Sondertitel ─────────────────────────────────────────
+// Bedingung: peak_title >= Praesagium (Lebenszeit-Bestleistung, nicht saisonal-
+// resettbar) + Urteilsvermögen >= 60/100 + min. 500 Trades. Einmal erreicht
+// (is_moebius = true in der DB), nie wieder verlierbar — kein erneuter Check nötig.
+
+export const MOEBIUS_MIN_TITLE = 'Praesagium'
+export const MOEBIUS_MIN_JUDGMENT = 60 // Urteilsvermögen, Skala 0-100
+export const MOEBIUS_MIN_TRADES = 500
+
+// Urteilsvermögen = (1 - BrierScore) × 100.
+// price_before ist laut place-bet IMMER die YES-Wahrscheinlichkeit des Marktes
+// zum Zeitpunkt des Trades (calcProb(q_yes, q_no, b) / 100) — unabhängig von der
+// Kauf-Richtung. Bei buy_no muss daher (1 - price_before) als die vom Nutzer
+// implizit seiner eigenen Richtung zugeschriebene Wahrscheinlichkeit verwendet werden.
+// Nur buy_yes/buy_no zählen (sell-Trades haben kein eigenes Ergebnis); nur Trades
+// auf bereits aufgelösten Märkten (resolutions-Map enthält nur diese).
+export function judgmentFromTrades(
+  trades: { market_id: string; type: string; price_before: number }[],
+  resolutions: Record<string, 'yes' | 'no'>
+): number | null {
+  let sumSquaredError = 0
+  let count = 0
+
+  for (const t of trades) {
+    if (t.type !== 'buy_yes' && t.type !== 'buy_no') continue
+    const resolution = resolutions[t.market_id]
+    if (!resolution) continue // Markt noch nicht aufgelöst oder unbekannt
+
+    const direction: 'yes' | 'no' = t.type === 'buy_yes' ? 'yes' : 'no'
+    const forecastProb = direction === 'yes' ? t.price_before : 1 - t.price_before
+    const actual = resolution === direction ? 1 : 0
+    const error = forecastProb - actual
+    sumSquaredError += error * error
+    count++
+  }
+
+  if (count === 0) return null
+  const brierScore = sumSquaredError / count
+  return Math.round((1 - brierScore) * 100)
 }
