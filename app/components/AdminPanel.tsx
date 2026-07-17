@@ -22,6 +22,22 @@ const CATEGORIES = [
 
 const TITLES = ['Nadir', 'Initiat', 'Bayes', 'Indigator', 'Mantiker', 'Theoros', 'Heliomant', 'Praesagium'];
 
+// LMSR: Berechne q_yes/q_no für gewünschte Startwahrscheinlichkeit
+function calcQValues(prob: number, b: number): { q_yes: number; q_no: number } {
+  // prob = exp(q_yes/b) / (exp(q_yes/b) + exp(q_no/b))
+  // Setze q_no = 0, dann: q_yes = b * ln(prob / (1 - prob))
+  const q_yes = b * Math.log(prob / (1 - prob));
+  const q_no = 0;
+  return { q_yes, q_no };
+}
+
+// LMSR: Berechne aktuelle Wahrscheinlichkeit aus q_yes/q_no
+function calcProb(q_yes: number, q_no: number, b: number): number {
+  const expYes = Math.exp(q_yes / b);
+  const expNo  = Math.exp(q_no  / b);
+  return expYes / (expYes + expNo);
+}
+
 interface Props {
   userId: string;
   openMarkets: any[];
@@ -56,7 +72,8 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
   const [editFields, setEditFields] = useState<{
     question: string; short_label: string; description: string;
     category: string; closes_at: string; group_title: string;
-  }>({ question: '', short_label: '', description: '', category: '', closes_at: '', group_title: '' });
+    startProb: number;
+  }>({ question: '', short_label: '', description: '', category: '', closes_at: '', group_title: '', startProb: 50 });
   const [editSaving, setEditSaving] = useState(false);
   const [editMessage, setEditMessage] = useState('');
   const [editSearch, setEditSearch] = useState('');
@@ -70,6 +87,7 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
   const [newClosesAt, setNewClosesAt]       = useState('');
   const [newB, setNewB]                     = useState(100);
   const [newGroupTitle, setNewGroupTitle]   = useState('');
+  const [newStartProb, setNewStartProb]     = useState(50);
   const [createLoading, setCreateLoading]   = useState(false);
   const [createMessage, setCreateMessage]   = useState('');
 
@@ -83,7 +101,6 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
   const [deleteUserConfirm, setDeleteUserConfirm] = useState<string | null>(null);
   const [userSearch, setUserSearch]         = useState('');
 
-  // Progression editor state
   const [progXp, setProgXp]         = useState('');
   const [progLevel, setProgLevel]   = useState('');
   const [progRp, setProgRp]         = useState('');
@@ -127,7 +144,7 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
 
   async function loadAllMarkets() {
     const res = await fetch(
-      `${supabaseUrl}/rest/v1/markets?is_auto=eq.false&resolved=eq.false&status=eq.open&select=id,question,short_label,category,description,closes_at,group_title,is_auto,resolved&order=created_at.desc&limit=2000`,
+      `${supabaseUrl}/rest/v1/markets?is_auto=eq.false&resolved=eq.false&status=eq.open&select=id,question,short_label,category,description,closes_at,group_title,is_auto,resolved,q_yes,q_no,b&order=created_at.desc&limit=2000`,
       { headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` } }
     );
     setAllMarkets(await res.json());
@@ -220,14 +237,11 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
 
     if (!patchRes.ok) { setProgMessage('Fehler beim Speichern.'); setProgLoading(false); return; }
 
-    // Bestehende Badges laden und diff berechnen
     const existingRows = await fetch(`${supabaseUrl}/rest/v1/user_badges?user_id=eq.${uid}&select=badge_id`, {
       headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` },
     }).then(r => r.json());
     const existing = new Set<string>((existingRows ?? []).map((r: { badge_id: string }) => r.badge_id));
 
-    // Neue Badges vergeben
-    // Neue Badges vergeben
     for (const badgeId of Array.from(progBadges)) {
       if (!existing.has(badgeId)) {
         await fetch(`${supabaseUrl}/rest/v1/user_badges`, {
@@ -238,7 +252,6 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
       }
     }
 
-    // Entzogene Badges löschen
     for (const badgeId of Array.from(existing)) {
       if (!progBadges.has(badgeId)) {
         await fetch(`${supabaseUrl}/rest/v1/user_badges?user_id=eq.${uid}&badge_id=eq.${badgeId}`, {
@@ -261,18 +274,33 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
       const pad = (n: number) => String(n).padStart(2, '0');
       closesAtLocal = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
     }
-    setEditFields({ question: m.question ?? '', short_label: m.short_label ?? '', description: m.description ?? '', category: m.category ?? 'Politik', closes_at: closesAtLocal, group_title: m.group_title ?? '' });
+    const b = m.b ?? 100;
+    const currentProb = Math.round(calcProb(m.q_yes ?? 0, m.q_no ?? 0, b) * 100);
+    setEditFields({
+      question: m.question ?? '',
+      short_label: m.short_label ?? '',
+      description: m.description ?? '',
+      category: m.category ?? 'Politik',
+      closes_at: closesAtLocal,
+      group_title: m.group_title ?? '',
+      startProb: currentProb,
+    });
     setEditMessage(''); setDeleteConfirm(null);
   }
 
   async function saveMarket(marketId: string) {
     setEditSaving(true); setEditMessage('');
+    const existingMarket = allMarkets.find(m => m.id === marketId);
+    const b = existingMarket?.b ?? 100;
+    const { q_yes, q_no } = calcQValues(editFields.startProb / 100, b);
     const body: any = {
       question:    editFields.question.trim(),
       short_label: editFields.short_label.trim() || editFields.question.trim().slice(0, 60),
       description: editFields.description.trim() || null,
       category:    editFields.category,
       group_title: editFields.group_title.trim() || null,
+      q_yes,
+      q_no,
     };
     if (editFields.closes_at) body.closes_at = new Date(editFields.closes_at).toISOString();
     const res = await fetch(`${supabaseUrl}/rest/v1/markets?id=eq.${marketId}`, {
@@ -368,12 +396,13 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
     if (!newQuestion.trim()) { setCreateMessage('❌ Frage ist Pflichtfeld.'); return; }
     if (!newClosesAt)        { setCreateMessage('❌ Schlussdatum ist Pflichtfeld.'); return; }
     setCreateLoading(true); setCreateMessage('');
+    const { q_yes, q_no } = calcQValues(newStartProb / 100, newB);
     const body: any = {
       question:    newQuestion.trim(),
       short_label: newShortLabel.trim() || newQuestion.trim().slice(0, 60),
       description: newDescription.trim() || null,
       category:    newCategory,
-      status: 'open', b: newB, q_yes: 0, q_no: 0,
+      status: 'open', b: newB, q_yes, q_no,
       closes_at: new Date(newClosesAt).toISOString(),
       resolved: false, is_auto: false,
     };
@@ -386,7 +415,7 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
     if (res.ok) {
       setCreateMessage('✅ Markt erstellt!');
       setNewQuestion(''); setNewShortLabel(''); setNewDescription('');
-      setNewCategory('Politik'); setNewClosesAt(''); setNewB(100); setNewGroupTitle('');
+      setNewCategory('Politik'); setNewClosesAt(''); setNewB(100); setNewGroupTitle(''); setNewStartProb(50);
       onMarketResolved();
     } else { setCreateMessage(`❌ Fehler: ${await res.text()}`); }
     setCreateLoading(false);
@@ -440,6 +469,32 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
     const mins = Math.floor(diff / 60000);
     const secs = Math.floor((diff % 60000) / 1000);
     return `${mins}:${secs.toString().padStart(2, '0')}`;
+  }
+
+  // Slider-Komponente (wiederverwendbar)
+  function ProbSlider({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+    const pct = value;
+    const noColor = '#dc2626';
+    const yesColor = '#16a34a';
+    return (
+      <div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Startwahrscheinlichkeit</span>
+          <span style={{ fontSize: 15, fontWeight: 800, color: pct >= 50 ? yesColor : noColor }}>{pct}% JA</span>
+        </div>
+        <input
+          type="range" min={10} max={90} step={1}
+          value={value}
+          onChange={e => onChange(Number(e.target.value))}
+          style={{ width: '100%', accentColor: pct >= 50 ? yesColor : noColor, cursor: 'pointer' }}
+        />
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+          <span style={{ color: noColor, fontWeight: 600 }}>10% JA</span>
+          <span style={{ color: 'var(--text-muted)' }}>50% = Standard</span>
+          <span style={{ color: yesColor, fontWeight: 600 }}>90% JA</span>
+        </div>
+      </div>
+    );
   }
 
   const adminCategories      = Array.from(new Set(openMarkets.map((m: any) => m.category).filter(Boolean))) as string[];
@@ -630,6 +685,7 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
                       <div><label style={labelStyle}>Gruppe</label><input style={inputStyle} value={editFields.group_title} onChange={e => setEditFields(f => ({ ...f, group_title: e.target.value }))} maxLength={80} /></div>
                     </div>
                     <div><label style={labelStyle}>Schließt am</label><input style={inputStyle} type="datetime-local" value={editFields.closes_at} onChange={e => setEditFields(f => ({ ...f, closes_at: e.target.value }))} /></div>
+                    <ProbSlider value={editFields.startProb} onChange={v => setEditFields(f => ({ ...f, startProb: v }))} />
                     <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 4, flexWrap: 'wrap' }}>
                       <button onClick={() => saveMarket(m.id)} disabled={editSaving || !editFields.question.trim()} style={{ padding: '9px 22px', background: editSaving ? 'var(--surface)' : '#0ea5e9', color: editSaving ? 'var(--text-muted)' : 'white', border: 'none', borderRadius: 8, cursor: editSaving ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 700 }}>{editSaving ? 'Speichert…' : 'Speichern'}</button>
                       <button onClick={() => setEditingMarket(null)} style={{ padding: '9px 16px', background: 'var(--surface)', color: 'var(--text-muted)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>Abbrechen</button>
@@ -684,7 +740,6 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
                     </div>
                   </div>
 
-                  {/* Guthaben-Editor */}
                   {editingUser === u.id && (
                     <div style={{ padding: '14px 16px', borderTop: '1px solid var(--border)', background: 'rgba(249,115,22,0.04)', display: 'flex', flexDirection: 'column', gap: 12 }}>
                       <div>
@@ -711,14 +766,12 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
                     </div>
                   )}
 
-                  {/* Progression-Editor */}
                   {editingUserProgression === u.id && (
                     <div style={{ padding: '14px 16px', borderTop: '1px solid var(--border)', background: 'rgba(124,58,237,0.04)', display: 'flex', flexDirection: 'column', gap: 16 }}>
                       {progLoading ? (
                         <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Lädt…</div>
                       ) : (
                         <>
-                          {/* XP / Level / RP */}
                           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
                             <div>
                               <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6 }}>XP</div>
@@ -734,7 +787,6 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
                             </div>
                           </div>
 
-                          {/* Titel */}
                           <div>
                             <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>Titel</div>
                             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -744,31 +796,21 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
                             </div>
                           </div>
 
-                          {/* Badges */}
                           <div>
                             <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>Badges</div>
                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                               {BADGES.map(badge => {
-                                const has = progBadges.has(badge.id)
+                                const has = progBadges.has(badge.id);
                                 return (
-                                  <button
-                                    key={badge.id}
-                                    onClick={() => {
-                                      const next = new Set(progBadges)
-                                      has ? next.delete(badge.id) : next.add(badge.id)
-                                      setProgBadges(next)
-                                    }}
-                                    style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer', border: has ? '1px solid rgba(99,102,241,0.4)' : '1px solid var(--border)', background: has ? 'rgba(99,102,241,0.1)' : 'var(--surface)', color: has ? '#6366f1' : 'var(--text-muted)' }}
-                                  >
+                                  <button key={badge.id} onClick={() => { const next = new Set(progBadges); has ? next.delete(badge.id) : next.add(badge.id); setProgBadges(next); }} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer', border: has ? '1px solid rgba(99,102,241,0.4)' : '1px solid var(--border)', background: has ? 'rgba(99,102,241,0.1)' : 'var(--surface)', color: has ? '#6366f1' : 'var(--text-muted)' }}>
                                     <span style={{ fontSize: 14 }}>{badge.icon}</span>
                                     <span>{badge.label}</span>
                                   </button>
-                                )
+                                );
                               })}
                             </div>
                           </div>
 
-                          {/* Speichern */}
                           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                             <button onClick={() => saveProgression(u.id)} disabled={progLoading} style={{ padding: '8px 20px', background: '#7c3aed', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>Speichern</button>
                             <button onClick={() => setEditingUserProgression(null)} style={{ padding: '8px 14px', background: 'var(--surface)', color: 'var(--text-muted)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>Schließen</button>
@@ -810,6 +852,7 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
                 <div><label style={labelStyle}>Schließt am *</label><input style={inputStyle} type="datetime-local" value={newClosesAt} onChange={e => setNewClosesAt(e.target.value)} /></div>
                 <div><label style={labelStyle}>Gruppe (optional)</label><input style={inputStyle} placeholder="z.B. WM 2026" value={newGroupTitle} onChange={e => setNewGroupTitle(e.target.value)} maxLength={80} /></div>
               </div>
+              <ProbSlider value={newStartProb} onChange={setNewStartProb} />
               {createMessage && (<div style={{ padding: '10px 14px', borderRadius: 8, background: createMessage.startsWith('✅') ? 'rgba(22,163,74,0.1)' : 'rgba(220,38,38,0.1)', color: createMessage.startsWith('✅') ? '#16a34a' : '#dc2626', fontSize: 13, fontWeight: 600 }}>{createMessage}</div>)}
               <button onClick={handleCreateMarket} disabled={createLoading} style={{ padding: '12px', background: createLoading ? 'var(--surface)' : '#16a34a', color: createLoading ? 'var(--text-muted)' : 'white', border: 'none', borderRadius: 10, cursor: createLoading ? 'not-allowed' : 'pointer', fontSize: 14, fontWeight: 700 }}>{createLoading ? 'Wird erstellt…' : 'Markt erstellen'}</button>
             </div>
