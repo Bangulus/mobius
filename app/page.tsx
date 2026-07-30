@@ -337,8 +337,6 @@ const NAV_ITEMS: NavItemDef[] = [
   { id: 'Sport', label: 'Sport', icon: 'ball-football', children: [
     { id: 'Fußball', label: 'Fußball', icon: 'ball-football', children: [
       { id: 'Bundesliga', label: 'Bundesliga',       flag: 'DE' },
-      { id: 'WM',         label: 'WM 2026',          icon: 'trophy' },
-      { id: 'CL',         label: 'Champions League', icon: 'star' },
     ]},
     { id: 'F1', label: 'Formel 1', icon: 'steering-wheel' },
   ]},
@@ -364,8 +362,6 @@ const MOBILE_CAT_PILLS: { id: string; label: string; icon?: string; flag?: strin
   { id: 'Geopolitik',          label: 'Geopolitik', icon: 'world' },
   { id: 'F1',                  label: 'Formel 1', icon: 'steering-wheel' },
   { id: 'Kultur',              label: 'Kultur',  icon: 'ticket' },
-  { id: 'WM',                  label: 'WM 2026', icon: 'trophy' },
-  { id: 'CL',                  label: 'Champions League', icon: 'star' },
 ]
 
 type AuthMode = 'login' | 'register'
