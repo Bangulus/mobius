@@ -245,6 +245,16 @@ const CAT_CLASS: Record<string, string> = {
 }
 const COIN_COLORS: Record<string, string> = { BTC: '#f59e0b', ETH: '#6366f1', SOL: '#9945ff', XRP: '#00aae4' }
 
+// ─── Auflösungsregeln Krypto-Märkte (fix, pro Coin, unabhängig von market.description) ──
+const CRYPTO_COIN_NAMES: Record<string, string> = { BTC: 'Bitcoin', ETH: 'Ethereum', SOL: 'Solana', XRP: 'XRP' }
+
+function getCryptoResolutionRules(coin: string): string {
+  const name = CRYPTO_COIN_NAMES[coin] ?? coin
+  return `Dieser Markt wird mit „Ja" aufgelöst, wenn der ${name}-Kurs am Ende des im Titel angegebenen Zeitraums größer oder gleich dem Kurs zu Beginn dieses Zeitraums ist. Andernfalls wird dieser Markt mit „Nein" aufgelöst.
+
+Die maßgebliche Quelle für die Auflösung dieses Marktes ist die Coinbase API, aus der Möbius auch die zugrunde liegenden Kursdaten für die Markterstellung und -auflösung bezieht. Maßgeblich ist ausschließlich der Kurs laut Coinbase, nicht der Kurs anderer Quellen oder Spotmärkte.`
+}
+
 // ─── News-Matching ─────────────────────────────────────────────────────────
 // Ordnet eine Marktkategorie einer news_items.source_category zu.
 // Nur Politik/Geopolitik/Wirtschaft(inkl. Finanzen)/Tech bekommen News —
@@ -1931,7 +1941,10 @@ export default function MarketPage() {
           </>
         )}
 
-        {!isFormula1 && !isWeather && market.description && <MarketRules description={market.description} />}
+        {isKrypto && market.coin && (
+          <MarketRules description={getCryptoResolutionRules(market.coin)} />
+        )}
+        {!isFormula1 && !isWeather && !isKrypto && market.description && <MarketRules description={market.description} />}
         <CommentsSection marketId={marketId} />
       </div>
 
