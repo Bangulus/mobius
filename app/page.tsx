@@ -103,6 +103,11 @@ interface WinToast {
   loserPct?: number
 }
 
+interface LoginBonusToast {
+  amount: number
+  isBankrupt: boolean
+}
+
 // ─── Icon System (Tabler outline SVGs, inline — kein npm-Paket) ───────────────
 
 const ICON_PATHS: Record<string, string[]> = {
@@ -392,6 +397,7 @@ export default function Home() {
   const [authLoading, setAuthLoading]         = useState(false)
   const [searchQuery, setSearchQuery]         = useState('')
   const [winToasts, setWinToasts]             = useState<WinToast[]>([])
+  const [loginBonusToast, setLoginBonusToast] = useState<LoginBonusToast | null>(null)
   const [expandedNav, setExpandedNav]         = useState<Record<string, boolean>>({ Sport: true, Fußball: true, Politik: true })
   const shownToastsRef                        = useRef<Set<string>>(new Set())
   const userRef                               = useRef<User | null>(null)
@@ -593,7 +599,20 @@ export default function Home() {
     if (userData?.[0]) {
       setUser(userData[0]); userRef.current = userData[0]
       localStorage.setItem('mobius_session', JSON.stringify({ access_token: res.access_token, user_id: userId }))
-      fetch('/api/login-xp', { method: 'POST', headers: { Authorization: `Bearer ${res.access_token}` } }).catch(() => {})
+      fetch('/api/login-xp', { method: 'POST', headers: { Authorization: `Bearer ${res.access_token}` } })
+        .then(r => r.json())
+        .then((data) => {
+          if (data?.alreadyAwarded) return
+          if (typeof data?.newBalance === 'number') {
+            setUser(prev => prev ? { ...prev, balance: data.newBalance } : prev)
+            userRef.current = userRef.current ? { ...userRef.current, balance: data.newBalance } : userRef.current
+          }
+          if (typeof data?.dukatenGain === 'number') {
+            setLoginBonusToast({ amount: data.dukatenGain, isBankrupt: !!data.isBankrupt })
+            setTimeout(() => setLoginBonusToast(null), 7000)
+          }
+        })
+        .catch(() => {})
       setShowAuth(false); resetAuthForm()
     } else { setAuthError('Benutzer nicht gefunden.') }
   }
@@ -627,6 +646,7 @@ export default function Home() {
     setUser(null); userRef.current = null
     localStorage.removeItem('mobius_session')
     setView('markets'); setMobileTab('markets'); setWinToasts([]); shownToastsRef.current = new Set()
+    setLoginBonusToast(null)
   }
 
   const resetAuthForm = () => { setAuthEmail(''); setAuthPassword(''); setAuthUsername(''); setAuthError('') }
@@ -739,6 +759,20 @@ export default function Home() {
             </div>
           )
         })}
+        {loginBonusToast && (
+          <div style={{ pointerEvents: 'all', background: 'var(--bg, #fff)', border: '1px solid rgba(99,102,241,0.3)', borderLeft: '4px solid #6366f1', borderRadius: 12, padding: '14px 16px', minWidth: 270, maxWidth: 330, boxShadow: '0 4px 24px rgba(0,0,0,0.12)', animation: 'slideInRight 0.3s ease' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: '#6366f1', letterSpacing: 0.3 }}>
+                {loginBonusToast.isBankrupt ? 'BANKROTT-HILFE' : 'DAILY BONUS'}
+              </span>
+              <button onClick={() => setLoginBonusToast(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, color: '#9ca3af', padding: 0, lineHeight: 1 }}>×</button>
+            </div>
+            {loginBonusToast.isBankrupt && (
+              <div style={{ fontSize: 11, color: 'var(--text-muted, #6b7280)', marginBottom: 8, lineHeight: 1.4 }}>Dein Guthaben war unter 10 ₫. Hier ist ein Neustart.</div>
+            )}
+            <div style={{ fontSize: 26, fontWeight: 900, color: '#6366f1', letterSpacing: '-0.5px', lineHeight: 1 }}>+{loginBonusToast.amount.toLocaleString('de')} ₫</div>
+          </div>
+        )}
       </div>
 
       {/* Leaderboard Modal */}
