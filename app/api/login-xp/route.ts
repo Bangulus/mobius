@@ -5,6 +5,14 @@ import { getNewBadges } from '@/lib/badges'
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY!
 
+const DAILY_DUKATEN = 20
+const BANKRUPTCY_THRESHOLD = 10
+const BANKRUPTCY_TIERS = [300, 200, 125, 100] // ab Index 3 bleibt es bei 100
+
+function bankruptcyBonusFor(count: number): number {
+  return BANKRUPTCY_TIERS[Math.min(count, BANKRUPTCY_TIERS.length - 1)]
+}
+
 async function dbGet(table: string, params: string) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}`, {
     headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` },
@@ -58,7 +66,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Ungültige Session.' }, { status: 401 })
   }
 
-  const userRows = await dbGet('users', `id=eq.${userId}&select=xp,login_streak,last_login_date,total_trades`)
+  const userRows = await dbGet('users', `id=eq.${userId}&select=xp,login_streak,last_login_date,total_trades,balance,bankruptcy_count`)
   const u = userRows?.[0]
   if (!u) {
     return NextResponse.json({ error: 'Benutzer nicht gefunden.' }, { status: 404 })
@@ -68,6 +76,8 @@ export async function POST(req: NextRequest) {
   const lastLogin: string | null = u.last_login_date ?? null
   const currentStreak: number = u.login_streak ?? 0
   const currentXp: number = u.xp ?? 0
+  const currentBalance: number = u.balance ?? 0
+  const currentBankruptcyCount: number = u.bankruptcy_count ?? 0
 
   if (lastLogin === today) {
     return NextResponse.json({ success: true, alreadyAwarded: true, streak: currentStreak })
@@ -83,12 +93,20 @@ export async function POST(req: NextRequest) {
   const newXp = currentXp + xpGain
   const newLevel = levelFromXp(newXp)
 
+  // Bankrott-Check: ersetzt den Daily-Dukaten-Bonus, kein Stacking
+  const isBankrupt = currentBalance < BANKRUPTCY_THRESHOLD
+  const dukatenGain = isBankrupt ? bankruptcyBonusFor(currentBankruptcyCount) : DAILY_DUKATEN
+  const newBankruptcyCount = isBankrupt ? currentBankruptcyCount + 1 : currentBankruptcyCount
+  const newBalance = currentBalance + dukatenGain
+
   const patchRes = await dbWrite('PATCH', 'users', `id=eq.${userId}`, {
     xp: newXp,
     level: newLevel,
     login_streak: newStreak,
     last_login_date: today,
     last_active_date: today,
+    balance: newBalance,
+    bankruptcy_count: newBankruptcyCount,
   })
   if (!patchRes.ok) {
     return NextResponse.json({ error: 'Update fehlgeschlagen.' }, { status: 500 })
@@ -143,5 +161,9 @@ export async function POST(req: NextRequest) {
     newXp,
     newLevel,
     newBadges,
+    dukatenGain,
+    newBalance,
+    isBankrupt,
+    bankruptcyCount: newBankruptcyCount,
   })
 }
