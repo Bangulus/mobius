@@ -18,7 +18,7 @@ const FAQ_SECTIONS: { title: string; items: FAQItem[] }[] = [
       },
       {
         question: 'Was ist ein Prognosemarkt?',
-        answer: 'Ein Prognosemarkt ist im Kern eine handelbare Frage: Du kaufst einen Anteil auf Ja oder Nein, und der aktuelle Preis spiegelt wider, wie alle Trader die Chancen einschätzen. Tritt das Ereignis ein, gewinnen alle, die auf Ja gesetzt haben. Tritt es nicht ein, gewinnen die Nein-Käufer.',
+        answer: 'Ein Prognosemarkt ist im Kern eine handelbare Frage: Du kaufst einen Anteil auf Ja oder Nein, und der aktuelle Preis spiegelt wider, wie alle Trader die Chancen einschätzen. Tritt das Ereignis ein, gewinnen alle, die auf "Ja" gesetzt haben. Tritt es nicht ein, gewinnen die "Nein"-Käufer.',
       },
       {
         question: 'Wie funktioniert Möbius genau?',
@@ -39,7 +39,7 @@ const FAQ_SECTIONS: { title: string; items: FAQItem[] }[] = [
     items: [
       {
         question: 'Warum Spielgeld und kein Echtgeld?',
-        answer: 'Weil die BaFin Vermarktung und Betrieb von binären Optionsmärkten an Privatkunden in Deutschland verboten hat. Binäre Optionen ähneln laut BaFin zu sehr dem Glücksspiel. Möbius nutzt daher seine eigene Spielwährung: Dukaten (₫). Das ist aber kein Kompromiss — Spielgeld-Prognosemärkte sind genauso präzise wie Echtgeldmärkte.',
+        answer: 'Weil die BaFin Vermarktung und Betrieb von binären Optionsmärkten an Privatkunden in Deutschland verboten hat. Binäre Optionen ähneln laut BaFin zu sehr dem Glücksspiel. Möbius nutzt daher seine eigene Spielwährung: Dukaten (₫). Das ist allerdings kein Kompromiss. Spielgeld-Prognosemärkte sind genauso präzise wie Echtgeldmärkte.',
       },
       {
         question: 'Was sind Dukaten?',
