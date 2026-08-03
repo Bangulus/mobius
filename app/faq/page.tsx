@@ -88,7 +88,7 @@ const FAQ_SECTIONS: { title: string; items: FAQItem[] }[] = [
       },
       {
         question: 'Wie wird der Preis in einem Markt berechnet?',
-        answer: 'Möbius nutzt einen Logarithmic Market Scoring Rule — einen mathematischen Market Maker. Er berechnet den Preis automatisch aus dem Verhältnis aller gekauften Ja- und Nein-Anteile. Kein Mensch setzt den Preis manuell.',
+        answer: 'Möbius nutzt einen Logarithmic Market Scoring Rule. Das ist ein mathematischer Market Maker. Er berechnet den Preis automatisch aus dem Verhältnis aller gekauften Ja- und Nein-Anteile. Kein Mensch setzt den Preis manuell.',
       },
       {
         question: 'Warum verändert sich der Preis wenn ich kaufe?',
@@ -96,7 +96,7 @@ const FAQ_SECTIONS: { title: string; items: FAQItem[] }[] = [
       },
       {
         question: 'Was ist eine Limit-Order?',
-        answer: 'Bei einer Limit-Order kaufst du nicht zum aktuellen Marktpreis, sondern zu deinem Wunschpreis. Diesen kannst du individuell festlegen. Dein Kaufauftrag wartet dann so lange, bis der Markt deinen Wunschpreis erreicht. Das gibt dir volle Kontrolle über deinen realisierten Preis — und funktioniert auch bei Verkäufen.',
+        answer: 'Bei einer Limit-Order kaufst du nicht zum aktuellen Marktpreis, sondern zu deinem Wunschpreis. Diesen kannst du individuell festlegen. Dein Kaufauftrag wartet dann so lange, bis der Markt deinen Wunschpreis erreicht. Das gibt dir volle Kontrolle über deinen realisierten Preis. Das funktioniert natürlich auch bei Verkäufen.',
       },
       {
         question: 'Wie lange laufen Märkte?',
