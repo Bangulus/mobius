@@ -132,6 +132,7 @@ const ICON_PATHS: Record<string, string[]> = {
   'chart-bar':       ['M3 13a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v6a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1l0 -6', 'M15 9a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v10a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1l0 -10', 'M9 5a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v14a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1l0 -14', 'M4 20h14'],
   briefcase:         ['M3 9a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2v9a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2l0 -9', 'M8 7v-2a2 2 0 0 1 2 -2h4a2 2 0 0 1 2 2v2', 'M12 12l0 .01', 'M3 13a20 20 0 0 0 18 0'],
   user:              ['M8 7a4 4 0 1 0 8 0a4 4 0 0 0 -8 0', 'M6 21v-2a4 4 0 0 1 4 -4h4a4 4 0 0 1 4 4v2'],
+  'thumb-up':        ['M7 11v8a1 1 0 0 1 -1 1h-2a1 1 0 0 1 -1 -1v-7a1 1 0 0 1 1 -1h3a4 4 0 0 0 4 -4v-1a2 2 0 0 1 4 0v5h3a2 2 0 0 1 2 2l-1 5a2 3 0 0 1 -2 2h-7a3 3 0 0 1 -3 -3'],
 }
 
 function Icon({ name, size = 16 }: { name: string; size?: number }) {
@@ -918,6 +919,10 @@ export default function Home() {
             <a href="/raenge" className="nav-item-btn" style={{ display: 'flex', alignItems: 'center', gap: 8, textDecoration: 'none', fontSize: 13, fontWeight: 500, color: 'var(--text-muted)', padding: '8px 12px', borderRadius: 8 }}>
               <Icon name="star" size={16} />
               <span>Ränge</span>
+            </a>
+            <a href="/bewertungen" className="nav-item-btn" style={{ display: 'flex', alignItems: 'center', gap: 8, textDecoration: 'none', fontSize: 13, fontWeight: 500, color: 'var(--text-muted)', padding: '8px 12px', borderRadius: 8 }}>
+              <Icon name="thumb-up" size={16} />
+              <span>Bewertungen</span>
             </a>
           </div>
         </aside>
