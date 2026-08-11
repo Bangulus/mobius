@@ -27,6 +27,16 @@ async function getMarketMeta(id: string): Promise<MarketMeta | null> {
   }
 }
 
+// Schneidet an der letzten Wortgrenze vor maxLength ab, statt mitten im Wort.
+function truncateAtWord(text: string, maxLength: number): string {
+  const cleaned = text.trim();
+  if (cleaned.length <= maxLength) return cleaned;
+  const cut = cleaned.slice(0, maxLength);
+  const lastSpace = cut.lastIndexOf(' ');
+  const safeCut = lastSpace > 0 ? cut.slice(0, lastSpace) : cut;
+  return `${safeCut.trim()}…`;
+}
+
 export async function generateMetadata({
   params,
 }: {
@@ -42,13 +52,13 @@ export async function generateMetadata({
   }
 
   const rawTitle = market.short_label || market.question;
-  const title =
-    rawTitle.length > 60 ? `${rawTitle.slice(0, 57)}… | Möbius` : `${rawTitle} | Möbius`;
+  const title = `${truncateAtWord(rawTitle, 60)} | Möbius`;
 
-  const description =
+  const rawDescription =
     market.description && market.description.length > 20
-      ? market.description.slice(0, 155)
+      ? market.description.replace(/\s+/g, ' ')
       : `Wie wahrscheinlich ist „${market.question}"? Handle mit Dukaten auf Möbius, dem deutschen Prognosemarkt.`;
+  const description = truncateAtWord(rawDescription, 155);
 
   return {
     title,
