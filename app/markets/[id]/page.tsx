@@ -29,6 +29,8 @@ async function getMarketMeta(id: string): Promise<MarketMeta | null> {
   }
 }
 
+const LOGO_URL = 'https://www.moebiusmarkets.de/logo-weiss.png';
+
 // Ephemere Auto-Märkte: Krypto-3-Minuten-Märkte und tägliche Wetter-Märkte.
 // Sterben permanent / werden ständig neu erstellt -> nicht indexierungswürdig.
 // Fussball (match_id gesetzt), Finanzen und Formel 1 bleiben indexierbar (bleibender Referenzwert).
@@ -85,11 +87,13 @@ export async function generateMetadata({
       type: 'website',
       locale: 'de_DE',
       siteName: 'Möbius',
+      images: [{ url: LOGO_URL }],
     },
     twitter: {
       card: 'summary',
       title,
       description,
+      images: [LOGO_URL],
     },
   };
 }
