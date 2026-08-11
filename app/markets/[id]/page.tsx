@@ -9,12 +9,14 @@ interface MarketMeta {
   short_label?: string;
   description?: string;
   category?: string;
+  is_auto?: boolean;
+  match_id?: string;
 }
 
 async function getMarketMeta(id: string): Promise<MarketMeta | null> {
   try {
     const res = await fetch(
-      `${SUPABASE_URL}/rest/v1/markets?id=eq.${id}&select=question,short_label,description,category`,
+      `${SUPABASE_URL}/rest/v1/markets?id=eq.${id}&select=question,short_label,description,category,is_auto,match_id`,
       {
         headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
         cache: 'no-store',
@@ -25,6 +27,17 @@ async function getMarketMeta(id: string): Promise<MarketMeta | null> {
   } catch {
     return null;
   }
+}
+
+// Ephemere Auto-Märkte: Krypto-3-Minuten-Märkte und tägliche Wetter-Märkte.
+// Sterben permanent / werden ständig neu erstellt -> nicht indexierungswürdig.
+// Fussball (match_id gesetzt), Finanzen und Formel 1 bleiben indexierbar (bleibender Referenzwert).
+const KEEP_AUTO_CATEGORIES = new Set(['finance', 'Finanzen', 'formula1']);
+
+function isEphemeralAutoMarket(market: MarketMeta): boolean {
+  if (!market.is_auto) return false;
+  if (market.match_id) return false;
+  return !KEEP_AUTO_CATEGORIES.has(market.category ?? '');
 }
 
 // Schneidet an der letzten Wortgrenze vor maxLength ab, statt mitten im Wort.
@@ -63,6 +76,9 @@ export async function generateMetadata({
   return {
     title,
     description,
+    robots: isEphemeralAutoMarket(market)
+      ? { index: false, follow: true }
+      : undefined,
     openGraph: {
       title,
       description,
