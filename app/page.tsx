@@ -1,7 +1,8 @@
-'use client'
+'use client';
 
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import AdminPanel from './components/AdminPanel'
 import ProfileView from './components/ProfileView'
 
@@ -1153,7 +1154,8 @@ function PastMatchRow({ markets, score, onOpen }: { markets: Market[]; score?: {
   const winnerName = homeWon ? homeTeam : awayWon ? awayTeam : isDraw ? 'Unentschieden' : '—'
   const winnerColor = homeWon ? homeColor : awayWon ? awayColor : '#64748b'
   return (
-    <div onClick={() => onOpen(home.id)} style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: 12, padding: '10px 16px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--card)', cursor: 'pointer', transition: 'background 0.1s' }} onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface)')} onMouseLeave={e => (e.currentTarget.style.background = 'var(--card)')}>
+    <div onClick={() => onOpen(home.id)} style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: 12, padding: '10px 16px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--card)', cursor: 'pointer', transition: 'background 0.1s', position: 'relative' }} onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface)')} onMouseLeave={e => (e.currentTarget.style.background = 'var(--card)')}>
+      <Link href={`/markets/${home.id}`} aria-hidden="true" tabIndex={-1} style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }} />
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <TeamLogo teamName={homeTeam} color={homeColor} size={28} />
         <span style={{ fontSize: 13, fontWeight: homeWon ? 700 : 500, color: homeWon ? 'var(--text)' : 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{homeTeam}</span>
@@ -1181,6 +1183,7 @@ function WeatherMarketCard({ market, onClick }: { market: Market; onClick: () =>
 
   return (
     <div className="market-card" onClick={onClick} style={{ position: 'relative' }}>
+      <Link href={`/markets/${market.id}`} aria-hidden="true" tabIndex={-1} style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }} />
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <Icon name="cloud" size={16} />
@@ -1318,7 +1321,8 @@ function MarketsGrid({ markets, onOpen, isSoccer }: { markets: Market[]; onOpen:
                     {sortedWithProbs.map(({ m, normProb }, i) => {
                       const isTop = i === 0
                       return (
-                        <div key={m.id} onClick={() => onOpen(m.id)} style={{ display: 'grid', gridTemplateColumns: '28px 1fr 80px 180px', alignItems: 'center', gap: 12, padding: '12px 16px', cursor: 'pointer', background: 'var(--card)', borderBottom: i < sortedWithProbs.length - 1 ? '1px solid var(--border)' : 'none', transition: 'background 0.1s' }} onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface)')} onMouseLeave={e => (e.currentTarget.style.background = 'var(--card)')}>
+                        <div key={m.id} onClick={() => onOpen(m.id)} style={{ display: 'grid', gridTemplateColumns: '28px 1fr 80px 180px', alignItems: 'center', gap: 12, padding: '12px 16px', cursor: 'pointer', background: 'var(--card)', borderBottom: i < sortedWithProbs.length - 1 ? '1px solid var(--border)' : 'none', transition: 'background 0.1s', position: 'relative' }} onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface)')} onMouseLeave={e => (e.currentTarget.style.background = 'var(--card)')}>
+                          <Link href={`/markets/${m.id}`} aria-hidden="true" tabIndex={-1} style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }} />
                           <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-muted)', textAlign: 'center' }}>{i + 1}</div>
                           <div style={{ minWidth: 0 }}>
                             <div style={{ fontSize: 14, fontWeight: isTop ? 700 : 500, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.short_label ?? m.question}</div>
@@ -1405,7 +1409,8 @@ function SoccerMatchCard({ markets, onOpen }: { markets: Market[]; onOpen: (id: 
   const lastGoals = liveData?.goals.slice(-3).reverse() ?? []
 
   return (
-    <div className="market-card" style={{ padding: '14px 18px', cursor: 'pointer' }} onClick={() => onOpen((homeMarket ?? anyMarket).id)}>
+    <div className="market-card" style={{ padding: '14px 18px', cursor: 'pointer', position: 'relative' }} onClick={() => onOpen((homeMarket ?? anyMarket).id)}>
+      <Link href={`/markets/${(homeMarket ?? anyMarket).id}`} aria-hidden="true" tabIndex={-1} style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }} />
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)' }}>Bundesliga</span>
@@ -1446,7 +1451,8 @@ function MarketCard({ market, onClick }: { market: Market; onClick: () => void }
   const isLow    = prob < 50
   const catClass = CAT_CLASS[market.category ?? ''] ?? ''
   return (
-    <div className="market-card" onClick={onClick}>
+    <div className="market-card" onClick={onClick} style={{ position: 'relative' }}>
+      <Link href={`/markets/${market.id}`} aria-hidden="true" tabIndex={-1} style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }} />
       <div className="market-card-meta">
         {market.category && <span className={`cat-badge ${catClass}`}>{market.category === 'finance' ? 'FINANZEN' : market.category}</span>}
         {market.is_auto && <div className="live-dot" title="Live" />}
