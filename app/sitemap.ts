@@ -48,6 +48,24 @@ async function getIndexableMarkets(): Promise<SitemapMarket[]> {
   }
 }
 
+// Kategorie-Slugs für /kategorie/[slug] — muss synchron mit CATEGORY_MAP
+// in app/kategorie/[slug]/page.tsx gehalten werden (bewusst lokal dupliziert,
+// analog zur parseUTC-Konvention, statt zentraler Import).
+const CATEGORY_SLUGS = [
+  'politik-deutschland',
+  'politik-usa',
+  'bundesliga',
+  'krypto',
+  'wirtschaft',
+  'finanzen',
+  'wetter',
+  'entertainment',
+  'tech',
+  'geopolitik',
+  'formel-1',
+  'kultur',
+];
+
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const markets = await getIndexableMarkets();
 
@@ -59,6 +77,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${BASE_URL}/bewertungen`, changeFrequency: 'monthly', priority: 0.4 },
   ];
 
+  const categoryPages: MetadataRoute.Sitemap = CATEGORY_SLUGS.map((slug) => ({
+    url: `${BASE_URL}/kategorie/${slug}`,
+    changeFrequency: 'daily',
+    priority: 0.6,
+  }));
+
   const marketPages: MetadataRoute.Sitemap = markets.map((m) => ({
     url: `${BASE_URL}/markets/${m.id}`,
     lastModified: new Date(m.closes_at),
@@ -66,5 +90,5 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.7,
   }));
 
-  return [...staticPages, ...marketPages];
+  return [...staticPages, ...categoryPages, ...marketPages];
 }
