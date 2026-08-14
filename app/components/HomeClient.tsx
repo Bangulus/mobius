@@ -41,7 +41,7 @@ async function dbPost(table: string, body: object, token: string) {
   return res.json()
 }
 
-interface Market {
+export interface Market {
   id: string
   question: string
   description?: string
@@ -374,9 +374,9 @@ const MOBILE_CAT_PILLS: { id: string; label: string; icon?: string; flag?: strin
 type AuthMode = 'login' | 'register'
 type MobileTab = 'markets' | 'portfolio' | 'ranking' | 'profil'
 
-export default function HomeClient({ initialCategory }: { initialCategory?: string }) {
+export default function HomeClient({ initialCategory, initialMarkets }: { initialCategory?: string; initialMarkets?: Market[] }) {
   const router = useRouter()
-  const [markets, setMarkets]                 = useState<Market[]>([])
+  const [markets, setMarkets]                 = useState<Market[]>(initialMarkets ?? [])
   const [pastSoccerMarkets, setPastSoccerMarkets] = useState<Market[]>([])
   const [user, setUser]                       = useState<User | null>(null)
   const [leaderboard, setLeaderboard]         = useState<LeaderboardEntry[]>([])
@@ -385,7 +385,7 @@ export default function HomeClient({ initialCategory }: { initialCategory?: stri
   const [category, setCategory]               = useState(initialCategory ?? 'Politik-Deutschland')
   const [view, setView]                       = useState<'markets' | 'portfolio' | 'admin' | 'profil'>('markets')
   const [mobileTab, setMobileTab]             = useState<MobileTab>('markets')
-  const [loading, setLoading]                 = useState(true)
+  const [loading, setLoading]                 = useState(!initialMarkets)
   const [darkMode, setDarkMode]               = useState(() => {
     if (typeof window === 'undefined') return false
     return localStorage.getItem('mobius_darkmode') === 'true'
@@ -403,7 +403,7 @@ export default function HomeClient({ initialCategory }: { initialCategory?: stri
   const [expandedNav, setExpandedNav]         = useState<Record<string, boolean>>({ Sport: true, Fußball: true, Politik: true })
   const shownToastsRef                        = useRef<Set<string>>(new Set())
   const userRef                               = useRef<User | null>(null)
-  const marketsRef                            = useRef<Market[]>([])
+  const marketsRef                            = useRef<Market[]>(initialMarkets ?? [])
   const triggeredCoinsRef                     = useRef<Record<string, number>>({})
 
   const ADMIN_ID = 'b75edaf4-141d-41f1-9555-887a8ddbac58'
@@ -508,7 +508,10 @@ export default function HomeClient({ initialCategory }: { initialCategory?: stri
     })))
   }, [])
 
-  useEffect(() => { loadMarkets(true); loadLeaderboard() }, [loadMarkets, loadLeaderboard])
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    loadMarkets(!initialMarkets); loadLeaderboard()
+  }, [loadMarkets, loadLeaderboard])
 
   useEffect(() => {
     if (category === 'Bundesliga') loadPastSoccerMarkets()
