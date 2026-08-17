@@ -8,6 +8,10 @@ import ProfileView from './ProfileView'
 import { useAppShell, ADMIN_ID, Market } from './AppShellContext'
 import { Icon } from './Icons'
 
+// Re-Export, damit app/page.tsx (import HomeClient, { Market } from './components/HomeClient')
+// unverändert funktioniert — Market lebt jetzt in AppShellContext.tsx.
+export type { Market }
+
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
