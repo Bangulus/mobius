@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef, ReactNode } from 'react'
 import { usePathname } from 'next/navigation'
+import Link from 'next/link'
 import {
   AppShellContext,
   ADMIN_ID,
@@ -117,78 +118,85 @@ function RankBadge({ rank }: { rank: number }) {
   )
 }
 
-const FINANCE_SUB_TABS = [
-  { id: 'Finanzen-Tag',   label: 'Aktueller Handelstag',  icon: 'calendar' },
-  { id: 'Finanzen-Woche', label: 'Aktuelle Handelswoche', icon: 'calendar-event' },
-]
-
 interface NavItemDef {
   id: string
+  href: string
   label: string
   icon?: string
   flag?: string
   children?: NavItemDef[]
-  parentOnly?: boolean
 }
 
+// href ist der Pfad ohne führenden Slash (siehe app/[...category]/page.tsx CATEGORY_MAP).
+// Jeder Eintrag ist jetzt eine echte, eigenständige URL — parentOnly entfällt, da auch
+// die vormals reinen Toggle-Einträge (Politik, Finanzen) selbst navigierbare Seiten sind.
 const NAV_ITEMS: NavItemDef[] = [
-  { id: 'Politik', label: 'Politik', icon: 'building-bank', parentOnly: true, children: [
-    { id: 'Politik-Deutschland', label: 'Deutschland', flag: 'DE' },
-    { id: 'Politik-USA',        label: 'USA',         flag: 'US' },
+  { id: 'Politik', href: 'politik', label: 'Politik', icon: 'building-bank', children: [
+    { id: 'Politik-Deutschland', href: 'politik/deutschland', label: 'Deutschland', flag: 'DE' },
+    { id: 'Politik-USA',        href: 'politik/usa',          label: 'USA',         flag: 'US' },
   ]},
-  { id: 'Sport', label: 'Sport', icon: 'ball-football', children: [
-    { id: 'Fußball', label: 'Fußball', icon: 'ball-football', children: [
-      { id: 'Bundesliga', label: 'Bundesliga',       flag: 'DE' },
+  { id: 'Sport', href: 'sport', label: 'Sport', icon: 'ball-football', children: [
+    { id: 'Fußball', href: 'sport/fussball', label: 'Fußball', icon: 'ball-football', children: [
+      { id: 'Bundesliga', href: 'sport/bundesliga', label: 'Bundesliga', flag: 'DE' },
     ]},
-    { id: 'F1', label: 'Formel 1', icon: 'steering-wheel' },
+    { id: 'F1', href: 'sport/f1', label: 'Formel 1', icon: 'steering-wheel' },
   ]},
-  { id: 'Krypto',        label: 'Krypto',        icon: '₿'  },
-  { id: 'Entertainment', label: 'Entertainment', icon: 'movie' },
-  { id: 'Wirtschaft',    label: 'Wirtschaft',    icon: 'chart-line' },
-  { id: 'Tech',          label: 'Tech',          icon: 'device-laptop' },
-  { id: 'Geopolitik',    label: 'Geopolitik',    icon: 'world' },
-  { id: 'Finanzen', label: 'Finanzen', icon: 'wallet', parentOnly: true, children: FINANCE_SUB_TABS },
-  { id: 'Wetter',        label: 'Wetter',        icon: 'cloud' },
-  { id: 'Kultur',        label: 'Kultur',        icon: 'ticket' },
+  { id: 'Krypto',        href: 'krypto',        label: 'Krypto',        icon: '₿'  },
+  { id: 'Entertainment', href: 'entertainment', label: 'Entertainment', icon: 'movie' },
+  { id: 'Wirtschaft',    href: 'wirtschaft',    label: 'Wirtschaft',    icon: 'chart-line' },
+  { id: 'Tech',          href: 'tech',          label: 'Tech',          icon: 'device-laptop' },
+  { id: 'Geopolitik',    href: 'geopolitik',    label: 'Geopolitik',    icon: 'world' },
+  { id: 'Finanzen', href: 'finanzen', label: 'Finanzen', icon: 'wallet', children: [
+    { id: 'Finanzen-Tag',   href: 'finanzen/tag',   label: 'Aktueller Handelstag',  icon: 'calendar' },
+    { id: 'Finanzen-Woche', href: 'finanzen/woche', label: 'Aktuelle Handelswoche', icon: 'calendar-event' },
+  ]},
+  { id: 'Wetter',        href: 'wetter',        label: 'Wetter',        icon: 'cloud' },
+  { id: 'Kultur',        href: 'kultur',         label: 'Kultur',        icon: 'ticket' },
 ]
 
-// Dupliziert aus app/kategorie/[slug]/page.tsx CATEGORY_MAP (nur Slug -> categoryId).
-// Bei Änderungen an CATEGORY_MAP dort muss diese Map manuell synchron gehalten werden,
-// bis Deploy 2 (nested URLs) das durch echtes Routing ablöst.
-const KATEGORIE_SLUG_TO_ID: Record<string, string> = {
-  'politik-deutschland': 'Politik-Deutschland',
-  'politik-usa':         'Politik-USA',
-  'bundesliga':           'Bundesliga',
+// Dupliziert aus app/[...category]/page.tsx CATEGORY_MAP (nur Pfad -> categoryId).
+// Bei Änderungen dort muss diese Map manuell synchron gehalten werden.
+const PATH_TO_CATEGORY: Record<string, string> = {
+  'politik':              'Politik-Deutschland',
+  'politik/deutschland':  'Politik-Deutschland',
+  'politik/usa':          'Politik-USA',
+  'sport':                'Sport',
+  'sport/fussball':       'Fußball',
+  'sport/bundesliga':     'Bundesliga',
+  'sport/f1':             'F1',
   'krypto':               'Krypto',
-  'wirtschaft':           'Wirtschaft',
-  'finanzen':             'Finanzen-Tag',
-  'wetter':               'Wetter',
   'entertainment':        'Entertainment',
+  'wirtschaft':           'Wirtschaft',
   'tech':                 'Tech',
   'geopolitik':           'Geopolitik',
-  'formel-1':             'F1',
+  'finanzen':             'Finanzen-Tag',
+  'finanzen/tag':         'Finanzen-Tag',
+  'finanzen/woche':       'Finanzen-Woche',
+  'wetter':               'Wetter',
   'kultur':               'Kultur',
 }
 
-function categoryFromPathname(pathname: string | null): string | null {
-  if (!pathname) return null
-  const match = pathname.match(/^\/kategorie\/([^/]+)$/)
-  if (!match) return null
-  return KATEGORIE_SLUG_TO_ID[match[1]] ?? null
+// category ist jetzt kein State mehr, sondern wird bei jedem Render direkt aus der
+// aktuellen URL abgeleitet — wichtig, da Navigation jetzt über echte <Link>-Klicks
+// läuft (Client-Navigation ohne Remount), nicht mehr über setCategory().
+function categoryFromPathname(pathname: string | null): string {
+  if (!pathname) return 'Politik-Deutschland'
+  const path = pathname.replace(/^\/+/, '').replace(/\/+$/, '')
+  return PATH_TO_CATEGORY[path] ?? 'Politik-Deutschland'
 }
 
-const MOBILE_CAT_PILLS: { id: string; label: string; icon?: string; flag?: string }[] = [
-  { id: 'Politik-Deutschland', label: 'Politik', flag: 'DE' },
-  { id: 'Bundesliga',          label: 'Fußball', icon: 'ball-football' },
-  { id: 'Krypto',              label: 'Krypto',  icon: '₿'  },
-  { id: 'Wirtschaft',          label: 'Wirtschaft', icon: 'chart-line' },
-  { id: 'Finanzen-Tag',        label: 'Finanzen', icon: 'wallet' },
-  { id: 'Wetter',              label: 'Wetter',  icon: 'cloud' },
-  { id: 'Entertainment',       label: 'Entertainment', icon: 'movie' },
-  { id: 'Tech',                label: 'Tech',    icon: 'device-laptop' },
-  { id: 'Geopolitik',          label: 'Geopolitik', icon: 'world' },
-  { id: 'F1',                  label: 'Formel 1', icon: 'steering-wheel' },
-  { id: 'Kultur',              label: 'Kultur',  icon: 'ticket' },
+const MOBILE_CAT_PILLS: { id: string; href: string; label: string; icon?: string; flag?: string }[] = [
+  { id: 'Politik-Deutschland', href: 'politik/deutschland', label: 'Politik', flag: 'DE' },
+  { id: 'Bundesliga',          href: 'sport/bundesliga',    label: 'Fußball', icon: 'ball-football' },
+  { id: 'Krypto',              href: 'krypto',              label: 'Krypto',  icon: '₿'  },
+  { id: 'Wirtschaft',          href: 'wirtschaft',          label: 'Wirtschaft', icon: 'chart-line' },
+  { id: 'Finanzen-Tag',        href: 'finanzen/tag',        label: 'Finanzen', icon: 'wallet' },
+  { id: 'Wetter',              href: 'wetter',              label: 'Wetter',  icon: 'cloud' },
+  { id: 'Entertainment',       href: 'entertainment',       label: 'Entertainment', icon: 'movie' },
+  { id: 'Tech',                href: 'tech',                label: 'Tech',    icon: 'device-laptop' },
+  { id: 'Geopolitik',          href: 'geopolitik',          label: 'Geopolitik', icon: 'world' },
+  { id: 'F1',                  href: 'sport/f1',            label: 'Formel 1', icon: 'steering-wheel' },
+  { id: 'Kultur',              href: 'kultur',              label: 'Kultur',  icon: 'ticket' },
 ]
 
 export default function Shell({ children }: { children: ReactNode }) {
@@ -200,7 +208,7 @@ export default function Shell({ children }: { children: ReactNode }) {
   })
   const [view, setView]                       = useState<ViewType>('markets')
   const [mobileTab, setMobileTab]             = useState<MobileTab>('markets')
-  const [category, setCategory]               = useState(() => categoryFromPathname(pathname) ?? 'Politik-Deutschland')
+  const category                              = categoryFromPathname(pathname)
   const [searchQuery, setSearchQuery]         = useState('')
 
   const [leaderboard, setLeaderboard]         = useState<LeaderboardEntry[]>([])
@@ -230,11 +238,6 @@ export default function Shell({ children }: { children: ReactNode }) {
         ids.forEach(id => shownToastsRef.current.add(id))
       }
     } catch {}
-  }, [])
-
-  useEffect(() => {
-    const cat = new URLSearchParams(window.location.search).get('category')
-    if (cat) setCategory(cat)
   }, [])
 
   useEffect(() => {
@@ -419,7 +422,14 @@ export default function Shell({ children }: { children: ReactNode }) {
   const resetAuthForm = () => { setAuthEmail(''); setAuthPassword(''); setAuthUsername(''); setAuthError('') }
   const openAuth = (mode: AuthMode) => { resetAuthForm(); setAuthMode(mode); setShowAuth(true) }
 
-  const selectCategory = (id: string) => { setCategory(id); setView('markets'); setMobileTab('markets'); setSearchQuery('') }
+  // Reset von view/mobileTab/searchQuery bei Kategorie-Navigation — läuft jetzt über
+  // echte <Link>-Klicks (siehe NavItem/MOBILE_CAT_PILLS/Logo weiter unten), die diese
+  // Funktion im onClick zusätzlich zur normalen Link-Navigation aufrufen.
+  const handleNavClick = () => { setView('markets'); setMobileTab('markets'); setSearchQuery('') }
+  // selectCategory bleibt in der AppShellContext-Schnittstelle erhalten (wird aktuell
+  // von HomeClient's Finanzen-Subtabs genutzt), setzt aber keine Kategorie mehr —
+  // die URL ist jetzt alleinige Quelle der Wahrheit dafür.
+  const selectCategory = (_id: string) => handleNavClick()
   const toggleNav = (id: string) => setExpandedNav(prev => ({ ...prev, [id]: !prev[id] }))
 
   const handleMobileTab = (tab: MobileTab) => {
@@ -552,8 +562,10 @@ export default function Shell({ children }: { children: ReactNode }) {
       {/* Nav */}
       <nav className="nav">
         <div className="nav-left">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo-weiss.png" alt="Möbius" className="nav-logo" onClick={() => selectCategory('Politik-Deutschland')} />
+          <Link href="/politik/deutschland" onClick={handleNavClick} style={{ display: 'inline-flex' }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo-weiss.png" alt="Möbius" className="nav-logo" />
+          </Link>
           <div className="nav-search-wrap">
             <span className="nav-search-icon">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
@@ -592,16 +604,21 @@ export default function Shell({ children }: { children: ReactNode }) {
 
       {/* Mobile Category Pills */}
       <div className="mobile-cat-scroll">
-        {MOBILE_CAT_PILLS.map(pill => (
-          <button
-            key={pill.id}
-            className={`mobile-cat-pill ${category === pill.id ? 'active' : ''}`}
-            onClick={() => selectCategory(pill.id)}
-            style={{ display: 'flex', alignItems: 'center', gap: 6 }}
-          >
-            <PillIcon icon={pill.icon} flag={pill.flag} size={14} /> {pill.label}
-          </button>
-        ))}
+        {MOBILE_CAT_PILLS.map(pill => {
+          const href = `/${pill.href}`
+          const isActive = pathname === href || pathname.startsWith(`${href}/`)
+          return (
+            <Link
+              key={pill.id}
+              href={href}
+              onClick={handleNavClick}
+              className={`mobile-cat-pill ${isActive ? 'active' : ''}`}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, textDecoration: 'none' }}
+            >
+              <PillIcon icon={pill.icon} flag={pill.flag} size={14} /> {pill.label}
+            </Link>
+          )
+        })}
       </div>
 
       {/* Layout */}
@@ -611,7 +628,7 @@ export default function Shell({ children }: { children: ReactNode }) {
         <aside style={{ width: 220, flexShrink: 0, borderRight: '1px solid var(--border)', padding: '20px 0', position: 'sticky', top: 'var(--nav-height, 56px)', height: 'calc(100vh - var(--nav-height, 56px))', overflowY: 'auto', background: 'var(--bg)' }}>
           {user && (<div style={{ padding: '0 16px 16px', borderBottom: '1px solid var(--border)', marginBottom: 12 }}><div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Guthaben</div><div style={{ fontSize: 20, fontWeight: 800, color: 'var(--text)' }}>{user.balance.toLocaleString('de')} ₫</div></div>)}
           <div style={{ padding: '0 8px' }}>
-            {NAV_ITEMS.map(item => (<NavItem key={item.id} item={item} category={category} expandedNav={expandedNav} onSelect={selectCategory} onToggle={toggleNav} depth={0} />))}
+            {NAV_ITEMS.map(item => (<NavItem key={item.id} item={item} pathname={pathname} expandedNav={expandedNav} onNavigate={handleNavClick} onToggle={toggleNav} depth={0} />))}
           </div>
           <div style={{ padding: '12px 8px 0', borderTop: '1px solid var(--border)', marginTop: 8 }}>
             <a href="/about" className="nav-item-btn" style={{ display: 'flex', alignItems: 'center', gap: 8, textDecoration: 'none', fontSize: 13, fontWeight: 500, color: 'var(--text-muted)', padding: '8px 12px', borderRadius: 8 }}>
@@ -675,27 +692,38 @@ export default function Shell({ children }: { children: ReactNode }) {
   )
 }
 
-function NavItem({ item, category, expandedNav, onSelect, onToggle, depth }: {
-  item: NavItemDef; category: string; expandedNav: Record<string, boolean>
-  onSelect: (id: string) => void; onToggle: (id: string) => void; depth: number
+function NavItem({ item, pathname, expandedNav, onNavigate, onToggle, depth }: {
+  item: NavItemDef; pathname: string; expandedNav: Record<string, boolean>
+  onNavigate: () => void; onToggle: (id: string) => void; depth: number
 }) {
-  const hasChildren = item.children && item.children.length > 0
-  const isExpanded  = expandedNav[item.id]
-  const isActive    = category === item.id || (item.id === 'Politik' && category.startsWith('Politik-')) || (item.id === 'Finanzen' && category.startsWith('Finanzen-'))
-  const handleClick = () => {
-    if (item.parentOnly) { onToggle(item.id) }
-    else if (hasChildren) { onToggle(item.id); onSelect(item.id) }
-    else { onSelect(item.id) }
-  }
+  const hasChildren = !!item.children && item.children.length > 0
+  const isExpanded   = expandedNav[item.id]
+  const href         = `/${item.href}`
+  const isActive     = pathname === href || pathname.startsWith(`${href}/`)
   return (
     <div>
-      <button className={`nav-item-btn ${isActive ? 'active' : ''}`} style={{ paddingLeft: 12 + depth * 12 }} onClick={handleClick}>
-        <PillIcon icon={item.icon} flag={item.flag} size={15} />
-        <span>{item.label}</span>
-        {hasChildren && <span className={`nav-chevron ${isExpanded ? 'open' : ''}`}>▼</span>}
-      </button>
+      <div style={{ display: 'flex', alignItems: 'center' }}>
+        <Link
+          href={href}
+          onClick={onNavigate}
+          className={`nav-item-btn ${isActive ? 'active' : ''}`}
+          style={{ paddingLeft: 12 + depth * 12, flex: 1, width: 'auto', textDecoration: 'none' }}
+        >
+          <PillIcon icon={item.icon} flag={item.flag} size={15} />
+          <span>{item.label}</span>
+        </Link>
+        {hasChildren && (
+          <button
+            onClick={() => onToggle(item.id)}
+            aria-label={isExpanded ? 'Einklappen' : 'Ausklappen'}
+            style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: '8px 10px', color: 'var(--text-muted)' }}
+          >
+            <span className={`nav-chevron ${isExpanded ? 'open' : ''}`}>▼</span>
+          </button>
+        )}
+      </div>
       {hasChildren && isExpanded && (
-        <div>{item.children!.map(child => (<NavItem key={child.id} item={child} category={category} expandedNav={expandedNav} onSelect={onSelect} onToggle={onToggle} depth={depth + 1} />))}</div>
+        <div>{item.children!.map(child => (<NavItem key={child.id} item={child} pathname={pathname} expandedNav={expandedNav} onNavigate={onNavigate} onToggle={onToggle} depth={depth + 1} />))}</div>
       )}
     </div>
   )
