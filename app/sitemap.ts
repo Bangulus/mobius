@@ -24,7 +24,6 @@ async function getIndexableMarkets(): Promise<SitemapMarket[]> {
       }
     );
     const manual = await manualRes.json();
-
     const autoRes = await fetch(
       `${SUPABASE_URL}/rest/v1/markets?is_auto=eq.true&select=id,closes_at,category,match_id&order=closes_at.desc&limit=2000`,
       {
@@ -33,7 +32,6 @@ async function getIndexableMarkets(): Promise<SitemapMarket[]> {
       }
     );
     const auto = await autoRes.json();
-
     const KEEP_AUTO_CATEGORIES = new Set(['finance', 'Finanzen', 'formula1']);
     const filteredAuto = (auto ?? []).filter(
       (m: { category?: string; match_id?: string }) => {
@@ -41,46 +39,52 @@ async function getIndexableMarkets(): Promise<SitemapMarket[]> {
         return KEEP_AUTO_CATEGORIES.has(m.category ?? '');
       }
     );
-
     return [...(manual ?? []), ...filteredAuto];
   } catch {
     return [];
   }
 }
 
-// Kategorie-Slugs für /kategorie/[slug] — muss synchron mit CATEGORY_MAP
-// in app/kategorie/[slug]/page.tsx gehalten werden (bewusst lokal dupliziert,
-// analog zur parseUTC-Konvention, statt zentraler Import).
-const CATEGORY_SLUGS = [
-  'politik-deutschland',
-  'politik-usa',
-  'bundesliga',
+// Kategorie-Pfade für app/[...category]/page.tsx — muss synchron mit CATEGORY_MAP
+// dort gehalten werden (bewusst lokal dupliziert, analog zur parseUTC-Konvention,
+// statt zentraler Import).
+// /politik und /finanzen sind bewusst NICHT gelistet: beide haben canonical auf
+// /politik/deutschland bzw. /finanzen/tag gesetzt (Duplicate Content), eine Sitemap
+// sollte nur kanonische URLs enthalten.
+const CATEGORY_PATHS = [
+  'politik/deutschland',
+  'politik/usa',
+  'sport',
+  'sport/fussball',
+  'sport/bundesliga',
+  'sport/f1',
   'krypto',
   'wirtschaft',
-  'finanzen',
-  'wetter',
-  'entertainment',
   'tech',
   'geopolitik',
-  'formel-1',
+  'finanzen/tag',
+  'finanzen/woche',
+  'wetter',
+  'entertainment',
   'kultur',
 ];
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const markets = await getIndexableMarkets();
 
+  // Kein eigener Eintrag für "/": redirected jetzt nur noch zu /politik/deutschland,
+  // das übernimmt stattdessen die Top-Priorität als eigentliche "Startseite".
   const staticPages: MetadataRoute.Sitemap = [
-    { url: BASE_URL, changeFrequency: 'always', priority: 1 },
     { url: `${BASE_URL}/about`, changeFrequency: 'monthly', priority: 0.5 },
     { url: `${BASE_URL}/faq`, changeFrequency: 'monthly', priority: 0.5 },
     { url: `${BASE_URL}/raenge`, changeFrequency: 'monthly', priority: 0.4 },
     { url: `${BASE_URL}/bewertungen`, changeFrequency: 'monthly', priority: 0.4 },
   ];
 
-  const categoryPages: MetadataRoute.Sitemap = CATEGORY_SLUGS.map((slug) => ({
-    url: `${BASE_URL}/kategorie/${slug}`,
+  const categoryPages: MetadataRoute.Sitemap = CATEGORY_PATHS.map((path) => ({
+    url: `${BASE_URL}/${path}`,
     changeFrequency: 'daily',
-    priority: 0.6,
+    priority: path === 'politik/deutschland' ? 1 : 0.6,
   }));
 
   const marketPages: MetadataRoute.Sitemap = markets.map((m) => ({
