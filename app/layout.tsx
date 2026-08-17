@@ -4,9 +4,8 @@ import { Suspense } from 'react';
 import type { Metadata } from 'next';
 import PostHogClientProvider from './components/PostHogClientProvider';
 import PostHogPageview from './components/PostHogPageview';
-
+import Shell from './components/Shell';
 const inter = Inter({ subsets: ['latin'] });
-
 export const metadata: Metadata = {
   title: 'Möbius',
   description: 'Prediction Markets auf Deutsch',
@@ -19,7 +18,6 @@ export const metadata: Metadata = {
     title: 'Möbius',
   },
 };
-
 export default function RootLayout({
   children,
 }: {
@@ -32,7 +30,7 @@ export default function RootLayout({
           <Suspense fallback={null}>
             <PostHogPageview />
           </Suspense>
-          {children}
+          <Shell>{children}</Shell>
         </PostHogClientProvider>
       </body>
     </html>
