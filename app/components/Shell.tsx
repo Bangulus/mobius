@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback, useRef, ReactNode } from 'react'
+import { usePathname } from 'next/navigation'
 import {
   AppShellContext,
   ADMIN_ID,
@@ -151,6 +152,31 @@ const NAV_ITEMS: NavItemDef[] = [
   { id: 'Kultur',        label: 'Kultur',        icon: 'ticket' },
 ]
 
+// Dupliziert aus app/kategorie/[slug]/page.tsx CATEGORY_MAP (nur Slug -> categoryId).
+// Bei Änderungen an CATEGORY_MAP dort muss diese Map manuell synchron gehalten werden,
+// bis Deploy 2 (nested URLs) das durch echtes Routing ablöst.
+const KATEGORIE_SLUG_TO_ID: Record<string, string> = {
+  'politik-deutschland': 'Politik-Deutschland',
+  'politik-usa':         'Politik-USA',
+  'bundesliga':           'Bundesliga',
+  'krypto':               'Krypto',
+  'wirtschaft':           'Wirtschaft',
+  'finanzen':             'Finanzen-Tag',
+  'wetter':               'Wetter',
+  'entertainment':        'Entertainment',
+  'tech':                 'Tech',
+  'geopolitik':           'Geopolitik',
+  'formel-1':             'F1',
+  'kultur':               'Kultur',
+}
+
+function categoryFromPathname(pathname: string | null): string | null {
+  if (!pathname) return null
+  const match = pathname.match(/^\/kategorie\/([^/]+)$/)
+  if (!match) return null
+  return KATEGORIE_SLUG_TO_ID[match[1]] ?? null
+}
+
 const MOBILE_CAT_PILLS: { id: string; label: string; icon?: string; flag?: string }[] = [
   { id: 'Politik-Deutschland', label: 'Politik', flag: 'DE' },
   { id: 'Bundesliga',          label: 'Fußball', icon: 'ball-football' },
@@ -166,6 +192,7 @@ const MOBILE_CAT_PILLS: { id: string; label: string; icon?: string; flag?: strin
 ]
 
 export default function Shell({ children }: { children: ReactNode }) {
+  const pathname = usePathname()
   const [user, setUser]                       = useState<User | null>(null)
   const [darkMode, setDarkMode]               = useState(() => {
     if (typeof window === 'undefined') return false
@@ -173,7 +200,7 @@ export default function Shell({ children }: { children: ReactNode }) {
   })
   const [view, setView]                       = useState<ViewType>('markets')
   const [mobileTab, setMobileTab]             = useState<MobileTab>('markets')
-  const [category, setCategory]               = useState('Politik-Deutschland')
+  const [category, setCategory]               = useState(() => categoryFromPathname(pathname) ?? 'Politik-Deutschland')
   const [searchQuery, setSearchQuery]         = useState('')
 
   const [leaderboard, setLeaderboard]         = useState<LeaderboardEntry[]>([])
