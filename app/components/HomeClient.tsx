@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import AdminPanel from './AdminPanel'
 import ProfileView from './ProfileView'
+import { useAppShell, ADMIN_ID, Market } from './AppShellContext'
+import { Icon } from './Icons'
 
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -18,165 +20,6 @@ async function dbGet(table: string, params: string) {
   return res.json()
 }
 
-async function supabaseAuth(path: string, body: object) {
-  const res = await fetch(`${SUPABASE_URL}/auth/v1/${path}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', apikey: SUPABASE_KEY },
-    body: JSON.stringify(body),
-  })
-  return res.json()
-}
-
-async function dbPost(table: string, body: object, token: string) {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      apikey: SUPABASE_KEY,
-      Authorization: `Bearer ${token}`,
-      Prefer: 'return=representation',
-    },
-    body: JSON.stringify(body),
-  })
-  return res.json()
-}
-
-export interface Market {
-  id: string
-  question: string
-  description?: string
-  status: string
-  b: number
-  q_yes: number
-  q_no: number
-  closes_at: string
-  group_title?: string
-  short_label?: string
-  category?: string
-  resolved: boolean
-  resolution?: string
-  display_group?: string
-  is_auto?: boolean
-  coin?: string
-  match_id?: string
-  outcome?: string
-  match_date?: string
-  start_price?: number
-  end_price?: number
-}
-
-interface User {
-  id: string
-  username: string
-  balance: number
-  avatar_url?: string
-  xp?: number
-  level?: number
-  rp?: number
-  title?: string
-  peak_title?: string
-  created_at?: string
-}
-
-interface LeaderboardEntry {
-  user_id: string
-  username: string
-  total_balance: number
-  avatar_url?: string
-  title?: string
-}
-
-interface WeeklyEntry {
-  user_id: string
-  username: string
-  weekly_gain: number
-  avatar_url?: string
-  title?: string
-}
-
-interface WinToast {
-  id: string
-  coin?: string
-  question: string
-  amount: number
-  isKrypto: boolean
-  direction: 'yes' | 'no'
-  loserPct?: number
-}
-
-interface LoginBonusToast {
-  amount: number
-  isBankrupt: boolean
-}
-
-// ─── Icon System (Tabler outline SVGs, inline — kein npm-Paket) ───────────────
-
-const ICON_PATHS: Record<string, string[]> = {
-  'building-bank':   ['M3 21l18 0', 'M3 10l18 0', 'M5 6l7 -3l7 3', 'M4 10l0 11', 'M20 10l0 11', 'M8 14l0 3', 'M12 14l0 3', 'M16 14l0 3'],
-  'ball-football':   ['M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0', 'M12 7l4.76 3.45l-1.76 5.55h-6l-1.76 -5.55l4.76 -3.45', 'M12 7v-4m3 13l2.5 3m-.74 -8.55l3.74 -1.45m-11.44 7.05l-2.56 2.95m.74 -8.55l-3.74 -1.45'],
-  trophy:            ['M8 21l8 0', 'M12 17l0 4', 'M7 4l10 0', 'M17 4v8a5 5 0 0 1 -10 0v-8', 'M3 9a2 2 0 1 0 4 0a2 2 0 1 0 -4 0', 'M17 9a2 2 0 1 0 4 0a2 2 0 1 0 -4 0'],
-  star:              ['M12 17.75l-6.172 3.245l1.179 -6.873l-5 -4.867l6.9 -1l3.086 -6.253l3.086 6.253l6.9 1l-5 4.867l1.179 6.873l-6.158 -3.245'],
-  'steering-wheel':  ['M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0', 'M10 12a2 2 0 1 0 4 0a2 2 0 1 0 -4 0', 'M12 14l0 7', 'M10 12l-6.75 -2', 'M14 12l6.75 -2'],
-  movie:             ['M4 6a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2l0 -12', 'M8 4l0 16', 'M16 4l0 16', 'M4 8l4 0', 'M4 16l4 0', 'M4 12l16 0', 'M16 8l4 0', 'M16 16l4 0'],
-  'chart-line':      ['M4 19l16 0', 'M4 15l4 -6l4 2l4 -5l4 4'],
-  'device-laptop':   ['M3 19l18 0', 'M5 7a1 1 0 0 1 1 -1h12a1 1 0 0 1 1 1v8a1 1 0 0 1 -1 1h-12a1 1 0 0 1 -1 -1l0 -8'],
-  world:             ['M3 12a9 9 0 1 0 18 0a9 9 0 0 0 -18 0', 'M3.6 9h16.8', 'M3.6 15h16.8', 'M11.5 3a17 17 0 0 0 0 18', 'M12.5 3a17 17 0 0 1 0 18'],
-  wallet:            ['M17 8v-3a1 1 0 0 0 -1 -1h-10a2 2 0 0 0 0 4h12a1 1 0 0 1 1 1v3m0 4v3a1 1 0 0 1 -1 1h-12a2 2 0 0 1 -2 -2v-12', 'M20 12v4h-4a2 2 0 0 1 0 -4h4'],
-  cloud:             ['M6.657 18c-2.572 0 -4.657 -2.007 -4.657 -4.483c0 -2.475 2.085 -4.482 4.657 -4.482c.393 -1.762 1.794 -3.2 3.675 -3.773c1.88 -.572 3.956 -.193 5.444 1c1.488 1.19 2.162 3.007 1.77 4.769h.99c1.913 0 3.464 1.56 3.464 3.486c0 1.927 -1.551 3.487 -3.465 3.487h-11.878'],
-  ticket:            ['M15 5l0 2', 'M15 11l0 2', 'M15 17l0 2', 'M5 5h14a2 2 0 0 1 2 2v3a2 2 0 0 0 0 4v3a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2v-3a2 2 0 0 0 0 -4v-3a2 2 0 0 1 2 -2'],
-  calendar:          ['M4 7a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-12', 'M16 3v4', 'M8 3v4', 'M4 11h16', 'M11 15h1', 'M12 15v3'],
-  'calendar-event':  ['M4 7a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2l0 -12', 'M16 3l0 4', 'M8 3l0 4', 'M4 11l16 0', 'M8 15h2v2h-2l0 -2'],
-  sun:               ['M8 12a4 4 0 1 0 8 0a4 4 0 1 0 -8 0', 'M3 12h1m8 -9v1m8 8h1m-9 8v1m-6.4 -15.4l.7 .7m12.1 -.7l-.7 .7m0 11.4l.7 .7m-12.1 -.7l-.7 .7'],
-  moon:              ['M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454l0 .008'],
-  bulb:              ['M3 12h1m8 -9v1m8 8h1m-15.4 -6.4l.7 .7m12.1 -.7l-.7 .7', 'M9 16a5 5 0 1 1 6 0a3.5 3.5 0 0 0 -1 3a2 2 0 0 1 -4 0a3.5 3.5 0 0 0 -1 -3', 'M9.7 17l4.6 0'],
-  help:              ['M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0', 'M12 17l0 .01', 'M12 13.5a1.5 1.5 0 0 1 1 -1.5a2.6 2.6 0 1 0 -3 -4'],
-  'chart-bar':       ['M3 13a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v6a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1l0 -6', 'M15 9a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v10a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1l0 -10', 'M9 5a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v14a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1l0 -14', 'M4 20h14'],
-  briefcase:         ['M3 9a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2v9a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2l0 -9', 'M8 7v-2a2 2 0 0 1 2 -2h4a2 2 0 0 1 2 2v2', 'M12 12l0 .01', 'M3 13a20 20 0 0 0 18 0'],
-  user:              ['M8 7a4 4 0 1 0 8 0a4 4 0 0 0 -8 0', 'M6 21v-2a4 4 0 0 1 4 -4h4a4 4 0 0 1 4 4v2'],
-  'thumb-up':        ['M7 11v8a1 1 0 0 1 -1 1h-2a1 1 0 0 1 -1 -1v-7a1 1 0 0 1 1 -1h3a4 4 0 0 0 4 -4v-1a2 2 0 0 1 4 0v5h3a2 2 0 0 1 2 2l-1 5a2 3 0 0 1 -2 2h-7a3 3 0 0 1 -3 -3'],
-}
-
-function Icon({ name, size = 16 }: { name: string; size?: number }) {
-  const paths = ICON_PATHS[name]
-  if (!paths) return <span>{name}</span>
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={{ display: 'inline-block', verticalAlign: 'middle', flexShrink: 0 }}>
-      {paths.map((d, i) => <path key={i} d={d} />)}
-    </svg>
-  )
-}
-
-function FlagBadge({ code }: { code: string }) {
-  return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, padding: '1px 5px', borderRadius: 4, background: 'var(--accent-light)', color: 'var(--accent)', minWidth: 20, letterSpacing: 0.2, flexShrink: 0 }}>
-      {code}
-    </span>
-  )
-}
-
-function RankBadge({ rank }: { rank: number }) {
-  const isFirst = rank === 1
-  return (
-    <span style={{
-      width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      fontSize: 12, fontWeight: 700,
-      background: isFirst ? 'var(--amber-light)' : 'var(--surface)',
-      color: isFirst ? 'var(--amber)' : 'var(--text-muted)',
-      border: isFirst ? 'none' : '1px solid var(--border)',
-    }}>
-      {rank}
-    </span>
-  )
-}
-
-function PillIcon({ icon, flag, size = 16 }: { icon?: string; flag?: string; size?: number }) {
-  if (flag) return <FlagBadge code={flag} />
-  if (icon && ICON_PATHS[icon]) return <Icon name={icon} size={size} />
-  if (icon) return <span>{icon}</span>
-  return null
-}
-
 function calcProb(qYes: number, qNo: number, b: number): number {
   const eYes = Math.exp(qYes / b)
   const eNo  = Math.exp(qNo  / b)
@@ -188,20 +31,6 @@ function parseUTC(raw: string): Date {
   if (raw.endsWith('Z') || raw.match(/[+-]\d{2}:\d{2}$/)) return new Date(raw)
   if (raw.match(/[+-]\d{2}$/)) return new Date(raw + ':00')
   return new Date(raw.replace(' ', 'T') + 'Z')
-}
-
-const AVATAR_COLORS = [
-  { bg: '#eff6ff', color: '#1d4ed8' },
-  { bg: '#f0fdf4', color: '#166534' },
-  { bg: '#fdf4ff', color: '#6b21a8' },
-  { bg: '#fffbeb', color: '#92400e' },
-  { bg: '#f0f9ff', color: '#075985' },
-]
-
-function avatarColor(str: string) {
-  let h = 0
-  for (let i = 0; i < str.length; i++) h = str.charCodeAt(i) + ((h << 5) - h)
-  return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length]
 }
 
 const COINS = ['BTC', 'ETH', 'SOL', 'XRP']
@@ -221,10 +50,6 @@ const CAT_CLASS: Record<string, string> = {
   Wetter:        'cat-sport',
   Kultur:        'cat-entertainment',
   Tech:          'cat-krypto',
-}
-
-const COIN_COLORS: Record<string, string> = {
-  BTC: '#f59e0b', ETH: '#6366f1', SOL: '#9945ff', XRP: '#00aae4',
 }
 
 function normalizeTeamName(name: string): string {
@@ -327,132 +152,18 @@ const FINANCE_GROUP_MAP: Record<string, string> = {
   'Finanzen-Woche': 'Aktuelle Handelswoche',
 }
 
-interface NavItemDef {
-  id: string
-  label: string
-  icon?: string
-  flag?: string
-  children?: NavItemDef[]
-  parentOnly?: boolean
-}
-
-const NAV_ITEMS: NavItemDef[] = [
-  { id: 'Politik', label: 'Politik', icon: 'building-bank', parentOnly: true, children: [
-    { id: 'Politik-Deutschland', label: 'Deutschland', flag: 'DE' },
-    { id: 'Politik-USA',        label: 'USA',         flag: 'US' },
-  ]},
-  { id: 'Sport', label: 'Sport', icon: 'ball-football', children: [
-    { id: 'Fußball', label: 'Fußball', icon: 'ball-football', children: [
-      { id: 'Bundesliga', label: 'Bundesliga',       flag: 'DE' },
-    ]},
-    { id: 'F1', label: 'Formel 1', icon: 'steering-wheel' },
-  ]},
-  { id: 'Krypto',        label: 'Krypto',        icon: '₿'  },
-  { id: 'Entertainment', label: 'Entertainment', icon: 'movie' },
-  { id: 'Wirtschaft',    label: 'Wirtschaft',    icon: 'chart-line' },
-  { id: 'Tech',          label: 'Tech',          icon: 'device-laptop' },
-  { id: 'Geopolitik',    label: 'Geopolitik',    icon: 'world' },
-  { id: 'Finanzen', label: 'Finanzen', icon: 'wallet', parentOnly: true, children: FINANCE_SUB_TABS },
-  { id: 'Wetter',        label: 'Wetter',        icon: 'cloud' },
-  { id: 'Kultur',        label: 'Kultur',        icon: 'ticket' },
-]
-
-const MOBILE_CAT_PILLS: { id: string; label: string; icon?: string; flag?: string }[] = [
-  { id: 'Politik-Deutschland', label: 'Politik', flag: 'DE' },
-  { id: 'Bundesliga',          label: 'Fußball', icon: 'ball-football' },
-  { id: 'Krypto',              label: 'Krypto',  icon: '₿'  },
-  { id: 'Wirtschaft',          label: 'Wirtschaft', icon: 'chart-line' },
-  { id: 'Finanzen-Tag',        label: 'Finanzen', icon: 'wallet' },
-  { id: 'Wetter',              label: 'Wetter',  icon: 'cloud' },
-  { id: 'Entertainment',       label: 'Entertainment', icon: 'movie' },
-  { id: 'Tech',                label: 'Tech',    icon: 'device-laptop' },
-  { id: 'Geopolitik',          label: 'Geopolitik', icon: 'world' },
-  { id: 'F1',                  label: 'Formel 1', icon: 'steering-wheel' },
-  { id: 'Kultur',              label: 'Kultur',  icon: 'ticket' },
-]
-
-type AuthMode = 'login' | 'register'
-type MobileTab = 'markets' | 'portfolio' | 'ranking' | 'profil'
-
-export default function HomeClient({ initialCategory, initialMarkets }: { initialCategory?: string; initialMarkets?: Market[] }) {
+// initialCategory bleibt im Typ (nicht mehr genutzt), damit app/kategorie/[slug]/page.tsx
+// weiter kompiliert, bis Deploy 2 diese Route ersetzt. Shell ermittelt die Kategorie für
+// diese Seiten jetzt selbst über usePathname().
+export default function HomeClient({ initialMarkets }: { initialCategory?: string; initialMarkets?: Market[] }) {
   const router = useRouter()
-  const [markets, setMarkets]                 = useState<Market[]>(initialMarkets ?? [])
-  const [pastSoccerMarkets, setPastSoccerMarkets] = useState<Market[]>([])
-  const [user, setUser]                       = useState<User | null>(null)
-  const [leaderboard, setLeaderboard]         = useState<LeaderboardEntry[]>([])
-  const [weeklyBoard, setWeeklyBoard]         = useState<WeeklyEntry[]>([])
-  const [showLeaderboard, setShowLeaderboard] = useState(false)
-  const [category, setCategory]               = useState(initialCategory ?? 'Politik-Deutschland')
-  const [view, setView]                       = useState<'markets' | 'portfolio' | 'admin' | 'profil'>('markets')
-  const [mobileTab, setMobileTab]             = useState<MobileTab>('markets')
-  const [loading, setLoading]                 = useState(!initialMarkets)
-  const [darkMode, setDarkMode]               = useState(() => {
-    if (typeof window === 'undefined') return false
-    return localStorage.getItem('mobius_darkmode') === 'true'
-  })
-  const [showAuth, setShowAuth]               = useState(false)
-  const [authMode, setAuthMode]               = useState<AuthMode>('login')
-  const [authEmail, setAuthEmail]             = useState('')
-  const [authPassword, setAuthPassword]       = useState('')
-  const [authUsername, setAuthUsername]       = useState('')
-  const [authError, setAuthError]             = useState('')
-  const [authLoading, setAuthLoading]         = useState(false)
-  const [searchQuery, setSearchQuery]         = useState('')
-  const [winToasts, setWinToasts]             = useState<WinToast[]>([])
-  const [loginBonusToast, setLoginBonusToast] = useState<LoginBonusToast | null>(null)
-  const [expandedNav, setExpandedNav]         = useState<Record<string, boolean>>({ Sport: true, Fußball: true, Politik: true })
-  const shownToastsRef                        = useRef<Set<string>>(new Set())
-  const userRef                               = useRef<User | null>(null)
-  const marketsRef                            = useRef<Market[]>(initialMarkets ?? [])
-  const triggeredCoinsRef                     = useRef<Record<string, number>>({})
+  const { user, setUser, logout, darkMode, setDarkMode, view, category, searchQuery, selectCategory, openAuth } = useAppShell()
 
-  const ADMIN_ID = 'b75edaf4-141d-41f1-9555-887a8ddbac58'
-
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem('mobius_shown_toasts')
-      if (saved) {
-        const ids: string[] = JSON.parse(saved)
-        ids.forEach(id => shownToastsRef.current.add(id))
-      }
-    } catch {}
-  }, [])
-
-  useEffect(() => {
-    const cat = new URLSearchParams(window.location.search).get('category')
-    if (cat) setCategory(cat)
-  }, [])
-
-  // Deep-Link Support: ?view=portfolio|ranking|profil (z. B. von der Marktdetailseite aus)
-  useEffect(() => {
-    const viewParam = new URLSearchParams(window.location.search).get('view')
-    if (viewParam === 'portfolio') {
-      setView('portfolio'); setMobileTab('portfolio')
-    } else if (viewParam === 'profil') {
-      setView('profil'); setMobileTab('profil')
-    } else if (viewParam === 'ranking') {
-      setMobileTab('ranking'); loadWeeklyBoard(); setShowLeaderboard(true)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  useEffect(() => {
-    document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light')
-    localStorage.setItem('mobius_darkmode', String(darkMode))
-  }, [darkMode])
-
-  useEffect(() => {
-    const saved = localStorage.getItem('mobius_session')
-    if (!saved) return
-    try {
-      const session = JSON.parse(saved)
-      if (session?.access_token && session?.user_id) {
-        dbGet('users', `id=eq.${session.user_id}&select=*`).then((data) => {
-          if (data?.[0]) { setUser(data[0]); userRef.current = data[0] }
-        })
-      }
-    } catch {}
-  }, [])
+  const [markets, setMarkets]                     = useState<Market[]>(initialMarkets ?? [])
+  const [pastSoccerMarkets, setPastSoccerMarkets]  = useState<Market[]>([])
+  const [loading, setLoading]                      = useState(!initialMarkets)
+  const marketsRef                                 = useRef<Market[]>(initialMarkets ?? [])
+  const triggeredCoinsRef                          = useRef<Record<string, number>>({})
 
   const loadMarkets = useCallback(async (showLoading = false) => {
     if (showLoading) setLoading(true)
@@ -471,47 +182,10 @@ export default function HomeClient({ initialCategory, initialMarkets }: { initia
     setPastSoccerMarkets(data ?? [])
   }, [])
 
-  const loadLeaderboard = useCallback(async () => {
-    const data = await dbGet('users', 'select=id,username,balance,avatar_url,title&order=balance.desc&limit=10')
-    setLeaderboard(
-      (data ?? []).map((u: User) => ({
-        user_id: u.id,
-        username: u.username,
-        total_balance: u.balance,
-        avatar_url: u.avatar_url,
-        title: u.title,
-      }))
-    )
-  }, [])
-
-  const loadWeeklyBoard = useCallback(async () => {
-    const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
-    const trades = await dbGet('trades', `type=eq.payout&created_at=gte.${since}&select=user_id,shares`)
-    if (!trades || trades.length === 0) { setWeeklyBoard([]); return }
-    const gainMap: Record<string, number> = {}
-    trades.forEach((t: { user_id: string; shares: number }) => {
-      gainMap[t.user_id] = (gainMap[t.user_id] ?? 0) + (t.shares ?? 0)
-    })
-    const topIds = Object.entries(gainMap).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([id]) => id)
-    if (topIds.length === 0) { setWeeklyBoard([]); return }
-    const users = await dbGet('users', `id=in.(${topIds.join(',')})&select=id,username,avatar_url,title`)
-    const userMap: Record<string, { username: string; avatar_url?: string; title?: string }> = {}
-    users?.forEach((u: { id: string; username: string; avatar_url?: string; title?: string }) => {
-      userMap[u.id] = { username: u.username, avatar_url: u.avatar_url, title: u.title }
-    })
-    setWeeklyBoard(topIds.map(id => ({
-      user_id: id,
-      username: userMap[id]?.username ?? 'Unbekannt',
-      weekly_gain: Math.round(gainMap[id]),
-      avatar_url: userMap[id]?.avatar_url,
-      title: userMap[id]?.title,
-    })))
-  }, [])
-
   useEffect(() => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    loadMarkets(!initialMarkets); loadLeaderboard()
-  }, [loadMarkets, loadLeaderboard])
+    loadMarkets(!initialMarkets)
+  }, [loadMarkets])
 
   useEffect(() => {
     if (category === 'Bundesliga') loadPastSoccerMarkets()
@@ -547,116 +221,6 @@ export default function HomeClient({ initialCategory, initialMarkets }: { initia
     return () => clearInterval(id)
   }, [loadMarkets])
 
-  const checkWins = useCallback(async (userId: string) => {
-    const since = new Date(Date.now() - 10 * 60 * 1000).toISOString()
-    const trades = await dbGet('trades', `user_id=eq.${userId}&type=in.(buy_yes,buy_no)&created_at=gte.${since}&select=market_id,type,shares`)
-    if (!trades || trades.length === 0) return
-    const seen: Record<string, boolean> = {}
-    const marketIds: string[] = []
-    trades.forEach((t: { market_id: string }) => { if (!seen[t.market_id]) { seen[t.market_id] = true; marketIds.push(t.market_id) } })
-    const resolvedMarkets = await dbGet('markets', `id=in.(${marketIds.join(',')})&resolved=eq.true&select=id,question,resolution,is_auto,coin,q_yes,q_no,b`)
-    if (!resolvedMarkets || resolvedMarkets.length === 0) return
-    const newToasts: WinToast[] = []
-    for (const market of resolvedMarkets) {
-      if (shownToastsRef.current.has(market.id)) continue
-      const marketTrades = trades.filter((t: { market_id: string; type: string; shares: number }) => t.market_id === market.id)
-      const wonTrades = marketTrades.filter((t: { type: string }) => (market.resolution === 'yes' && t.type === 'buy_yes') || (market.resolution === 'no' && t.type === 'buy_no'))
-      if (wonTrades.length === 0) continue
-      const totalShares = wonTrades.reduce((s: number, t: { shares: number }) => s + (t.shares ?? 0), 0)
-      const amount = Math.round(totalShares)
-      if (amount <= 0) continue
-      const probAtResolution = calcProb(market.q_yes, market.q_no, market.b)
-      const loserPct = market.resolution === 'yes' ? (100 - probAtResolution) : probAtResolution
-      shownToastsRef.current.add(market.id)
-      try {
-        const existing: string[] = JSON.parse(localStorage.getItem('mobius_shown_toasts') ?? '[]')
-        existing.push(market.id)
-        localStorage.setItem('mobius_shown_toasts', JSON.stringify(existing.slice(-200)))
-      } catch {}
-      newToasts.push({ id: market.id, coin: market.coin, question: market.question, amount, isKrypto: !!market.is_auto, direction: market.resolution as 'yes' | 'no', loserPct })
-    }
-    if (newToasts.length > 0) {
-      setWinToasts(prev => [...prev, ...newToasts])
-      const freshUser = await dbGet('users', `id=eq.${userId}&select=balance`)
-      if (freshUser?.[0]) { setUser(prev => prev ? { ...prev, balance: freshUser[0].balance } : prev); userRef.current = { ...userRef.current!, balance: freshUser[0].balance } }
-      newToasts.forEach(toast => { setTimeout(() => setWinToasts(prev => prev.filter(t => t.id !== toast.id)), 7000) })
-    }
-  }, [])
-
-  useEffect(() => {
-    if (!user?.id) return
-    const id = setInterval(() => checkWins(user.id), 15000)
-    checkWins(user.id)
-    return () => clearInterval(id)
-  }, [user?.id, checkWins])
-
-  const handleLogin = async () => {
-    setAuthError('')
-    if (!authEmail || !authPassword) { setAuthError('Bitte alle Felder ausfüllen.'); return }
-    if (authEmail.length > 254) { setAuthError('E-Mail zu lang.'); return }
-    if (authPassword.length < 6 || authPassword.length > 128) { setAuthError('Passwort muss 6–128 Zeichen lang sein.'); return }
-    setAuthLoading(true)
-    const res = await supabaseAuth('token?grant_type=password', { email: authEmail.trim(), password: authPassword })
-    setAuthLoading(false)
-    if (res.error || !res.access_token) { setAuthError('E-Mail oder Passwort falsch.'); return }
-    const userId = res.user?.id
-    const userData = await dbGet('users', `id=eq.${userId}&select=*`)
-    if (userData?.[0]) {
-      setUser(userData[0]); userRef.current = userData[0]
-      localStorage.setItem('mobius_session', JSON.stringify({ access_token: res.access_token, user_id: userId }))
-      fetch('/api/login-xp', { method: 'POST', headers: { Authorization: `Bearer ${res.access_token}` } })
-        .then(r => r.json())
-        .then((data) => {
-          if (data?.alreadyAwarded) return
-          if (typeof data?.newBalance === 'number') {
-            setUser(prev => prev ? { ...prev, balance: data.newBalance } : prev)
-            userRef.current = userRef.current ? { ...userRef.current, balance: data.newBalance } : userRef.current
-          }
-          if (typeof data?.dukatenGain === 'number') {
-            setLoginBonusToast({ amount: data.dukatenGain, isBankrupt: !!data.isBankrupt })
-            setTimeout(() => setLoginBonusToast(null), 7000)
-          }
-        })
-        .catch(() => {})
-      setShowAuth(false); resetAuthForm()
-    } else { setAuthError('Benutzer nicht gefunden.') }
-  }
-
-  const handleRegister = async () => {
-    setAuthError('')
-    if (!authEmail || !authPassword || !authUsername) { setAuthError('Bitte alle Felder ausfüllen.'); return }
-    if (authEmail.length > 254) { setAuthError('E-Mail zu lang.'); return }
-    if (authUsername.length < 3 || authUsername.length > 50) { setAuthError('Benutzername: 3–50 Zeichen.'); return }
-    if (authPassword.length < 6 || authPassword.length > 128) { setAuthError('Passwort muss 6–128 Zeichen lang sein.'); return }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(authEmail.trim())) { setAuthError('Ungültige E-Mail-Adresse.'); return }
-    setAuthLoading(true)
-    const existing = await dbGet('users', `username=eq.${encodeURIComponent(authUsername.trim())}&select=id`)
-    if (existing?.length > 0) { setAuthLoading(false); setAuthError('Benutzername bereits vergeben.'); return }
-    const res = await supabaseAuth('signup', { email: authEmail.trim(), password: authPassword })
-    setAuthLoading(false)
-    if (res.error) { setAuthError(res.error.message ?? 'Registrierung fehlgeschlagen.'); return }
-    const userId = res.user?.id
-    const token = res.access_token
-    if (!userId) { setAuthError('Bitte bestätige deine E-Mail und melde dich dann an.'); return }
-    await dbPost('users', { id: userId, username: authUsername.trim().slice(0, 50), balance: 1000 }, token ?? SUPABASE_KEY)
-    const userData = await dbGet('users', `id=eq.${userId}&select=*`)
-    if (userData?.[0]) {
-      setUser(userData[0]); userRef.current = userData[0]
-      localStorage.setItem('mobius_session', JSON.stringify({ access_token: token, user_id: userId }))
-      setShowAuth(false); resetAuthForm(); loadLeaderboard()
-    } else { setAuthError('Konto erstellt! Bitte melde dich jetzt an.') }
-  }
-
-  const handleLogout = () => {
-    setUser(null); userRef.current = null
-    localStorage.removeItem('mobius_session')
-    setView('markets'); setMobileTab('markets'); setWinToasts([]); shownToastsRef.current = new Set()
-    setLoginBonusToast(null)
-  }
-
-  const resetAuthForm = () => { setAuthEmail(''); setAuthPassword(''); setAuthUsername(''); setAuthError('') }
-  const openAuth = (mode: AuthMode) => { resetAuthForm(); setAuthMode(mode); setShowAuth(true) }
-
   const isSportCategory = category === 'Sport' || category === 'Fußball' || category === 'Bundesliga'
     || category === 'WM' || category === 'CL' || category === 'DFB-Kader'
   const isFinanzCategory = category.startsWith('Finanzen-')
@@ -672,12 +236,6 @@ export default function HomeClient({ initialCategory, initialMarkets }: { initia
     const q = (m.question ?? '').toLowerCase()
     return q.includes('trump') || q.includes('demokraten') || q.includes('us-senat') || q.includes('usa') || q.includes('senat 2026')
   }
-  function isPolitikWelt(m: Market): boolean {
-    if (m.category !== 'Politik' && m.category !== 'Politik-Deutschland' && m.category !== 'Politik-USA') return false
-    if (isPolitikDeutschland(m)) return false
-    if (isPolitikUSA(m)) return false
-    return true
-  }
 
   const filteredMarkets = markets.filter((m) => {
     let matchCat = false
@@ -685,8 +243,6 @@ export default function HomeClient({ initialCategory, initialMarkets }: { initia
       matchCat = isPolitikDeutschland(m)
     } else if (category === 'Politik-USA') {
       matchCat = isPolitikUSA(m)
-    } else if (category === 'Politik-Welt') {
-      matchCat = isPolitikWelt(m)
     } else if (category === 'Bundesliga') {
       matchCat = !!m.match_id
     } else if (category === 'Fußball') {
@@ -719,361 +275,96 @@ export default function HomeClient({ initialCategory, initialMarkets }: { initia
     return matchCat && matchSearch
   })
 
-  const toggleNav = (id: string) => setExpandedNav(prev => ({ ...prev, [id]: !prev[id] }))
-  const selectCategory = (id: string) => { setCategory(id); setView('markets'); setMobileTab('markets'); setSearchQuery('') }
-
   const categoryLabel: Record<string, string> = {
     'Politik-Deutschland': 'Politik · Deutschland',
     'Politik-USA':         'Politik · USA',
-    'Politik-Welt':        'Politik · Welt',
     'Finanzen-Tag':        'Finanzen · Aktueller Handelstag',
     'Finanzen-Woche':      'Finanzen · Aktuelle Handelswoche',
     'F1':                  'Formel 1',
   }
 
-  const handleMobileTab = (tab: MobileTab) => {
-    setMobileTab(tab)
-    if (tab === 'markets') setView('markets')
-    else if (tab === 'portfolio') setView('portfolio')
-    else if (tab === 'ranking') { loadWeeklyBoard(); setShowLeaderboard(true) }
-    else if (tab === 'profil') {
-      if (user) setView('profil')
-      else openAuth('login')
-    }
-  }
-
   return (
     <>
-      {/* Win Toasts */}
-      <div style={{ position: 'fixed', top: 80, right: 16, zIndex: 9999, display: 'flex', flexDirection: 'column', gap: 10, pointerEvents: 'none' }}>
-        {winToasts.map(toast => {
-          const isUp = toast.direction === 'yes'
-          const accentColor = toast.isKrypto ? (isUp ? '#16a34a' : '#dc2626') : '#16a34a'
-          return (
-            <div key={toast.id} style={{ pointerEvents: 'all', background: 'var(--bg, #fff)', border: `1px solid ${isUp ? 'rgba(22,163,74,0.3)' : 'rgba(220,38,38,0.3)'}`, borderLeft: `4px solid ${accentColor}`, borderRadius: 12, padding: '14px 16px', minWidth: 270, maxWidth: 330, boxShadow: '0 4px 24px rgba(0,0,0,0.12)', animation: 'slideInRight 0.3s ease' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  {toast.isKrypto && toast.coin && (<span style={{ width: 22, height: 22, borderRadius: 6, background: COIN_COLORS[toast.coin] ?? '#f97316', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, color: '#fff', flexShrink: 0 }}>{toast.coin.charAt(0)}</span>)}
-                  <span style={{ fontSize: 12, fontWeight: 700, color: accentColor, letterSpacing: 0.3 }}>{toast.isKrypto ? (isUp ? `${toast.coin} · UP ↑` : `${toast.coin} · DOWN ↓`) : 'POSITION GEWONNEN'}</span>
-                </div>
-                <button onClick={() => setWinToasts(prev => prev.filter(t => t.id !== toast.id))} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, color: '#9ca3af', padding: 0, lineHeight: 1 }}>×</button>
-              </div>
-              {!toast.isKrypto && (<div style={{ fontSize: 11, color: 'var(--text-muted, #6b7280)', marginBottom: 8, lineHeight: 1.4 }}>{toast.question.length > 55 ? toast.question.slice(0, 55) + '…' : toast.question}</div>)}
-              <div style={{ fontSize: 26, fontWeight: 900, color: accentColor, letterSpacing: '-0.5px', lineHeight: 1, marginBottom: 6 }}>+{toast.amount.toLocaleString('de')} ₫</div>
-              {toast.loserPct !== undefined && toast.loserPct > 5 && (<div style={{ fontSize: 11, color: 'var(--text-muted, #9ca3af)', borderTop: '1px solid rgba(0,0,0,0.06)', paddingTop: 6, marginTop: 2 }}>{toast.loserPct}% der Marktteilnehmer lagen falsch.</div>)}
-            </div>
-          )
-        })}
-        {loginBonusToast && (
-          <div style={{ pointerEvents: 'all', background: 'var(--bg, #fff)', border: '1px solid rgba(99,102,241,0.3)', borderLeft: '4px solid #6366f1', borderRadius: 12, padding: '14px 16px', minWidth: 270, maxWidth: 330, boxShadow: '0 4px 24px rgba(0,0,0,0.12)', animation: 'slideInRight 0.3s ease' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-              <span style={{ fontSize: 12, fontWeight: 700, color: '#6366f1', letterSpacing: 0.3 }}>
-                {loginBonusToast.isBankrupt ? 'BANKROTT-HILFE' : 'DAILY BONUS'}
-              </span>
-              <button onClick={() => setLoginBonusToast(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, color: '#9ca3af', padding: 0, lineHeight: 1 }}>×</button>
-            </div>
-            {loginBonusToast.isBankrupt && (
-              <div style={{ fontSize: 11, color: 'var(--text-muted, #6b7280)', marginBottom: 8, lineHeight: 1.4 }}>Dein Guthaben war unter 10 ₫. Hier ist ein Neustart.</div>
-            )}
-            <div style={{ fontSize: 26, fontWeight: 900, color: '#6366f1', letterSpacing: '-0.5px', lineHeight: 1 }}>+{loginBonusToast.amount.toLocaleString('de')} ₫</div>
-          </div>
-        )}
-      </div>
-
-      {/* Leaderboard Modal */}
-      {showLeaderboard && (
-        <div className="modal-backdrop" onClick={() => setShowLeaderboard(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 400 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-              <div>
-                <div className="modal-title" style={{ marginBottom: 2 }}>Wochenranking</div>
-                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Top-Händler der letzten 7 Tage</div>
-              </div>
-              <button onClick={() => setShowLeaderboard(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 20, color: 'var(--text-muted)', lineHeight: 1 }}>×</button>
-            </div>
-            {weeklyBoard.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '24px 0', color: 'var(--text-muted)', fontSize: 13 }}>Noch keine Daten für diese Woche.</div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {weeklyBoard.map((e, i) => {
-                  const av = avatarColor(e.username)
-                  const isMe = e.user_id === user?.id
-                  return (
-                    <div key={e.user_id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 10, background: isMe ? 'var(--accent-light, rgba(99,102,241,0.08))' : 'var(--surface)', border: isMe ? '1px solid rgba(99,102,241,0.2)' : '1px solid transparent' }}>
-                      <RankBadge rank={i + 1} />
-                      {e.avatar_url ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={e.avatar_url} alt={e.username} style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
-                      ) : (
-                        <div style={{ width: 32, height: 32, borderRadius: '50%', background: av.bg, color: av.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{e.username.slice(0, 2).toUpperCase()}</div>
-                      )}
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 13, fontWeight: isMe ? 700 : 500, color: 'var(--text)', lineHeight: 1.2 }}>
-                          {e.username}{isMe ? ' (du)' : ''}
-                        </div>
-                        <div style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.2 }}>
-                          {e.title ?? 'Nadir'}
-                        </div>
-                      </div>
-                      <span style={{ fontSize: 13, fontWeight: 700, color: '#16a34a', flexShrink: 0 }}>+{e.weekly_gain.toLocaleString('de')} ₫</span>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-            <div style={{ fontSize: 11, color: 'var(--text-subtle)', textAlign: 'center', marginTop: 16 }}>Resets jeden Montag · Basiert auf realisierten Gewinnen</div>
-          </div>
-        </div>
-      )}
-
-      {/* Auth Modal */}
-      {showAuth && (
-        <div className="modal-backdrop" onClick={() => setShowAuth(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-title">{authMode === 'login' ? 'Anmelden' : 'Konto erstellen'}</div>
-            <div className="auth-tabs">
-              <button className={`auth-tab ${authMode === 'login' ? 'active' : ''}`} onClick={() => { setAuthMode('login'); setAuthError('') }}>Anmelden</button>
-              <button className={`auth-tab ${authMode === 'register' ? 'active' : ''}`} onClick={() => { setAuthMode('register'); setAuthError('') }}>Registrieren</button>
-            </div>
-            {authMode === 'register' && (<input type="text" placeholder="Benutzername" value={authUsername} onChange={(e) => setAuthUsername(e.target.value)} maxLength={50} style={{ width: '100%' }} />)}
-            <input type="email" placeholder="E-Mail" value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} maxLength={254} style={{ width: '100%' }} autoFocus />
-            <input type="password" placeholder="Passwort" value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} maxLength={128} onKeyDown={(e) => e.key === 'Enter' && (authMode === 'login' ? handleLogin() : handleRegister())} style={{ width: '100%' }} />
-            {authError && <div className="alert alert-error">{authError}</div>}
-            <button className="submit-btn yes" onClick={authMode === 'login' ? handleLogin : handleRegister} disabled={authLoading} style={{ marginTop: 4 }}>
-              {authLoading ? 'not me waiting...' : authMode === 'login' ? 'Anmelden' : 'Konto erstellen'}
+      {view === 'admin' && user?.id === ADMIN_ID && (<AdminPanel userId={user.id} openMarkets={markets} onMarketResolved={loadMarkets} />)}
+      {view === 'profil' && user && (
+        <>
+          <ProfileView
+            userId={user.id}
+            token={user.id}
+            displayName={user.username}
+            avatarUrl={user.avatar_url ?? ''}
+            balance={user.balance}
+            xp={user.xp}
+            level={user.level}
+            rp={user.rp}
+            title={user.title}
+            peakTitle={user.peak_title}
+            createdAt={user.created_at}
+            onUsernameChange={(name) => setUser({ ...user, username: name })}
+            onAvatarChange={(url) => setUser({ ...user, avatar_url: url })}
+          />
+          <div style={{ marginTop: 24 }}>
+            <button
+              onClick={() => setDarkMode(!darkMode)}
+              style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', background: 'var(--surface)', border: '0.5px solid var(--border)', borderRadius: 12, cursor: 'pointer', fontSize: 14, color: 'var(--text)', width: '100%' }}
+            >
+              <Icon name={darkMode ? 'sun' : 'moon'} size={20} />
+              <span>{darkMode ? 'Light Mode aktivieren' : 'Dark Mode aktivieren'}</span>
             </button>
-            {authMode === 'register' && (<div style={{ fontSize: 12, color: 'var(--text-subtle)', textAlign: 'center' }}>Du startest mit 1.000 ₫ Dukaten.</div>)}
+            <button
+              onClick={logout}
+              style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', background: 'var(--no-light)', border: '0.5px solid var(--no-border)', borderRadius: 12, cursor: 'pointer', fontSize: 14, color: 'var(--no)', width: '100%', marginTop: 8 }}
+            >
+              <span>Abmelden</span>
+            </button>
           </div>
+        </>
+      )}
+      {view === 'profil' && !user && (
+        <div style={{ textAlign: 'center', padding: '48px 16px' }}>
+          <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'center', color: 'var(--text-muted)' }}><Icon name="user" size={32} /></div>
+          <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', marginBottom: 8 }}>Kein Konto</div>
+          <div style={{ fontSize: 14, color: 'var(--text-muted)', marginBottom: 20 }}>Melde dich an um dein Profil zu sehen.</div>
+          <button className="submit-btn yes" onClick={() => openAuth('login')} style={{ maxWidth: 200, margin: '0 auto' }}>Anmelden</button>
         </div>
       )}
-
-      {/* Nav */}
-      <nav className="nav">
-        <div className="nav-left">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo-weiss.png" alt="Möbius" className="nav-logo" onClick={() => { setView('markets'); setMobileTab('markets'); setSearchQuery(''); setCategory('Politik-Deutschland') }} />
-          <div className="nav-search-wrap">
-            <span className="nav-search-icon">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            </span>
-            <input className="nav-search" type="text" placeholder="Märkte durchsuchen…" value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setView('markets'); setMobileTab('markets') }} />
+      {view === 'markets' && (
+        <>
+          <div className="section-head">
+            <div className="section-title" style={{ fontSize: 22, fontWeight: 800 }}>{searchQuery ? `Suche: „${searchQuery}"` : (categoryLabel[category] ?? category)}</div>
+            <div className="section-link" onClick={() => loadMarkets()}>Aktualisieren</div>
           </div>
-        </div>
-        <div className="nav-right">
-          {user ? (
-            <>
-              <button className="nav-pill" onClick={() => { loadWeeklyBoard(); setShowLeaderboard(true) }} style={{ display: 'flex', alignItems: 'center', gap: 5, fontWeight: 600 }}>
-                <Icon name="trophy" size={14} /><span>Ranking</span>
-              </button>
-              <div className="nav-stat"><div className="nav-stat-label">Guthaben</div><div className="nav-stat-value">{user.balance.toLocaleString('de')} ₫</div></div>
-              <div className="nav-divider" />
-              {user?.id === ADMIN_ID && (<button className="nav-pill" onClick={() => { setView('admin'); setMobileTab('markets') }} style={{ background: 'rgba(124,58,237,0.25)', borderColor: 'rgba(124,58,237,0.5)', color: '#c4b5fd' }}>Admin</button>)}
-              <div className="nav-avatar" onClick={() => { setView('profil'); setMobileTab('profil') }} title={user.username}>
-                {user.avatar_url ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={user.avatar_url} alt={user.username} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
-                ) : (
-                  <span>{user.username.slice(0, 2).toUpperCase()}</span>
-                )}
-              </div>
-              <button className="nav-pill" onClick={handleLogout}>Abmelden</button>
-            </>
+          {isFinanzCategory && (
+            <div style={{ display: 'flex', gap: 8, marginBottom: 24, flexWrap: 'wrap' }}>
+              {FINANCE_SUB_TABS.map(tab => (
+                <button key={tab.id} onClick={() => selectCategory(tab.id)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 16px', borderRadius: 20, fontSize: 13, fontWeight: category === tab.id ? 700 : 500, border: category === tab.id ? '1px solid var(--accent, #6366f1)' : '1px solid var(--border)', background: category === tab.id ? 'var(--accent-light, rgba(99,102,241,0.1))' : 'var(--surface)', color: category === tab.id ? 'var(--accent, #6366f1)' : 'var(--text-muted)', cursor: 'pointer', transition: 'all 0.15s' }}>
+                  <Icon name={tab.icon} size={14} /> {tab.label}
+                </button>
+              ))}
+            </div>
+          )}
+          {loading ? (
+            <div style={{ color: 'var(--text-muted)', fontSize: 14, padding: '24px 0' }}>Wird mit 1 % Motivation geladen…</div>
+          ) : filteredMarkets.length === 0 && category !== 'Bundesliga' ? (
+            <div style={{ color: 'var(--text-muted)', fontSize: 14, padding: '24px 0' }}>
+              {isFinanzCategory ? 'Derzeit sind keine Märkte aktiv. Sie starten automatisch zu Beginn der offiziellen Handelszeiten der deutschen (09:00 – 17:30 Uhr) und amerikanischen Börsen (15:30 – 22:00 Uhr).' : 'Keine Märkte gefunden.'}
+            </div>
           ) : (
-            <>
-              <button className="nav-pill" onClick={() => openAuth('login')}>Anmelden</button>
-              <button className="nav-pill accent" onClick={() => openAuth('register')}>Registrieren</button>
-            </>
+            <MarketsGrid markets={filteredMarkets} onOpen={(id) => router.push(`/markets/${id}`)} isSoccer={isSportCategory} />
           )}
-          <button className="nav-icon-btn" onClick={() => setDarkMode(!darkMode)}><Icon name={darkMode ? 'sun' : 'moon'} size={17} /></button>
-        </div>
-      </nav>
-
-      {/* Mobile Category Pills */}
-      <div className="mobile-cat-scroll">
-        {MOBILE_CAT_PILLS.map(pill => (
-          <button
-            key={pill.id}
-            className={`mobile-cat-pill ${category === pill.id ? 'active' : ''}`}
-            onClick={() => selectCategory(pill.id)}
-            style={{ display: 'flex', alignItems: 'center', gap: 6 }}
-          >
-            <PillIcon icon={pill.icon} flag={pill.flag} size={14} /> {pill.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Layout */}
-      <div style={{ display: 'flex', minHeight: 'calc(100vh - var(--nav-height, 56px))', maxWidth: 1400, margin: '0 auto' }}>
-
-        {/* Desktop Sidebar */}
-        <aside style={{ width: 220, flexShrink: 0, borderRight: '1px solid var(--border)', padding: '20px 0', position: 'sticky', top: 'var(--nav-height, 56px)', height: 'calc(100vh - var(--nav-height, 56px))', overflowY: 'auto', background: 'var(--bg)' }}>
-          {user && (<div style={{ padding: '0 16px 16px', borderBottom: '1px solid var(--border)', marginBottom: 12 }}><div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Guthaben</div><div style={{ fontSize: 20, fontWeight: 800, color: 'var(--text)' }}>{user.balance.toLocaleString('de')} ₫</div></div>)}
-          <div style={{ padding: '0 8px' }}>
-            {NAV_ITEMS.map(item => (<NavItem key={item.id} item={item} category={category} expandedNav={expandedNav} onSelect={selectCategory} onToggle={toggleNav} depth={0} />))}
-          </div>
-          <div style={{ padding: '12px 8px 0', borderTop: '1px solid var(--border)', marginTop: 8 }}>
-            <a href="/about" className="nav-item-btn" style={{ display: 'flex', alignItems: 'center', gap: 8, textDecoration: 'none', fontSize: 13, fontWeight: 500, color: 'var(--text-muted)', padding: '8px 12px', borderRadius: 8 }}>
-              <Icon name="bulb" size={16} />
-              <span>About</span>
-            </a>
-            <a href="/faq" className="nav-item-btn" style={{ display: 'flex', alignItems: 'center', gap: 8, textDecoration: 'none', fontSize: 13, fontWeight: 500, color: 'var(--text-muted)', padding: '8px 12px', borderRadius: 8 }}>
-              <Icon name="help" size={16} />
-              <span>FAQ</span>
-            </a>
-            <a href="/raenge" className="nav-item-btn" style={{ display: 'flex', alignItems: 'center', gap: 8, textDecoration: 'none', fontSize: 13, fontWeight: 500, color: 'var(--text-muted)', padding: '8px 12px', borderRadius: 8 }}>
-              <Icon name="star" size={16} />
-              <span>Ränge</span>
-            </a>
-            <a href="/bewertungen" className="nav-item-btn" style={{ display: 'flex', alignItems: 'center', gap: 8, textDecoration: 'none', fontSize: 13, fontWeight: 500, color: 'var(--text-muted)', padding: '8px 12px', borderRadius: 8 }}>
-              <Icon name="thumb-up" size={16} />
-              <span>Bewertungen</span>
-            </a>
-          </div>
-        </aside>
-
-        <main style={{ flex: 1, minWidth: 0, padding: '24px 32px' }}>
-          {view === 'admin' && user?.id === ADMIN_ID && (<AdminPanel userId={user.id} openMarkets={markets} onMarketResolved={loadMarkets} />)}
-          {view === 'profil' && user && (
-            <>
-              <ProfileView
-                userId={user.id}
-                token={user.id}
-                displayName={user.username}
-                avatarUrl={user.avatar_url ?? ''}
-                balance={user.balance}
-                xp={user.xp}
-                level={user.level}
-                rp={user.rp}
-                title={user.title}
-                peakTitle={user.peak_title}
-                createdAt={user.created_at}
-                onUsernameChange={(name) => setUser({ ...user, username: name })}
-                onAvatarChange={(url) => setUser({ ...user, avatar_url: url })}
-              />
-              <div style={{ marginTop: 24 }}>
-                <button
-                  onClick={() => setDarkMode(!darkMode)}
-                  style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', background: 'var(--surface)', border: '0.5px solid var(--border)', borderRadius: 12, cursor: 'pointer', fontSize: 14, color: 'var(--text)', width: '100%' }}
-                >
-                  <Icon name={darkMode ? 'sun' : 'moon'} size={20} />
-                  <span>{darkMode ? 'Light Mode aktivieren' : 'Dark Mode aktivieren'}</span>
-                </button>
-                <button
-                  onClick={handleLogout}
-                  style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', background: 'var(--no-light)', border: '0.5px solid var(--no-border)', borderRadius: 12, cursor: 'pointer', fontSize: 14, color: 'var(--no)', width: '100%', marginTop: 8 }}
-                >
-                  <span>Abmelden</span>
-                </button>
-              </div>
-            </>
-          )}
-          {view === 'profil' && !user && (
-            <div style={{ textAlign: 'center', padding: '48px 16px' }}>
-              <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'center', color: 'var(--text-muted)' }}><Icon name="user" size={32} /></div>
-              <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', marginBottom: 8 }}>Kein Konto</div>
-              <div style={{ fontSize: 14, color: 'var(--text-muted)', marginBottom: 20 }}>Melde dich an um dein Profil zu sehen.</div>
-              <button className="submit-btn yes" onClick={() => openAuth('login')} style={{ maxWidth: 200, margin: '0 auto' }}>Anmelden</button>
-            </div>
-          )}
-          {view === 'markets' && (
-            <>
-              <div className="section-head">
-                <div className="section-title" style={{ fontSize: 22, fontWeight: 800 }}>{searchQuery ? `Suche: „${searchQuery}"` : (categoryLabel[category] ?? category)}</div>
-                <div className="section-link" onClick={() => loadMarkets()}>Aktualisieren</div>
-              </div>
-              {isFinanzCategory && (
-                <div style={{ display: 'flex', gap: 8, marginBottom: 24, flexWrap: 'wrap' }}>
-                  {FINANCE_SUB_TABS.map(tab => (
-                    <button key={tab.id} onClick={() => selectCategory(tab.id)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 16px', borderRadius: 20, fontSize: 13, fontWeight: category === tab.id ? 700 : 500, border: category === tab.id ? '1px solid var(--accent, #6366f1)' : '1px solid var(--border)', background: category === tab.id ? 'var(--accent-light, rgba(99,102,241,0.1))' : 'var(--surface)', color: category === tab.id ? 'var(--accent, #6366f1)' : 'var(--text-muted)', cursor: 'pointer', transition: 'all 0.15s' }}>
-                      <Icon name={tab.icon} size={14} /> {tab.label}
-                    </button>
-                  ))}
-                </div>
-              )}
-              {loading ? (
-                <div style={{ color: 'var(--text-muted)', fontSize: 14, padding: '24px 0' }}>Wird mit 1 % Motivation geladen…</div>
-              ) : filteredMarkets.length === 0 && category !== 'Bundesliga' ? (
-                <div style={{ color: 'var(--text-muted)', fontSize: 14, padding: '24px 0' }}>
-                  {isFinanzCategory ? 'Derzeit sind keine Märkte aktiv. Sie starten automatisch zu Beginn der offiziellen Handelszeiten der deutschen (09:00 – 17:30 Uhr) und amerikanischen Börsen (15:30 – 22:00 Uhr).' : 'Keine Märkte gefunden.'}
-                </div>
-              ) : (
-                <MarketsGrid markets={filteredMarkets} onOpen={(id) => router.push(`/markets/${id}`)} isSoccer={isSportCategory} />
-              )}
-              {category === 'Bundesliga' && pastSoccerMarkets.length > 0 && (<PastSoccerSection markets={pastSoccerMarkets} onOpen={(id) => router.push(`/markets/${id}`)} />)}
-            </>
-          )}
-          {view === 'portfolio' && user && (<PortfolioView userId={user.id} router={router} />)}
-          {view === 'portfolio' && !user && (
-            <div style={{ textAlign: 'center', padding: '48px 16px' }}>
-              <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'center', color: 'var(--text-muted)' }}><Icon name="chart-bar" size={32} /></div>
-              <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', marginBottom: 8 }}>Kein Konto</div>
-              <div style={{ fontSize: 14, color: 'var(--text-muted)', marginBottom: 20 }}>Melde dich an um dein Portfolio zu sehen.</div>
-              <button className="submit-btn yes" onClick={() => openAuth('login')} style={{ maxWidth: 200, margin: '0 auto' }}>Anmelden</button>
-            </div>
-          )}
-        </main>
-      </div>
-
-      {/* Mobile Bottom Tab Bar */}
-      <nav className="mobile-tab-bar">
-        {[
-          { id: 'markets',   label: 'Märkte',    icon: 'chart-bar' },
-          { id: 'portfolio', label: 'Portfolio',  icon: 'briefcase' },
-          { id: 'ranking',   label: 'Ranking',    icon: 'trophy' },
-          { id: 'profil',    label: 'Profil',     icon: 'user' },
-        ].map(tab => (
-          <button
-            key={tab.id}
-            className={`mobile-tab-item ${mobileTab === tab.id ? 'active' : ''}`}
-            onClick={() => handleMobileTab(tab.id as MobileTab)}
-          >
-            <Icon name={tab.icon} size={20} />
-            <span>{tab.label}</span>
-          </button>
-        ))}
-      </nav>
-
-      <style>{`
-        @keyframes slideInRight { from { transform: translateX(120%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
-        .nav-item-btn { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 12px; border: none; background: transparent; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 500; color: var(--text-muted); text-align: left; transition: background 0.1s, color 0.1s; }
-        .nav-item-btn:hover { background: var(--surface); color: var(--text); }
-        .nav-item-btn.active { background: var(--accent-light, rgba(99,102,241,0.1)); color: var(--accent, #6366f1); font-weight: 700; }
-        .nav-chevron { margin-left: auto; font-size: 10px; opacity: 0.5; transition: transform 0.2s; }
-        .nav-chevron.open { transform: rotate(180deg); }
-        @media (max-width: 768px) {
-          .nav-right .nav-pill { display: none !important; }
-          .nav-right .nav-icon-btn { display: none !important; }
-          .nav-right .nav-divider { display: none !important; }
-          .nav-right .nav-stat { display: none !important; }
-        }
-      `}</style>
-    </>
-  )
-}
-
-function NavItem({ item, category, expandedNav, onSelect, onToggle, depth }: {
-  item: NavItemDef; category: string; expandedNav: Record<string, boolean>
-  onSelect: (id: string) => void; onToggle: (id: string) => void; depth: number
-}) {
-  const hasChildren = item.children && item.children.length > 0
-  const isExpanded  = expandedNav[item.id]
-  const isActive    = category === item.id || (item.id === 'Politik' && category.startsWith('Politik-')) || (item.id === 'Finanzen' && category.startsWith('Finanzen-'))
-  const handleClick = () => {
-    if (item.parentOnly) { onToggle(item.id) }
-    else if (hasChildren) { onToggle(item.id); onSelect(item.id) }
-    else { onSelect(item.id) }
-  }
-  return (
-    <div>
-      <button className={`nav-item-btn ${isActive ? 'active' : ''}`} style={{ paddingLeft: 12 + depth * 12 }} onClick={handleClick}>
-        <PillIcon icon={item.icon} flag={item.flag} size={15} />
-        <span>{item.label}</span>
-        {hasChildren && <span className={`nav-chevron ${isExpanded ? 'open' : ''}`}>▼</span>}
-      </button>
-      {hasChildren && isExpanded && (
-        <div>{item.children!.map(child => (<NavItem key={child.id} item={child} category={category} expandedNav={expandedNav} onSelect={onSelect} onToggle={onToggle} depth={depth + 1} />))}</div>
+          {category === 'Bundesliga' && pastSoccerMarkets.length > 0 && (<PastSoccerSection markets={pastSoccerMarkets} onOpen={(id) => router.push(`/markets/${id}`)} />)}
+        </>
       )}
-    </div>
+      {view === 'portfolio' && user && (<PortfolioView userId={user.id} router={router} />)}
+      {view === 'portfolio' && !user && (
+        <div style={{ textAlign: 'center', padding: '48px 16px' }}>
+          <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'center', color: 'var(--text-muted)' }}><Icon name="chart-bar" size={32} /></div>
+          <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', marginBottom: 8 }}>Kein Konto</div>
+          <div style={{ fontSize: 14, color: 'var(--text-muted)', marginBottom: 20 }}>Melde dich an um dein Portfolio zu sehen.</div>
+          <button className="submit-btn yes" onClick={() => openAuth('login')} style={{ maxWidth: 200, margin: '0 auto' }}>Anmelden</button>
+        </div>
+      )}
+    </>
   )
 }
 
