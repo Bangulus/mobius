@@ -1552,6 +1552,6 @@ input:focus, textarea:focus, select:focus {
 @media (min-width: 769px) and (max-width: 1024px) {
   .nav { padding: 0 20px; }
   .markets-grid { grid-template-columns: repeat(2, 1fr); }
-  main { padding: 20px 20px !important; }
+  main { padding: 20px 20px !important; } 
   aside { width: 180px !important; }
 }
