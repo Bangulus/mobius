@@ -196,7 +196,7 @@ const MOBILE_CAT_PILLS: { id: string; href: string; label: string; icon?: string
   { id: 'Tech',                href: 'tech',                label: 'Tech',    icon: 'device-laptop' },
   { id: 'Geopolitik',          href: 'geopolitik',          label: 'Geopolitik', icon: 'world' },
   { id: 'F1',                  href: 'sport/f1',            label: 'Formel 1', icon: 'steering-wheel' },
-  { id: 'Kultur',              href: 'kultur',              label: 'Kultur',  icon: 'ticket' },
+  { id: 'Kultur',              href: 'kultur',               label: 'Kultur',  icon: 'ticket' },
 ]
 
 export default function Shell({ children }: { children: ReactNode }) {
@@ -209,7 +209,12 @@ export default function Shell({ children }: { children: ReactNode }) {
   const [view, setView]                       = useState<ViewType>('markets')
   const [mobileTab, setMobileTab]             = useState<MobileTab>('markets')
   const category                              = categoryFromPathname(pathname)
-  const [searchQuery, setSearchQuery]         = useState('')
+  // Initialwert kommt aus der URL (?q=...), analog zum bestehenden ?view=-Deep-Link-Muster
+  // weiter unten — dadurch überlebt eine Suche einen Reload und ist teilbar.
+  const [searchQuery, setSearchQuery]         = useState<string>(() => {
+    if (typeof window === 'undefined') return ''
+    return new URLSearchParams(window.location.search).get('q') ?? ''
+  })
 
   const [leaderboard, setLeaderboard]         = useState<LeaderboardEntry[]>([])
   const [weeklyBoard, setWeeklyBoard]         = useState<WeeklyEntry[]>([])
@@ -311,6 +316,22 @@ export default function Shell({ children }: { children: ReactNode }) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Suche auf ?q= synchronisieren. Bewusst history.replaceState() statt router.push/replace():
+  // page.tsx/[...category]/page.tsx nutzen cache: 'no-store' für den Supabase-Fetch — eine
+  // Router-Navigation würde bei jedem Tastendruck einen neuen Server-Fetch auslösen, obwohl
+  // die Suche rein clientseitig in HomeClient (filteredMarkets) läuft. replaceState ändert
+  // nur die sichtbare URL, ohne Next.js' Routing/Server-Fetch zu triggern.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const url = new URL(window.location.href)
+    if (searchQuery) {
+      url.searchParams.set('q', searchQuery)
+    } else {
+      url.searchParams.delete('q')
+    }
+    window.history.replaceState(null, '', url.pathname + url.search)
+  }, [searchQuery])
 
   const checkWins = useCallback(async (userId: string) => {
     const since = new Date(Date.now() - 10 * 60 * 1000).toISOString()
