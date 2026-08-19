@@ -7,6 +7,15 @@ const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 const ADMIN_ID     = 'b75edaf4-141d-41f1-9555-887a8ddbac58'
 
+// Session-Token aus localStorage lesen (gleiche Konvention wie MarketPageClient.tsx / ProfileView.tsx)
+function getToken(): string | null {
+  try {
+    const saved = localStorage.getItem('mobius_session')
+    if (!saved) return null
+    return JSON.parse(saved).access_token ?? null
+  } catch { return null }
+}
+
 async function dbGet(table: string, params: string) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}`, {
     headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
@@ -16,11 +25,12 @@ async function dbGet(table: string, params: string) {
 }
 
 async function dbPatch(table: string, params: string, body: object) {
+  const token = getToken()
   await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}`, {
     method: 'PATCH',
     headers: {
       apikey: SUPABASE_KEY,
-      Authorization: `Bearer ${SUPABASE_KEY}`,
+      Authorization: `Bearer ${token ?? SUPABASE_KEY}`,
       'Content-Type': 'application/json',
       Prefer: 'return=minimal',
     },
