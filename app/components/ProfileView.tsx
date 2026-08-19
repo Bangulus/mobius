@@ -9,6 +9,15 @@ import { BADGES } from '@/lib/badges';
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
+// Session-Token aus localStorage lesen (gleiche Konvention wie MarketPageClient.tsx)
+function getToken(): string | null {
+  try {
+    const saved = localStorage.getItem('mobius_session');
+    if (!saved) return null;
+    return JSON.parse(saved).access_token ?? null;
+  } catch { return null; }
+}
+
 async function dbGet(table: string, params: string) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}`, {
     headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
@@ -18,11 +27,12 @@ async function dbGet(table: string, params: string) {
 }
 
 async function dbPatch(table: string, params: string, body: object) {
+  const token = getToken();
   await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}`, {
     method: 'PATCH',
     headers: {
       apikey: SUPABASE_KEY,
-      Authorization: `Bearer ${SUPABASE_KEY}`,
+      Authorization: `Bearer ${token ?? SUPABASE_KEY}`,
       'Content-Type': 'application/json',
       Prefer: 'return=minimal',
     },
@@ -764,9 +774,10 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, x
   async function saveUsername() {
     if (!newUsername.trim()) return;
     setSavingUsername(true);
+    const token = getToken();
     const res = await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${userId}`, {
       method: 'PATCH',
-      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${token ?? SUPABASE_KEY}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
       body: JSON.stringify({ username: newUsername.trim() }),
     });
     if (res.ok) { onUsernameChange(newUsername.trim()); setProfileMessage('Gespeichert ✓'); setEditingUsername(false); }
@@ -785,9 +796,10 @@ export default function ProfileView({ userId, displayName, avatarUrl, balance, x
       const res = await fetch('/api/upload-avatar', { method: 'POST', body: formData });
       if (res.ok) {
         const { url } = await res.json();
+        const token = getToken();
         await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${userId}`, {
           method: 'PATCH',
-          headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+          headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${token ?? SUPABASE_KEY}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
           body: JSON.stringify({ avatar_url: url }),
         });
         onAvatarChange(url);
