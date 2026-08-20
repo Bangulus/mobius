@@ -138,6 +138,7 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
 
   const [cronLogs, setCronLogs]           = useState<any[]>([]);
   const [cronLogsLoading, setCronLogsLoading] = useState(false);
+  const [cronLogsError, setCronLogsError] = useState('');
 
   useEffect(() => {
     const interval = setInterval(() => setNow(Date.now()), 1000);
@@ -211,11 +212,29 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
     setDashLoading(false);
   }
 
+  // FIX (20.08.2026): try/catch/finally ergänzt, damit ein Fehler (Netzwerk, Exception,
+  // fehlerhafte Response) nicht mehr zu einem endlosen "Lädt…" führt. Zusätzlich wird der
+  // tatsächliche Fehlertext angezeigt statt eines stillen leeren Zustands, und die Antwort
+  // wird auf ein echtes Array geprüft, bevor sie in cronLogs übernommen wird.
   async function loadCronLogs() {
     setCronLogsLoading(true);
-    const { ok, data } = await callAdmin('get_cron_logs');
-    setCronLogs(ok ? (data?.logs ?? []) : []);
-    setCronLogsLoading(false);
+    setCronLogsError('');
+    try {
+      const { ok, data } = await callAdmin('get_cron_logs');
+      if (ok && Array.isArray(data?.logs)) {
+        setCronLogs(data.logs);
+      } else {
+        setCronLogs([]);
+        setCronLogsError(
+          typeof data?.error === 'string' ? data.error : `Unerwartete Antwort: ${JSON.stringify(data).slice(0, 300)}`
+        );
+      }
+    } catch (err: any) {
+      setCronLogs([]);
+      setCronLogsError(err?.message ? String(err.message) : 'Netzwerkfehler beim Laden der Cron-Logs.');
+    } finally {
+      setCronLogsLoading(false);
+    }
   }
 
   async function openProgressionEditor(uid: string) {
@@ -569,6 +588,10 @@ export default function AdminView({ userId, openMarkets, onMarketResolved }: Pro
           </div>
           {cronLogsLoading ? (
             <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Lädt…</div>
+          ) : cronLogsError ? (
+            <div style={{ padding: '10px 14px', borderRadius: 8, background: 'rgba(220,38,38,0.1)', color: '#dc2626', fontSize: 13, fontWeight: 600 }}>
+              Fehler: {cronLogsError}
+            </div>
           ) : cronLogs.length === 0 ? (
             <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Noch keine Logs.</div>
           ) : (
