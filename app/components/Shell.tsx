@@ -33,6 +33,9 @@ async function supabaseAuth(path: string, body: object) {
   return res.json()
 }
 
+// DIAGNOSE-FIX: prüft jetzt res.ok statt den Response-Status zu ignorieren.
+// Gibt { ok, status, data } zurück, damit der Aufrufer echte Fehler (z. B. RLS-Verstoß)
+// sehen und anzeigen kann, statt sie stillschweigend zu verschlucken.
 async function dbPost(table: string, body: object, token: string) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
     method: 'POST',
@@ -44,7 +47,8 @@ async function dbPost(table: string, body: object, token: string) {
     },
     body: JSON.stringify(body),
   })
-  return res.json()
+  const data = await res.json()
+  return { ok: res.ok, status: res.status, data }
 }
 
 function calcProb(qYes: number, qNo: number, b: number): number {
@@ -419,12 +423,27 @@ export default function Shell({ children }: { children: ReactNode }) {
     const existing = await dbGet('users', `username=eq.${encodeURIComponent(authUsername.trim())}&select=id`)
     if (existing?.length > 0) { setAuthLoading(false); setAuthError('Benutzername bereits vergeben.'); return }
     const res = await supabaseAuth('signup', { email: authEmail.trim(), password: authPassword })
-    setAuthLoading(false)
-    if (res.error) { setAuthError(res.error.message ?? 'Registrierung fehlgeschlagen.'); return }
     const userId = res.user?.id
     const token = res.access_token
-    if (!userId) { setAuthError('Bitte bestätige deine E-Mail und melde dich dann an.'); return }
-    await dbPost('users', { id: userId, username: authUsername.trim().slice(0, 50), balance: 1000 }, token ?? SUPABASE_KEY)
+    if (res.error || !userId) {
+      setAuthLoading(false)
+      setAuthError(res.error?.message ?? 'Registrierung fehlgeschlagen (kein User).')
+      return
+    }
+    // DIAGNOSE: fehlt hier der access_token, kann der folgende dbPost nur mit dem
+    // anon key laufen — die RLS-Policy "auth.uid() = id" schlägt dann fehl, ohne
+    // dass es vorher sichtbar wäre.
+    if (!token) {
+      setAuthLoading(false)
+      setAuthError('Kein Access Token nach Signup erhalten. Supabase-Response: ' + JSON.stringify(res).slice(0, 300))
+      return
+    }
+    const insertRes = await dbPost('users', { id: userId, username: authUsername.trim().slice(0, 50), balance: 1000 }, token)
+    setAuthLoading(false)
+    if (!insertRes.ok) {
+      setAuthError(`DB-Insert fehlgeschlagen (Status ${insertRes.status}): ${JSON.stringify(insertRes.data).slice(0, 300)}`)
+      return
+    }
     const userData = await dbGet('users', `id=eq.${userId}&select=*`)
     if (userData?.[0]) {
       setUser(userData[0]); userRef.current = userData[0]
