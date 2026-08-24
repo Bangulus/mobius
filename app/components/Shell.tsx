@@ -438,7 +438,7 @@ export default function Shell({ children }: { children: ReactNode }) {
       setAuthError('Kein Access Token nach Signup erhalten. Supabase-Response: ' + JSON.stringify(res).slice(0, 300))
       return
     }
-    const insertRes = await dbPost('users', { id: userId, username: authUsername.trim().slice(0, 50), balance: 1000 }, token)
+    const insertRes = await dbPost('users', { id: userId, email: authEmail.trim(), username: authUsername.trim().slice(0, 50), balance: 1000 }, token)
     setAuthLoading(false)
     if (!insertRes.ok) {
       setAuthError(`DB-Insert fehlgeschlagen (Status ${insertRes.status}): ${JSON.stringify(insertRes.data).slice(0, 300)}`)
