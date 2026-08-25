@@ -16,8 +16,10 @@ import { Icon, PillIcon } from './Icons'
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
-// Puffer, ab dem proaktiv erneuert wird, bevor der access_token wirklich abläuft.
-const REFRESH_BUFFER_MS = 5 * 60 * 1000
+// TEST-MODUS: künstlich hochgesetzt auf 55 Min, damit der Refresh beim ersten
+// 60s-Check sofort auslöst (Token ist ja frisch, läuft normal erst in ~60 Min ab).
+// Nach erfolgreichem Test zurück auf 5 * 60 * 1000 setzen.
+const REFRESH_BUFFER_MS = 55 * 60 * 1000
 // Intervall, in dem geprüft wird, ob ein Refresh fällig ist.
 const REFRESH_CHECK_INTERVAL_MS = 60 * 1000
 
@@ -265,6 +267,9 @@ export default function Shell({ children }: { children: ReactNode }) {
   // Verhindert parallele Refresh-Anfragen (z. B. wenn Mount-Check und Interval-Check
   // gleichzeitig feuern).
   const refreshInFlightRef                    = useRef(false)
+  // TEST-MODUS: Zeitstempel der letzten erfolgreichen Token-Erneuerung, nur für die
+  // sichtbare Debug-Anzeige in der Sidebar. Danach wieder entfernen.
+  const [lastRefreshAt, setLastRefreshAt]     = useState<string | null>(null)
 
   useEffect(() => {
     try {
@@ -321,6 +326,8 @@ export default function Shell({ children }: { children: ReactNode }) {
         expires_at: expiresAt,
       }
       localStorage.setItem('mobius_session', JSON.stringify(nextSession))
+      // TEST-MODUS: Debug-Zeitstempel setzen, danach wieder entfernen.
+      setLastRefreshAt(new Date().toLocaleTimeString('de'))
       return res.access_token
     } finally {
       refreshInFlightRef.current = false
@@ -745,7 +752,7 @@ export default function Shell({ children }: { children: ReactNode }) {
 
         {/* Desktop Sidebar */}
         <aside style={{ width: 220, flexShrink: 0, borderRight: '1px solid var(--border)', padding: '20px 0', position: 'sticky', top: 'var(--nav-height, 56px)', height: 'calc(100vh - var(--nav-height, 56px))', overflowY: 'auto', background: 'var(--bg)' }}>
-          {user && (<div style={{ padding: '0 16px 16px', borderBottom: '1px solid var(--border)', marginBottom: 12 }}><div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Guthaben</div><div style={{ fontSize: 20, fontWeight: 800, color: 'var(--text)' }}>{user.balance.toLocaleString('de')} ₫</div></div>)}
+          {user && (<div style={{ padding: '0 16px 16px', borderBottom: '1px solid var(--border)', marginBottom: 12 }}><div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Guthaben</div><div style={{ fontSize: 20, fontWeight: 800, color: 'var(--text)' }}>{user.balance.toLocaleString('de')} ₫</div>{/* TEST-MODUS: danach wieder entfernen */}<div style={{ fontSize: 10, color: 'var(--text-subtle)', marginTop: 6 }}>Token-Refresh: {lastRefreshAt ?? 'noch keiner'}</div></div>)}
           <div style={{ padding: '0 8px' }}>
             {NAV_ITEMS.map(item => (<NavItem key={item.id} item={item} pathname={pathname} expandedNav={expandedNav} onNavigate={handleNavClick} onToggle={toggleNav} depth={0} />))}
           </div>
