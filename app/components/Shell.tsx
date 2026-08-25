@@ -16,6 +16,18 @@ import { Icon, PillIcon } from './Icons'
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
+// Puffer, ab dem proaktiv erneuert wird, bevor der access_token wirklich abläuft.
+const REFRESH_BUFFER_MS = 5 * 60 * 1000
+// Intervall, in dem geprüft wird, ob ein Refresh fällig ist.
+const REFRESH_CHECK_INTERVAL_MS = 60 * 1000
+
+interface StoredSession {
+  access_token: string
+  refresh_token?: string
+  user_id: string
+  expires_at?: number
+}
+
 async function dbGet(table: string, params: string) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}`, {
     headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
@@ -55,6 +67,18 @@ function calcProb(qYes: number, qNo: number, b: number): number {
   const eYes = Math.exp(qYes / b)
   const eNo  = Math.exp(qNo  / b)
   return Math.round((eYes / (eYes + eNo)) * 100)
+}
+
+// Liest die aktuell gespeicherte Session aus localStorage. Zentral genutzt von
+// refreshSession() und dem Mount-Restore-Effect, um Duplikation zu vermeiden.
+function readStoredSession(): StoredSession | null {
+  try {
+    const saved = localStorage.getItem('mobius_session')
+    if (!saved) return null
+    const parsed = JSON.parse(saved)
+    if (!parsed?.access_token || !parsed?.user_id) return null
+    return parsed as StoredSession
+  } catch { return null }
 }
 
 interface LeaderboardEntry {
@@ -238,6 +262,9 @@ export default function Shell({ children }: { children: ReactNode }) {
 
   const shownToastsRef                        = useRef<Set<string>>(new Set())
   const userRef                               = useRef<User | null>(null)
+  // Verhindert parallele Refresh-Anfragen (z. B. wenn Mount-Check und Interval-Check
+  // gleichzeitig feuern).
+  const refreshInFlightRef                    = useRef(false)
 
   useEffect(() => {
     try {
@@ -254,18 +281,78 @@ export default function Shell({ children }: { children: ReactNode }) {
     localStorage.setItem('mobius_darkmode', String(darkMode))
   }, [darkMode])
 
-  useEffect(() => {
-    const saved = localStorage.getItem('mobius_session')
-    if (!saved) return
-    try {
-      const session = JSON.parse(saved)
-      if (session?.access_token && session?.user_id) {
-        dbGet('users', `id=eq.${session.user_id}&select=*`).then((data) => {
-          if (data?.[0]) { setUser(data[0]); userRef.current = data[0] }
-        })
-      }
-    } catch {}
+  const logout = useCallback(() => {
+    setUser(null); userRef.current = null
+    localStorage.removeItem('mobius_session')
+    setView('markets'); setMobileTab('markets'); setWinToasts([]); shownToastsRef.current = new Set()
+    setLoginBonusToast(null)
   }, [])
+
+  const resetAuthForm = useCallback(() => {
+    setAuthEmail(''); setAuthPassword(''); setAuthUsername(''); setAuthError('')
+  }, [])
+
+  const openAuth = useCallback((mode: AuthMode) => {
+    resetAuthForm(); setAuthMode(mode); setShowAuth(true)
+  }, [resetAuthForm])
+
+  // Erneuert den access_token über den gespeicherten refresh_token. Gibt bei Erfolg
+  // den neuen access_token zurück, sonst null. Bei ungültigem/abgelaufenem
+  // refresh_token wird der User ausgeloggt und das Auth-Modal geöffnet, da hier
+  // nichts mehr automatisch reparierbar ist (Variante A, mit Nutzer abgestimmt).
+  const refreshSession = useCallback(async (): Promise<string | null> => {
+    if (refreshInFlightRef.current) return null
+    const session = readStoredSession()
+    if (!session?.refresh_token) return null
+    refreshInFlightRef.current = true
+    try {
+      const res = await supabaseAuth('token?grant_type=refresh_token', { refresh_token: session.refresh_token })
+      if (res.error || !res.access_token) {
+        logout()
+        openAuth('login')
+        setAuthError('Sitzung abgelaufen — bitte erneut anmelden.')
+        return null
+      }
+      const expiresAt = Date.now() + (res.expires_in ?? 3600) * 1000
+      const nextSession: StoredSession = {
+        access_token: res.access_token,
+        refresh_token: res.refresh_token ?? session.refresh_token,
+        user_id: session.user_id,
+        expires_at: expiresAt,
+      }
+      localStorage.setItem('mobius_session', JSON.stringify(nextSession))
+      return res.access_token
+    } finally {
+      refreshInFlightRef.current = false
+    }
+  }, [logout, openAuth])
+
+  useEffect(() => {
+    const session = readStoredSession()
+    if (!session) return
+    dbGet('users', `id=eq.${session.user_id}&select=*`).then((data) => {
+      if (data?.[0]) { setUser(data[0]); userRef.current = data[0] }
+    })
+    // Falls der Token beim Reload schon abgelaufen oder kurz davor ist, sofort
+    // erneuern statt bis zum ersten Interval-Check (60s) zu warten.
+    if (session.expires_at && session.expires_at - Date.now() < REFRESH_BUFFER_MS) {
+      refreshSession()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Proaktiver Refresh-Timer: läuft nur während ein User eingeloggt ist, prüft
+  // minütlich ob der access_token bald abläuft und erneuert ihn dann im Voraus.
+  useEffect(() => {
+    if (!user?.id) return
+    const check = () => {
+      const session = readStoredSession()
+      if (!session?.expires_at) return
+      if (session.expires_at - Date.now() < REFRESH_BUFFER_MS) refreshSession()
+    }
+    const id = setInterval(check, REFRESH_CHECK_INTERVAL_MS)
+    return () => clearInterval(id)
+  }, [user?.id, refreshSession])
 
   const loadLeaderboard = useCallback(async () => {
     const data = await dbGet('users', 'select=id,username,balance,avatar_url,title&order=balance.desc&limit=10')
@@ -393,7 +480,8 @@ export default function Shell({ children }: { children: ReactNode }) {
     const userData = await dbGet('users', `id=eq.${userId}&select=*`)
     if (userData?.[0]) {
       setUser(userData[0]); userRef.current = userData[0]
-      localStorage.setItem('mobius_session', JSON.stringify({ access_token: res.access_token, user_id: userId }))
+      const expiresAt = Date.now() + (res.expires_in ?? 3600) * 1000
+      localStorage.setItem('mobius_session', JSON.stringify({ access_token: res.access_token, refresh_token: res.refresh_token, user_id: userId, expires_at: expiresAt }))
       fetch('/api/login-xp', { method: 'POST', headers: { Authorization: `Bearer ${res.access_token}` } })
         .then(r => r.json())
         .then((data) => {
@@ -447,20 +535,11 @@ export default function Shell({ children }: { children: ReactNode }) {
     const userData = await dbGet('users', `id=eq.${userId}&select=*`)
     if (userData?.[0]) {
       setUser(userData[0]); userRef.current = userData[0]
-      localStorage.setItem('mobius_session', JSON.stringify({ access_token: token, user_id: userId }))
+      const expiresAt = Date.now() + (res.expires_in ?? 3600) * 1000
+      localStorage.setItem('mobius_session', JSON.stringify({ access_token: token, refresh_token: res.refresh_token, user_id: userId, expires_at: expiresAt }))
       setShowAuth(false); resetAuthForm(); loadLeaderboard()
     } else { setAuthError('Konto erstellt! Bitte melde dich jetzt an.') }
   }
-
-  const logout = () => {
-    setUser(null); userRef.current = null
-    localStorage.removeItem('mobius_session')
-    setView('markets'); setMobileTab('markets'); setWinToasts([]); shownToastsRef.current = new Set()
-    setLoginBonusToast(null)
-  }
-
-  const resetAuthForm = () => { setAuthEmail(''); setAuthPassword(''); setAuthUsername(''); setAuthError('') }
-  const openAuth = (mode: AuthMode) => { resetAuthForm(); setAuthMode(mode); setShowAuth(true) }
 
   // Reset von view/mobileTab/searchQuery bei Kategorie-Navigation — läuft jetzt über
   // echte <Link>-Klicks (siehe NavItem/MOBILE_CAT_PILLS/Logo weiter unten), die diese
