@@ -293,6 +293,10 @@ export default function Shell({ children }: { children: ReactNode }) {
   }, [])
 
   const openAuth = useCallback((mode: AuthMode) => {
+    // Fix: Wochenranking-Modal muss geschlossen werden, sonst stacken beide Modals
+    // übereinander (auf Mobile landet dadurch der Anmelden-Button außerhalb des
+    // sichtbaren Bereichs).
+    setShowLeaderboard(false)
     resetAuthForm(); setAuthMode(mode); setShowAuth(true)
   }, [resetAuthForm])
 
@@ -555,7 +559,7 @@ export default function Shell({ children }: { children: ReactNode }) {
     setMobileTab(tab)
     if (tab === 'markets') setView('markets')
     else if (tab === 'portfolio') setView('portfolio')
-    else if (tab === 'ranking') { loadWeeklyBoard(); setShowLeaderboard(true) }
+    else if (tab === 'ranking') { setShowAuth(false); loadWeeklyBoard(); setShowLeaderboard(true) }
     else if (tab === 'profil') {
       if (user) setView('profil')
       else openAuth('login')
@@ -715,6 +719,11 @@ export default function Shell({ children }: { children: ReactNode }) {
             <>
               <button className="nav-pill" onClick={() => openAuth('login')}>Anmelden</button>
               <button className="nav-pill accent" onClick={() => openAuth('register')}>Registrieren</button>
+              {/* Mobile-only: Desktop-Pills werden per CSS ausgeblendet, sonst gab es
+                  oben rechts gar keinen sichtbaren Login-Einstieg mehr. */}
+              <button className="nav-login-mobile" onClick={() => openAuth('login')} aria-label="Anmelden">
+                <Icon name="user" size={18} />
+              </button>
             </>
           )}
           <button className="nav-icon-btn" onClick={() => setDarkMode(!darkMode)}><Icon name={darkMode ? 'sun' : 'moon'} size={17} /></button>
