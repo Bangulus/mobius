@@ -168,10 +168,15 @@ async function fetchFinancePrice(symbol: string): Promise<number | null> {
   } catch { return null }
 }
 
+// Wie viele Minuten Preisverlauf VOR Marktstart im Chart angezeigt werden.
+// Datenquelle: price_ticks (1 Tick/Minute/Coin, geschrieben von cron-frequent).
+const PRE_MARKET_LOOKBACK_MS = 10 * 60 * 1000
+
 function drawCryptoChart(
   canvas: HTMLCanvasElement,
   history: PricePoint[],
   targetPrice: number,
+  chartStartMs: number,
   marketStartMs: number,
   marketEndMs: number,
 ) {
@@ -185,8 +190,8 @@ function drawCryptoChart(
   const allVals  = [...visiblePrices, targetPrice]
   const minP     = Math.min(Math.min(...allVals), midPrice - spread)
   const maxP     = Math.max(Math.max(...allVals), midPrice + spread)
-  const duration = marketEndMs - marketStartMs
-  const xScale   = (ms: number) => padL + ((Math.min(ms, marketEndMs) - marketStartMs) / duration) * (W - padL - padR)
+  const duration = marketEndMs - chartStartMs
+  const xScale   = (ms: number) => padL + ((Math.min(ms, marketEndMs) - chartStartMs) / duration) * (W - padL - padR)
   const yScale   = (p: number)  => padT + ((maxP - p) / (maxP - minP)) * (H - padT - padB)
 
   ctx.clearRect(0, 0, W, H)
@@ -197,6 +202,15 @@ function drawCryptoChart(
   for (let i = 0; i <= 4; i++) {
     const y = yScale(minP + (maxP - minP) * (i / 4))
     ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W - padR, y); ctx.stroke()
+  }
+
+  // Markt-Start-Markierung — nur sichtbar, wenn Vorlauf-Daten vorhanden sind
+  if (chartStartMs < marketStartMs) {
+    const startX = xScale(marketStartMs)
+    ctx.beginPath(); ctx.setLineDash([3, 3]); ctx.strokeStyle = '#cbd5e1'; ctx.lineWidth = 1
+    ctx.moveTo(startX, padT); ctx.lineTo(startX, H - padB); ctx.stroke(); ctx.setLineDash([])
+    ctx.fillStyle = '#94a3b8'; ctx.font = '8px Inter, sans-serif'; ctx.textAlign = 'center'
+    ctx.fillText('Start', startX, padT - 4)
   }
 
   const targetY = yScale(targetPrice)
@@ -232,7 +246,7 @@ function drawCryptoChart(
   }
   ctx.textAlign = 'center'
   for (let i = 0; i <= 3; i++) {
-    const ms = marketStartMs + (duration * i / 3)
+    const ms = chartStartMs + (duration * i / 3)
     const d  = new Date(ms)
     ctx.fillText(`${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`, xScale(ms), H - padB + 14)
   }
@@ -314,7 +328,7 @@ function NewsSection({ items }: { items: NewsItem[] }) {
         <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>Relevante News</div>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {items.slice(0, 5).map(n => (<a
+        {items.slice(0, 5).map(n => (
           
             key={n.id}
             href={n.link}
@@ -715,6 +729,7 @@ export default function MarketPageClient() {
   const chartInstance                   = useRef<unknown>(null)
   const [livePrice, setLivePrice]       = useState<number | null>(null)
   const [priceHistory, setPriceHistory] = useState<PricePoint[]>([])
+  const [preMarketHistory, setPreMarketHistory] = useState<PricePoint[]>([])
   const cryptoCanvasRef                 = useRef<HTMLCanvasElement>(null)
   const cryptoWrapRef                   = useRef<HTMLDivElement>(null)
   const priceHistoryRef                 = useRef<PricePoint[]>([])
@@ -817,6 +832,26 @@ export default function MarketPageClient() {
       setMatchedNews(matchNews(items ?? [], keywords))
     })
   }, [market?.id, market?.category, market?.question])
+
+  // Vorlauf-Preisdaten für den Krypto-Chart (10 Min VOR Marktstart), aus price_ticks.
+  // Wird pro Markt einmalig geladen — price_ticks wächst nach dem Laden nicht mehr rückwirkend,
+  // daher genügt ein einmaliger Fetch statt Polling.
+  useEffect(() => {
+    if (!market?.is_auto || !market?.coin || !market?.start_price || !market?.closes_at) { setPreMarketHistory([]); return }
+    if (market?.match_id) { setPreMarketHistory([]); return }
+    if (market?.category === 'finance' || market?.category === 'Finanzen') { setPreMarketHistory([]); return }
+    if (isFormula1 || isWeather) { setPreMarketHistory([]); return }
+
+    const marketStartMs = parseUTC(market.closes_at).getTime() - 3 * 60 * 1000
+    const fromMs = marketStartMs - PRE_MARKET_LOOKBACK_MS
+    dbGet(
+      'price_ticks',
+      `coin=eq.${market.coin}&created_at=gte.${new Date(fromMs).toISOString()}&created_at=lt.${new Date(marketStartMs).toISOString()}&select=price,created_at&order=created_at.asc`
+    ).then((rows: { price: number; created_at: string }[]) => {
+      if (!Array.isArray(rows)) { setPreMarketHistory([]); return }
+      setPreMarketHistory(rows.map(r => ({ t: parseUTC(r.created_at).getTime(), price: r.price })))
+    }).catch(() => setPreMarketHistory([]))
+  }, [market?.id, market?.is_auto, market?.coin, market?.start_price, market?.closes_at, market?.match_id, market?.category, isFormula1, isWeather])
 
   useEffect(() => {
     if (!market?.resolved || toastShownRef.current) return
@@ -952,10 +987,14 @@ export default function MarketPageClient() {
     const marketDurationMs = 3 * 60 * 1000
     const marketStartMs    = marketEndMs - marketDurationMs
     const anchorPoint: PricePoint = { t: marketStartMs, price: market.start_price }
-    const fullHistory = priceHistory.length > 0 ? [anchorPoint, ...priceHistory.filter(p => p.t > marketStartMs)] : [anchorPoint]
+    const preMarket    = preMarketHistory.filter(p => p.t < marketStartMs)
+    const chartStartMs = preMarket.length > 0 ? preMarket[0].t : marketStartMs
+    const fullHistory  = priceHistory.length > 0
+      ? [...preMarket, anchorPoint, ...priceHistory.filter(p => p.t > marketStartMs)]
+      : [...preMarket, anchorPoint]
     const chartEnd = market.resolved ? marketEndMs : Date.now()
-    drawCryptoChart(canvas, fullHistory, market.start_price, marketStartMs, chartEnd)
-  }, [priceHistory, market?.is_auto, market?.start_price, market?.closes_at, market?.resolved, market?.match_id, market?.category, isFormula1, isWeather])
+    drawCryptoChart(canvas, fullHistory, market.start_price, chartStartMs, marketStartMs, chartEnd)
+  }, [priceHistory, preMarketHistory, market?.is_auto, market?.start_price, market?.closes_at, market?.resolved, market?.match_id, market?.category, isFormula1, isWeather])
 
   useEffect(() => {
     if (!market?.closes_at || !market?.coin || !market?.id) return
