@@ -329,27 +329,21 @@ function NewsSection({ items }: { items: NewsItem[] }) {
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {items.slice(0, 5).map(n => {
-          const link = n.link
+          const linkStyle = {
+            display: 'block',
+            padding: '10px 12px',
+            borderRadius: 8,
+            border: '1px solid var(--border)',
+            background: 'var(--surface)',
+            textDecoration: 'none',
+            color: 'var(--text)',
+            fontSize: 13,
+            fontWeight: 500,
+            lineHeight: 1.4,
+            transition: 'background 0.1s',
+          }
           return (
-            
-              key={n.id}
-              href={link}
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{
-                display: 'block',
-                padding: '10px 12px',
-                borderRadius: 8,
-                border: '1px solid var(--border)',
-                background: 'var(--surface)',
-                textDecoration: 'none',
-                color: 'var(--text)',
-                fontSize: 13,
-                fontWeight: 500,
-                lineHeight: 1.4,
-                transition: 'background 0.1s',
-              }}
-            >
+            <a key={n.id} href={n.link} target="_blank" rel="noopener noreferrer" style={linkStyle}>
               {n.title}
               <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
                 {new Date(n.published_at).toLocaleDateString('de', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
