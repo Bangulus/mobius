@@ -22,6 +22,14 @@ async function cleanupZombieMarkets() {
   )
 }
 
+async function getCoinPrice(coin: string): Promise<number | null> {
+  try {
+    const res  = await fetch(`https://api.coinbase.com/v2/prices/${coin}-USD/spot`, { cache: 'no-store' })
+    const data = await res.json()
+    return parseFloat(data.data.amount)
+  } catch { return null }
+}
+
 function isAuthorized(request: Request): boolean {
   const url         = new URL(request.url)
   const querySecret = url.searchParams.get('secret')
@@ -70,6 +78,32 @@ export async function GET(request: Request) {
     results.cryptoResolve = await cryptoResolve.json()
   } catch (e) {
     results.cryptoResolveError = String(e)
+  }
+
+  // --- PRICE TICKS (Krypto-Chart-Historie) ---
+  // Schreibt 1 Preis-Tick pro Coin und Lauf (~minütlich) in price_ticks.
+  // Dient dem Chart auf der Marktdetailseite als Preisverlauf VOR Marktstart.
+  try {
+    const tickRows: { coin: string; price: number }[] = []
+    for (const coin of COINS) {
+      const price = await getCoinPrice(coin)
+      if (price !== null) tickRows.push({ coin, price })
+    }
+    if (tickRows.length > 0) {
+      await fetch(`${SUPABASE_URL}/rest/v1/price_ticks`, {
+        method: 'POST',
+        headers: {
+          apikey:         SERVICE_KEY,
+          Authorization:  `Bearer ${SERVICE_KEY}`,
+          'Content-Type': 'application/json',
+          Prefer:         'return=minimal',
+        },
+        body: JSON.stringify(tickRows),
+      })
+    }
+    results.priceTicks = { written: tickRows.length }
+  } catch (e) {
+    results.priceTicksError = String(e)
   }
 
   // --- WETTER SICHERHEITSNETZ ---
