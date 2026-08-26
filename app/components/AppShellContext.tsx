@@ -1,9 +1,6 @@
 'use client'
-
-import { createContext, useContext, Dispatch, SetStateAction } from 'react'
-
+import { createContext, useContext, Dispatch, SetStateAction, ReactNode } from 'react'
 export const ADMIN_ID = 'b75edaf4-141d-41f1-9555-887a8ddbac58'
-
 export interface Market {
   id: string
   question: string
@@ -27,7 +24,6 @@ export interface Market {
   start_price?: number
   end_price?: number
 }
-
 export interface User {
   id: string
   username: string
@@ -40,11 +36,9 @@ export interface User {
   peak_title?: string
   created_at?: string
 }
-
 export type ViewType = 'markets' | 'portfolio' | 'admin' | 'profil'
 export type MobileTab = 'markets' | 'portfolio' | 'ranking' | 'profil'
 export type AuthMode = 'login' | 'register'
-
 export interface AppShellContextValue {
   user: User | null
   setUser: Dispatch<SetStateAction<User | null>>
@@ -59,10 +53,12 @@ export interface AppShellContextValue {
   setSearchQuery: Dispatch<SetStateAction<string>>
   selectCategory: (id: string) => void
   openAuth: (mode: AuthMode) => void
+  // Seiten-spezifischer Slot in der globalen Nav-Bar (nav-left, neben dem Logo).
+  // Genutzt z. B. von MarketPageClient für den Zurück-Button. null = nichts anzeigen.
+  pageAction: ReactNode
+  setPageAction: Dispatch<SetStateAction<ReactNode>>
 }
-
 export const AppShellContext = createContext<AppShellContextValue | null>(null)
-
 export function useAppShell(): AppShellContextValue {
   const ctx = useContext(AppShellContext)
   if (!ctx) {
