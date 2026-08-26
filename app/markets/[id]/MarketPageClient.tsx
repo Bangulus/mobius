@@ -328,32 +328,35 @@ function NewsSection({ items }: { items: NewsItem[] }) {
         <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>Relevante News</div>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {items.slice(0, 5).map(n => (
-          
-            key={n.id}
-            href={n.link}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{
-              display: 'block',
-              padding: '10px 12px',
-              borderRadius: 8,
-              border: '1px solid var(--border)',
-              background: 'var(--surface)',
-              textDecoration: 'none',
-              color: 'var(--text)',
-              fontSize: 13,
-              fontWeight: 500,
-              lineHeight: 1.4,
-              transition: 'background 0.1s',
-            }}
-          >
-            {n.title}
-            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
-              {new Date(n.published_at).toLocaleDateString('de', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
-            </div>
-          </a>
-        ))}
+        {items.slice(0, 5).map(n => {
+          const link = n.link
+          return (
+            
+              key={n.id}
+              href={link}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: 'block',
+                padding: '10px 12px',
+                borderRadius: 8,
+                border: '1px solid var(--border)',
+                background: 'var(--surface)',
+                textDecoration: 'none',
+                color: 'var(--text)',
+                fontSize: 13,
+                fontWeight: 500,
+                lineHeight: 1.4,
+                transition: 'background 0.1s',
+              }}
+            >
+              {n.title}
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+                {new Date(n.published_at).toLocaleDateString('de', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+              </div>
+            </a>
+          )
+        })}
       </div>
     </div>
   )
