@@ -242,6 +242,15 @@ export default function HomeClient({ initialMarkets }: { initialCategory?: strin
   }
 
   const filteredMarkets = markets.filter((m) => {
+    const matchSearch = searchQuery === '' ||
+      (m.question ?? '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (m.short_label ?? '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (m.display_group ?? '').toLowerCase().includes(searchQuery.toLowerCase())
+
+    // Bei aktiver Suche über alle offenen Märkte suchen, unabhängig von der
+    // gerade gewählten Kategorie-Tab (Kategorie-Filter wird übersprungen).
+    if (searchQuery !== '') return matchSearch
+
     let matchCat = false
     if (category === 'Politik-Deutschland') {
       matchCat = isPolitikDeutschland(m)
@@ -272,11 +281,7 @@ export default function HomeClient({ initialMarkets }: { initialCategory?: strin
     } else {
       matchCat = m.category === category || m.category === category.toLowerCase()
     }
-    const matchSearch = searchQuery === '' ||
-      (m.question ?? '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (m.short_label ?? '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (m.display_group ?? '').toLowerCase().includes(searchQuery.toLowerCase())
-    return matchCat && matchSearch
+    return matchCat
   })
 
   const categoryLabel: Record<string, string> = {
