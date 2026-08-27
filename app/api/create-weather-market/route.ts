@@ -68,11 +68,9 @@ async function run() {
 
       const question = `Wird es in ${city.label} heute wärmer als gestern? (${todayMax}°C)`
 
-      const description = `Löst mit JA auf, wenn das von Open-Meteo erfasste Tagesmaximum (temperature_2m_max) für ${city.label} am heutigen Tag höher ist als das gestrige Maximum von ${todayMax}°C.
+      const description = `Dieser Markt wird mit „Ja" aufgelöst, wenn das von Open-Meteo erfasste Tagesmaximum (temperature_2m_max) für ${city.label} am heutigen Tag höher ist als das gestrige Maximum von ${todayMax}°C. Andernfalls wird dieser Markt mit „Nein" aufgelöst.
 
-Maßgeblich ist ausschließlich der Wert der Open-Meteo Archive API für die Koordinaten ${city.latitude}, ${city.longitude} (Timezone: ${city.timezone}). Andere Wetterdienste, eigene Messungen oder abweichende Quellen sind irrelevant.
-
-Auflösung erfolgt automatisch durch den Möbius-Cron nach Marktschluss.`
+Die maßgebliche Quelle für die Auflösung dieses Marktes ist die Open-Meteo Archive API für die Koordinaten ${city.latitude}, ${city.longitude} (Timezone: ${city.timezone}), aus der Möbius auch die zugrunde liegenden Wetterdaten für die Markterstellung und -auflösung bezieht. Maßgeblich ist ausschließlich der Wert laut Open-Meteo, nicht der Wert anderer Wetterdienste, eigener Messungen oder abweichender Quellen.`
 
       const ok = await dbPost('markets', {
         question,
