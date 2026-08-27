@@ -260,6 +260,11 @@ export default function Shell({ children }: { children: ReactNode }) {
   const [loginBonusToast, setLoginBonusToast] = useState<LoginBonusToast | null>(null)
   const [expandedNav, setExpandedNav]         = useState<Record<string, boolean>>({ Sport: true, Fußball: true, Politik: true })
 
+  // Seiten-spezifischer Aktions-Slot in nav-left (z. B. der Zurück-Button auf der
+  // Marktdetailseite). Wird von der jeweiligen Seite per useAppShell().setPageAction
+  // gesetzt und im Unmount/Routenwechsel wieder auf null zurückgesetzt.
+  const [pageAction, setPageAction]           = useState<ReactNode>(null)
+
   const shownToastsRef                        = useRef<Set<string>>(new Set())
   const userRef                               = useRef<User | null>(null)
   // Verhindert parallele Refresh-Anfragen (z. B. wenn Mount-Check und Interval-Check
@@ -575,6 +580,7 @@ export default function Shell({ children }: { children: ReactNode }) {
     searchQuery, setSearchQuery,
     selectCategory,
     openAuth,
+    pageAction, setPageAction,
   }
 
   return (
@@ -689,6 +695,7 @@ export default function Shell({ children }: { children: ReactNode }) {
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/logo-weiss.png" alt="Möbius" className="nav-logo" />
           </Link>
+          {pageAction}
           <div className="nav-search-wrap">
             <span className="nav-search-icon">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
