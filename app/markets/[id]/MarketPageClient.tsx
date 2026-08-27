@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import CommentsSection from '../../components/CommentsSection'
+import { useAppShell } from '../../components/AppShellContext'
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -259,7 +260,30 @@ const CAT_CLASS: Record<string, string> = {
 }
 const COIN_COLORS: Record<string, string> = { BTC: '#f59e0b', ETH: '#6366f1', SOL: '#9945ff', XRP: '#00aae4' }
 
-// ─── Auflösungsregeln Krypto-Märkte (fix, pro Coin, unabhängig von market.description) ──
+// Umkehrung von PATH_TO_CATEGORY aus Shell.tsx (categoryId -> URL-Pfad ohne führenden
+// Slash). Bei Änderungen an Shell.tsx's PATH_TO_CATEGORY muss diese Map manuell
+// synchron gehalten werden — gleiche Konvention wie dort dokumentiert.
+const CATEGORY_TO_PATH: Record<string, string> = {
+  'Politik-Deutschland': 'politik/deutschland',
+  'Politik-USA':         'politik/usa',
+  'Sport':               'sport',
+  'Fußball':             'sport/fussball',
+  'Bundesliga':          'sport/bundesliga',
+  'F1':                  'sport/f1',
+  'Krypto':              'krypto',
+  'Entertainment':       'entertainment',
+  'Wirtschaft':          'wirtschaft',
+  'Tech':                'tech',
+  'Geopolitik':          'geopolitik',
+  'Finanzen-Tag':        'finanzen/tag',
+  'Finanzen-Woche':      'finanzen/woche',
+  'Wetter':              'wetter',
+  'Kultur':              'kultur',
+}
+// Default-Ziel, falls die Kategorie nicht in CATEGORY_TO_PATH gefunden wird —
+// identisch zu Shell.tsx's categoryFromPathname()-Fallback.
+const DEFAULT_BACK_PATH = 'politik/deutschland'
+
 const CRYPTO_COIN_NAMES: Record<string, string> = { BTC: 'Bitcoin', ETH: 'Ethereum', SOL: 'Solana', XRP: 'XRP' }
 
 function getCryptoResolutionRules(coin: string): string {
@@ -269,11 +293,6 @@ function getCryptoResolutionRules(coin: string): string {
 Die maßgebliche Quelle für die Auflösung dieses Marktes ist die Coinbase API, aus der Möbius auch die zugrunde liegenden Kursdaten für die Markterstellung und -auflösung bezieht. Maßgeblich ist ausschließlich der Kurs laut Coinbase, nicht der Kurs anderer Quellen oder Spotmärkte.`
 }
 
-// ─── News-Matching ─────────────────────────────────────────────────────────
-// Ordnet eine Marktkategorie einer news_items.source_category zu.
-// Nur Politik/Geopolitik/Wirtschaft(inkl. Finanzen)/Tech bekommen News —
-// Krypto, Sport, Wetter, F1, Entertainment, Kultur bewusst ausgeschlossen
-// (keine passende RSS-Quelle vorhanden, sonst Fehlzuordnungsgefahr).
 function getNewsCategory(market: Market): string | null {
   const cat = market.category ?? ''
   if (cat.startsWith('Politik')) return 'politik'
@@ -701,6 +720,7 @@ export default function MarketPageClient() {
   const params   = useParams()
   const router   = useRouter()
   const marketId = params?.id as string
+  const { setPageAction } = useAppShell()
 
   const [market, setMarket]           = useState<Market | null>(null)
   const [trades, setTrades]           = useState<Trade[]>([])
@@ -849,6 +869,35 @@ export default function MarketPageClient() {
       setPreMarketHistory(rows.map(r => ({ t: parseUTC(r.created_at).getTime(), price: r.price })))
     }).catch(() => setPreMarketHistory([]))
   }, [market?.id, market?.is_auto, market?.coin, market?.start_price, market?.closes_at, market?.match_id, market?.category, isFormula1, isWeather])
+
+  // Registriert den seitenspezifischen Zurück-Button in der globalen Nav-Bar (Shell.tsx,
+  // nav-left, neben dem Logo). Ersetzt die frühere eigene <nav> dieser Komponente.
+  // Ziel-Pfade nutzen jetzt die echten verschachtelten URLs (CATEGORY_TO_PATH) statt
+  // der alten ?category=-Query-Params aus der Zeit vor der SEO-Restrukturierung.
+  useEffect(() => {
+    if (!market) { setPageAction(null); return }
+    const isSoccerM   = !!market.match_id
+    const isFinanceM  = market.category === 'finance' || market.category === 'Finanzen'
+    const isFormula1M = market.category === 'formula1'
+    const isWeatherM  = market.category === 'weather' || market.category === 'Wetter'
+    const label = isSoccerM ? '← Bundesliga'
+      : isFinanceM ? '← Finanzen'
+      : isFormula1M ? '← Formel 1'
+      : isWeatherM ? '← Wetter'
+      : market.category ? `← ${market.category}`
+      : '← Zurück'
+    const path = isSoccerM ? CATEGORY_TO_PATH['Bundesliga']
+      : isFinanceM ? (market.group_title === 'Aktueller Handelstag' ? CATEGORY_TO_PATH['Finanzen-Tag'] : CATEGORY_TO_PATH['Finanzen-Woche'])
+      : isFormula1M ? CATEGORY_TO_PATH['F1']
+      : isWeatherM ? CATEGORY_TO_PATH['Wetter']
+      : market.category ? (CATEGORY_TO_PATH[market.category] ?? DEFAULT_BACK_PATH)
+      : DEFAULT_BACK_PATH
+    const target = `/${path}`
+    setPageAction(
+      <button className="nav-pill" onClick={() => router.push(target)} style={{ fontSize: 13 }}>{label}</button>
+    )
+    return () => setPageAction(null)
+  }, [market, router, setPageAction])
 
   useEffect(() => {
     if (!market?.resolved || toastShownRef.current) return
@@ -1211,30 +1260,6 @@ export default function MarketPageClient() {
     ? `${market.short_label ?? market.coin} · ${market.group_title ?? ''}`
     : `${market.coin} Up or Down – 3 Minuten`
 
-  const backLabel = isSoccer
-    ? '← Bundesliga'
-    : isFinance
-    ? '← Finanzen'
-    : isFormula1
-    ? '← Formel 1'
-    : isWeather
-    ? '← Wetter'
-    : market.category
-    ? `← ${market.category}`
-    : '← Zurück'
-
-  const backTarget = isSoccer
-    ? '/?category=Bundesliga'
-    : isFinance
-    ? `/?category=Finanzen-${market.group_title === 'Aktueller Handelstag' ? 'Tag' : 'Woche'}`
-    : isFormula1
-    ? '/?category=F1'
-    : isWeather
-    ? '/?category=Wetter'
-    : market.category
-    ? `/?category=${encodeURIComponent(market.category)}`
-    : '/'
-
   const toastIsUp    = resultToast?.resolution === 'yes'
   const toastColor   = toastIsUp ? '#16a34a' : '#dc2626'
   const toastLabel   = resultToast?.coin
@@ -1286,9 +1311,6 @@ export default function MarketPageClient() {
               {userWon ? (<><div style={{ fontSize: 12, color: '#16a34a', marginBottom: 4 }}>Auszahlung erfolgt automatisch</div><div style={{ fontSize: 28, fontWeight: 800, color: '#16a34a' }}>+{Math.round(market.resolution === 'yes' ? sharesYes : sharesNo)} ₫</div></>) : (<div style={{ fontSize: 13, color: '#dc2626' }}>Leider verloren — nächsten Markt versuchen!</div>)}
             </div>
           )}
-          <button onClick={() => router.push(backTarget)} style={{ width: '100%', padding: '12px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 10, cursor: 'pointer', fontSize: 13, fontWeight: 700, marginTop: 8 }}>
-            Weitere Möbius-Märkte →
-          </button>
         </div>
       ) : !user ? (
         <div style={{ textAlign: 'center', padding: '24px 16px' }}>
@@ -1415,13 +1437,11 @@ export default function MarketPageClient() {
         </div>
       )}
 
-      <nav className="nav">
-        <div className="nav-left">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo-weiss.png" alt="Möbius" className="nav-logo" onClick={() => router.push('/')} style={{ cursor: 'pointer' }} />
-          <button className="nav-pill" onClick={() => router.push(backTarget)} style={{ fontSize: 13 }}>{backLabel}</button>
-        </div>
-        <div className="nav-right">
+      <div style={{ maxWidth: containerMaxWidth, margin: '0 auto', padding: isMobile ? '16px 12px 80px' : '24px 16px' }}>
+
+        {/* Teilen — ehemals im lokalen Nav dieser Seite, jetzt oben im Content-Bereich,
+            da der Zurück-Button in die globale Nav-Bar (Shell.tsx) gewandert ist. */}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
           <button
             onClick={() => {
               navigator.clipboard.writeText(window.location.href)
@@ -1440,18 +1460,7 @@ export default function MarketPageClient() {
           >
             {copied ? '✓ Kopiert' : '↗ Teilen'}
           </button>
-          {user ? (
-            <div className="nav-stat">
-              <div className="nav-stat-label">Guthaben</div>
-              <div className="nav-stat-value">{user.balance.toLocaleString('de')} ₫</div>
-            </div>
-          ) : (
-            <button className="nav-pill accent" onClick={() => router.push('/')}>Anmelden</button>
-          )}
         </div>
-      </nav>
-
-      <div style={{ maxWidth: containerMaxWidth, margin: '0 auto', padding: isMobile ? '16px 12px 80px' : '24px 16px' }}>
 
         {/* ── SOCCER ── */}
         {isSoccer && (
@@ -1550,7 +1559,6 @@ export default function MarketPageClient() {
                   <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 6 }}>{userWon ? 'Gewonnen!' : hasPosition ? 'Verloren' : 'Markt nicht mehr aktiv'}</div>
                   {market.resolved && <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}>{soccerResolutionLabel()}</div>}
                   {userWon && <div style={{ fontSize: 32, fontWeight: 800, color: '#16a34a', letterSpacing: '-0.5px', marginBottom: 16 }}>+{Math.round(market.resolution === 'yes' ? sharesYes : sharesNo)} ₫</div>}
-                  <button onClick={() => router.push('/')} style={{ width: '100%', padding: '12px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 10, cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>Weitere Möbius-Märkte →</button>
                 </div>
               ) : (
                 <div className="card" style={{ position: isSingleColumn ? 'static' : 'sticky', top: 'calc(var(--nav-height) + 16px)', padding: 0, overflow: 'hidden' }}>
@@ -1675,7 +1683,6 @@ export default function MarketPageClient() {
                     {market.resolved && market.start_price && market.end_price && (<div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>${market.start_price.toFixed(2)} → ${market.end_price.toFixed(2)}</div>)}
                   </div>
                 </div>
-                {nextLiveMarket && (<button onClick={() => router.push(`/markets/${nextLiveMarket.id}`)} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 20px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: 20, cursor: 'pointer', fontSize: 13, fontWeight: 700 }}><span style={{ width: 7, height: 7, borderRadius: '50%', background: '#fff', display: 'inline-block' }} />Zum Live-Markt →</button>)}
               </div>
             )}
             {twoCol(
@@ -1716,7 +1723,6 @@ export default function MarketPageClient() {
                     <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Ergebnis: <strong style={{ color: market.resolution === 'yes' ? '#16a34a' : '#dc2626', fontSize: 15 }}>{market.resolution === 'yes' ? '↑ Höher' : '↓ Tiefer'}</strong></div>
                   </div>
                   {hasPosition && (<div style={{ padding: '14px', borderRadius: 10, textAlign: 'center', marginBottom: 14, background: userWon ? 'rgba(22,163,74,0.08)' : 'rgba(220,38,38,0.08)', border: `1px solid ${userWon ? 'rgba(22,163,74,0.2)' : 'rgba(220,38,38,0.2)'}` }}>{userWon ? (<><div style={{ fontSize: 12, color: '#16a34a', marginBottom: 4 }}>Auszahlung erfolgt automatisch</div><div style={{ fontSize: 28, fontWeight: 800, color: '#16a34a' }}>+{Math.round(market.resolution === 'yes' ? sharesYes : sharesNo)} ₫</div></>) : (<div style={{ fontSize: 13, color: '#dc2626' }}>Leider verloren — nächsten Markt versuchen!</div>)}</div>)}
-                  {nextLiveMarket && (<button onClick={() => router.push(`/markets/${nextLiveMarket.id}`)} style={{ width: '100%', padding: '12px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: 10, cursor: 'pointer', fontSize: 14, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: '#fff' }} />Zum Live-Markt →</button>)}
                 </div>
               ) : !user ? (
                 <div className="card" style={{ textAlign: 'center', padding: '24px 16px' }}><div style={{ fontSize: 14, color: 'var(--text-muted)', marginBottom: 12 }}>Anmelden um zu handeln</div><button className="submit-btn yes" onClick={() => router.push('/')}>Zur Anmeldung</button></div>
@@ -1771,7 +1777,6 @@ export default function MarketPageClient() {
                 {market.resolved && market.start_price && market.end_price && (<div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 2 }}>{market.short_label ?? market.coin}: ${market.start_price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} → ${market.end_price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>)}
               </div>
             </div>
-            {nextLiveMarket && (<button onClick={() => router.push(`/markets/${nextLiveMarket.id}`)} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 20px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: 20, cursor: 'pointer', fontSize: 14, fontWeight: 700, whiteSpace: 'nowrap' }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: '#fff', display: 'inline-block' }} />Zum Live-Markt →</button>)}
           </div>
         )}
         {isKrypto && twoCol(
@@ -1795,7 +1800,6 @@ export default function MarketPageClient() {
               </div>
             </div>
             {!market.resolved && <LivePositionsBar trades={trades} isKrypto={true} />}
-            {/* Responsive Canvas */}
             <div ref={cryptoWrapRef} style={{ position: 'relative', width: '100%', height: 200 }}>
               <canvas ref={cryptoCanvasRef} style={{ width: '100%', height: '100%', display: 'block' }} />
               {priceHistory.length < 1 && !market.resolved && (<div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: 13 }}>Chart wird aufgebaut…</div>)}
@@ -1814,7 +1818,6 @@ export default function MarketPageClient() {
                     {userWon ? (<><div style={{ fontSize: 12, color: '#16a34a', marginBottom: 4 }}>Auszahlung erfolgt automatisch</div><div style={{ fontSize: 28, fontWeight: 800, color: '#16a34a' }}>+{Math.round(market.resolution === 'yes' ? sharesYes : sharesNo)} ₫</div></>) : (<div style={{ fontSize: 13, color: '#dc2626' }}>Leider verloren — nächsten Markt versuchen!</div>)}
                   </div>
                 )}
-                {nextLiveMarket && (<button onClick={() => router.push(`/markets/${nextLiveMarket.id}`)} style={{ width: '100%', padding: '12px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: 10, cursor: 'pointer', fontSize: 14, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: '#fff' }} />Zum Live-Markt →</button>)}
               </div>
             ) : !user ? (
               <div style={{ textAlign: 'center', padding: '24px 16px' }}>
