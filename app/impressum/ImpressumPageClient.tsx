@@ -94,7 +94,7 @@ export default function ImpressumPageClient() {
             Hinweis
           </div>
           <p style={{ margin: 0, fontSize: 14, color: 'var(--text-muted, #475569)', lineHeight: 1.7 }}>
-            Möbius ist eine Spielgeld-Plattform. Es werden keine Einsätze mit echtem Geld angenommen, keine Gewinne ausgezahlt und kein Glücksspiel im Sinne des Glücksspielstaatsvertrags angeboten. Die verwendete Währung „Dukaten" (₫) hat keinen Geldwert und ist nicht handelbar.
+            Möbius ist eine Spielgeld-Plattform. Es werden keine Einsätze mit echtem Geld angenommen, keine Gewinne ausgezahlt und kein Glücksspiel im Sinne des Glücksspielstaatsvertrags angeboten. Die verwendete Währung „Dukaten&rdquo; (₫) hat keinen Geldwert und ist nicht handelbar.
           </p>
         </div>
 
