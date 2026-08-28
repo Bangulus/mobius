@@ -783,7 +783,7 @@ export default function Shell({ children }: { children: ReactNode }) {
               <span>Bewertungen</span>
             </a>
             <a href="/impressum" className="nav-item-btn" style={{ display: 'flex', alignItems: 'center', gap: 8, textDecoration: 'none', fontSize: 13, fontWeight: 500, color: 'var(--text-muted)', padding: '8px 12px', borderRadius: 8 }}>
-              <Icon name="file-text" size={16} />
+              <Icon name="mail" size={16} />
               <span>Kontakt</span>
             </a>
           </div>
