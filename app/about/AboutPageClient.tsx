@@ -90,7 +90,7 @@ export default function AboutPageClient() {
           </FeatureBlock>
 
           <FeatureBlock title="Genauer als Experten">
-            Prognosemärkte sind systematisch präziser als Experten. Einzelne Experten mögen zwar hochspezialisiert sein, besitzen aber trotzdem nur Wissensfragmente. Prognosemärkte preisen über die ihre Lebensdauer früher oder später das gesamte verfügbare Wissen aller Trader in die Eintrittswahrscheinlichkeit ihres Ereignisses ein (vgl. Snowberg, Wolfers &amp; Zitzewitz, 2012, S. 34f.).
+            Prognosemärkte sind systematisch präziser als Experten. Einzelne Experten mögen zwar hochspezialisiert sein, besitzen aber trotzdem nur Wissensfragmente. Prognosemärkte preisen über ihre Lebensdauer früher oder später das gesamte verfügbare Wissen aller Trader in die Eintrittswahrscheinlichkeit ihres Ereignisses ein (vgl. Snowberg, Wolfers &amp; Zitzewitz, 2012, S. 34f.).
           </FeatureBlock>
 
           <FeatureBlock title="Jeder findet seine Nische">
