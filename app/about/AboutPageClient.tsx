@@ -1,38 +1,22 @@
 'use client'
 
+import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { useAppShell } from '../components/AppShellContext'
 
 export default function AboutPageClient() {
   const router = useRouter()
+  const { setPageAction } = useAppShell()
+
+  useEffect(() => {
+    setPageAction(
+      <button className="nav-pill" onClick={() => router.push('/')} style={{ fontSize: 13 }}>← Zurück</button>
+    )
+    return () => setPageAction(null)
+  }, [router, setPageAction])
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg, #f8fafc)' }}>
-
-      {/* Nav */}
-      <div style={{
-        background: 'var(--primary, #1a1f3c)',
-        height: 56,
-        display: 'flex',
-        alignItems: 'center',
-        padding: '0 24px',
-        position: 'sticky',
-        top: 0,
-        zIndex: 100,
-        borderBottom: '0.5px solid rgba(255,255,255,0.08)',
-      }}>
-        <button
-          onClick={() => router.push('/')}
-          style={{
-            background: 'none', border: 'none', color: 'rgba(255,255,255,0.7)',
-            cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', gap: 6,
-          }}
-        >
-          ← Zurück
-        </button>
-        <span style={{ fontSize: 14, fontWeight: 600, color: '#fff', marginLeft: 16 }}>
-          Über Möbius
-        </span>
-      </div>
 
       {/* Content */}
       <div style={{ maxWidth: 720, margin: '0 auto', padding: '48px 24px 80px' }}>
