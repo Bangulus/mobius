@@ -83,24 +83,6 @@ export default function ImpressumPageClient() {
           </p>
         </div>
 
-        {/* Verantwortlich für den Inhalt */}
-        <div style={{
-          background: 'var(--card, #fff)',
-          border: '1px solid var(--border, #e2e8f0)',
-          borderRadius: 12,
-          padding: '24px 28px',
-          marginBottom: 24,
-        }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted, #94a3b8)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 14 }}>
-            Verantwortlich für den Inhalt nach § 18 Abs. 2 MStV
-          </div>
-          <p style={{ margin: 0, fontSize: 15, color: 'var(--text, #0f172a)', lineHeight: 1.8 }}>
-            Benno Möbius<br />
-            Josef-May-Straße 1<br />
-            60489 Frankfurt am Main
-          </p>
-        </div>
-
         {/* Hinweis Spielgeld */}
         <div style={{
           background: 'var(--surface, #f1f5f9)',
