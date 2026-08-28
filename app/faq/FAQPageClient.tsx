@@ -119,6 +119,10 @@ const FAQ_SECTIONS: { title: string; items: FAQItem[] }[] = [
         question: 'Wo werden meine Daten gespeichert?',
         answer: 'Möbius nutzt Supabase als Datenbankinfrastruktur. Die Daten werden auf europäischen Servern gespeichert.',
       },
+      {
+        question: 'Wie erreiche ich den Support?',
+        answer: 'Per E-Mail an support@moebiusmarkets.de.',
+      },
     ],
   },
 ]
