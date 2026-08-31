@@ -49,7 +49,7 @@ Wird das Spiel verschoben, bleibt der Markt offen, bis die Partie nachgeholt wur
 Primäre Auflösungsquelle ist die offizielle Spielstatistik des DFB bzw. der DFL. Sollten keine offiziellen Daten innerhalb von zwei Stunden nach Spielende vorliegen, wird auf Basis übereinstimmender Berichte glaubwürdiger Sportmedien aufgelöst.`
 }
 
-async function createThreeMarkets(match: OpenLigaMatch) {
+async function createThreeMarkets(match: OpenLigaMatch, errors: string[]) {
   const matchId = `bl1-${match.matchID}`
   const matchUTC = match.matchDateTimeUTC
     ? new Date(match.matchDateTimeUTC.endsWith('Z') ? match.matchDateTimeUTC : match.matchDateTimeUTC + 'Z')
@@ -113,7 +113,7 @@ async function createThreeMarkets(match: OpenLigaMatch) {
       match_date: matchDate,
     }
 
-    await fetch(`${supabaseUrl}/rest/v1/markets`, {
+    const res = await fetch(`${supabaseUrl}/rest/v1/markets`, {
       method: 'POST',
       headers: {
         apikey: supabaseKey,
@@ -123,6 +123,13 @@ async function createThreeMarkets(match: OpenLigaMatch) {
       },
       body: JSON.stringify(body),
     })
+
+    if (!res.ok) {
+      const detail = await res.text().catch(() => '')
+      const msg = `insert-failed:${matchId}:${o.outcome}:${res.status}:${detail}`
+      console.error('create-soccer-market:', msg)
+      errors.push(msg)
+    }
   }
 }
 
@@ -131,14 +138,15 @@ export async function GET() {
     const allMatches = await getCurrentMatches()
     const upcoming = getUpcomingMatches(allMatches)
     let created = 0
+    const errors: string[] = []
     for (const match of upcoming) {
       const matchId = `bl1-${match.matchID}`
       const exists = await marketExists(matchId)
       if (exists) continue
-      await createThreeMarkets(match)
+      await createThreeMarkets(match, errors)
       created++
     }
-    return NextResponse.json({ ok: true, created })
+    return NextResponse.json({ ok: true, created, errors })
   } catch (err) {
     return NextResponse.json({ ok: false, error: String(err) }, { status: 500 })
   }
