@@ -239,7 +239,11 @@ export async function GET() {
 
       let resolution: 'yes' | 'no' | 'draw'
       if (outcome === 'draw') {
-        resolution = market.outcome === 'draw' ? 'yes' : 'draw'
+        // Fix: bei echtem Unentschieden lösen Home- und Away-Markt mit 'no' auf,
+        // nur der Draw-Markt selbst mit 'yes'. Vorher fälschlich 'draw' zurückgegeben,
+        // was payoutWinners() in den Refund-Zweig geschickt hat statt Gewinner korrekt
+        // auszuzahlen und Verlierer korrekt zu verbuchen.
+        resolution = market.outcome === 'draw' ? 'yes' : 'no'
       } else if (market.outcome === outcome) {
         resolution = 'yes'
       } else {
