@@ -12,51 +12,51 @@ interface Review {
 const REVIEWS: Review[] = [
   {
     text: 'Die 3-Minuten-BTC-Märkte sind schon ziemlich dumm. Im positiven Sinne. Wollte eigentlich nur einmal ausprobieren und hab dann deutlich länger auf der Seite verbracht als geplant.',
-    username: 'felix23',
+    username: 'Rhia',
   },
   {
     text: 'Ich kannte Prediction Markets vorher eigentlich nur von Polymarket. Finde den Ansatz von Möbius auf Deutsch echt gut. Vor allem weil man nicht direkt echtes Geld verliert.',
-    username: 'chris_m',
+    username: 'Schwachstromstachelrochen',
   },
   {
     text: 'Was ich daran mag: Man merkt relativ schnell, dass „ich denke, ich wähle die Grünen“ und „ich denke, die Grünen gewinnen die Wahl“ zwei komplett verschiedene Aussagen sind. Und wenn man danebenliegt, sieht man es halt auch. Hat bei mir ein paar Illusionen zerstört lol.',
-    username: 'whateverman',
+    username: 'gnarly',
   },
   {
     text: 'Bin über die Crypto-Märkte drauf gekommen. Die kurzen Märkte machen generell überraschend viel Spaß.',
-    username: 'candleboy',
+    username: 'Joschka1968',
   },
   {
     text: 'Optisch finde ich Möbius schon ziemlich gelungen. Vor allem ist der Einstieg nicht so kompliziert. Man kann einfach ein paar Märkte anschauen und versteht relativ schnell, worum es geht.',
-    username: 'maybe420bearish',
+    username: 'Bingulus',
   },
   {
     text: 'Der interessante Teil ist eigentlich gar nicht das Gewinnen, sondern hinterher zu sehen, wie daneben die eigene Einschätzung war.',
-    username: 'BerlinerJunge',
+    username: 'Rhia',
   },
   {
     text: 'Die Plattform ist noch relativ jung, merkt man auch. Wenn die Community weiterhin wächst und mehr interessante Märkte dazukommen, kann das gut werden.',
-    username: 'BlueMango17',
+    username: 'Schwachstromstachelrochen',
   },
   {
     text: 'Man probiert hier auf Möbius halt auch Sachen aus, von denen man sonst wahrscheinlich die Finger davon lassen würde.',
-    username: 'mrx56258',
+    username: 'gnarly',
   },
   {
     text: 'Hab eigentlich nur nach einem deutschsprachigen Prediction Market gesucht. Bin dann bei Möbius gelandet. Nicht alles ist für mich interessant, aber Wirtschaft und Geopolitik sind schon echt geil.',
-    username: 'tomo007',
+    username: 'Joschka1968',
   },
   {
     text: 'Bei manchen Märkten hätte ich mir noch etwas mehr Auswahl gewünscht. Das Grundkonzept finde ich aber stark und gerade für Deutschland ist das Ganze ziemlich interessant.',
-    username: 'kai69',
+    username: 'Bingulus',
   },
   {
     text: 'Bin eher so der Typ, der normalerweise 15 Tabs gleichzeitig offen hat. Genau deshalb funktioniert Möbius bei mir irgendwie. Kurz reinschauen, ein paar Prognosen abgeben und später wiederkommen.',
-    username: 'conditional01',
+    username: 'Rhia',
   },
   {
     text: 'Prediction Markets sind in Deutschland irgendwie noch viel zu wenig bekannt. Möbius macht das Konzept zumindest mal zugänglich, ohne dass man sich erstmal mit irgendwelchen komplizierten Finanzprodukten beschäftigen muss.',
-    username: 'einfach92max',
+    username: 'Schwachstromstachelrochen',
   },
 ]
 
