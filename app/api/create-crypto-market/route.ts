@@ -48,20 +48,21 @@ export async function POST(req: NextRequest) {
       { status: 400 }
     )
   }
-
   coin = coin.toUpperCase()
 
   const guardWindow = new Date(Date.now() - 60 * 1000).toISOString()
-
+  // category=eq.Krypto ergänzt: ohne diesen Filter matchte die Guard-Query auch
+  // zweckfremde Nicht-Krypto-Märkte mit gleichem coin-Wert (z. B. Sport-Märkte,
+  // die "BTC" als Team-Kürzel im coin-Feld nutzen) und verhinderte fälschlich
+  // die Neuanlage des 3-Minuten-BTC-Markts.
   const checkRes = await fetch(
-    `${SUPABASE_URL}/rest/v1/markets?is_auto=eq.true&status=eq.open&resolved=eq.false&coin=eq.${coin}&closes_at=gt.${guardWindow}&select=id,closes_at`,
+    `${SUPABASE_URL}/rest/v1/markets?is_auto=eq.true&status=eq.open&resolved=eq.false&category=eq.Krypto&coin=eq.${coin}&closes_at=gt.${guardWindow}&select=id,closes_at`,
     {
       headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` },
       cache: 'no-store',
     }
   )
   const existing = await checkRes.json()
-
   if (Array.isArray(existing) && existing.length > 0) {
     return NextResponse.json({
       message: 'Markt bereits offen',
