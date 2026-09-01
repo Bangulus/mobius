@@ -18,17 +18,19 @@ interface CategoryDef {
 // Metadata-Texte 1:1 aus der bisherigen app/kategorie/[slug]/page.tsx CATEGORY_MAP übernommen,
 // nur neu verschlüsselt auf die verschachtelten Pfade. Drei Einträge (sport, sport/fussball,
 // finanzen/woche) sind neu formuliert, da es dafür vorher keine eigene URL/Metadata gab.
+// politik + politik/deutschland: Title/Description am 01.09.2026 geschärft, damit die
+// Marken-Query "Möbius Markets" bei Google auf diese Seite statt auf /bewertungen zeigt.
 const CATEGORY_MAP: Record<string, CategoryDef> = {
   'politik': {
     categoryId: 'Politik-Deutschland',
-    title: 'Politik-Wetten Deutschland | Möbius',
-    description: 'Wie wahrscheinlich sind aktuelle politische Entwicklungen in Deutschland? Aktuelle Markteinschätzungen auf Möbius.',
+    title: 'Möbius Markets – Politik-Wetten Deutschland',
+    description: 'Möbius Markets: der deutschsprachige Prediction-Market. Wie wahrscheinlich sind aktuelle politische Entwicklungen in Deutschland?',
     canonicalPath: 'politik/deutschland',
   },
   'politik/deutschland': {
     categoryId: 'Politik-Deutschland',
-    title: 'Politik-Wetten Deutschland | Möbius',
-    description: 'Wie wahrscheinlich sind aktuelle politische Entwicklungen in Deutschland? Aktuelle Markteinschätzungen auf Möbius.',
+    title: 'Möbius Markets – Politik-Wetten Deutschland',
+    description: 'Möbius Markets: der deutschsprachige Prediction-Market. Wie wahrscheinlich sind aktuelle politische Entwicklungen in Deutschland?',
   },
   'politik/usa': {
     categoryId: 'Politik-USA',
