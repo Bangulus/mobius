@@ -1,10 +1,8 @@
 import { NextResponse } from 'next/server'
 import { XP_WIN, XP_LOSS, RP_WIN, RP_LOSS, levelFromXp, titleFromRp } from '@/lib/progression'
-
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY!
 const JOLPICA_BASE = 'https://api.jolpi.ca/ergast/f1'
-
 async function getLastRaceResults() {
   const year = new Date().getFullYear()
   const res  = await fetch(`${JOLPICA_BASE}/${year}/last/results.json`, { cache: 'no-store' })
@@ -12,7 +10,6 @@ async function getLastRaceResults() {
   const data = await res.json()
   return data?.MRData?.RaceTable?.Races?.[0] ?? null
 }
-
 async function getLastQualifyingResults() {
   const year = new Date().getFullYear()
   const res  = await fetch(`${JOLPICA_BASE}/${year}/last/qualifying.json`, { cache: 'no-store' })
@@ -20,7 +17,6 @@ async function getLastQualifyingResults() {
   const data = await res.json()
   return data?.MRData?.RaceTable?.Races?.[0] ?? null
 }
-
 async function getOpenF1Markets(): Promise<any[]> {
   const res = await fetch(
     `${SUPABASE_URL}/rest/v1/markets?category=eq.formula1&resolved=eq.false&status=eq.open`,
@@ -28,7 +24,6 @@ async function getOpenF1Markets(): Promise<any[]> {
   )
   return res.ok ? await res.json() : []
 }
-
 async function resolveMarket(id: string, resolution: 'yes' | 'no') {
   await fetch(`${SUPABASE_URL}/rest/v1/markets?id=eq.${id}`, {
     method: 'PATCH',
@@ -41,7 +36,6 @@ async function resolveMarket(id: string, resolution: 'yes' | 'no') {
     body: JSON.stringify({ resolved: true, resolution, status: 'closed' }),
   })
 }
-
 // Progression: Gewinn/Verlust-XP + RP nach Marktauflösung verbuchen.
 // Fehler hier werden geloggt, blockieren aber nicht den Payout-Flow.
 async function awardResolutionXp(userId: string, won: boolean, marketId: string) {
@@ -56,18 +50,14 @@ async function awardResolutionXp(userId: string, won: boolean, marketId: string)
       console.error(`awardResolutionXp: User ${userId} nicht gefunden.`)
       return
     }
-
     const currentXp: number = u.xp ?? 0
     const currentRp: number = u.rp ?? 0
-
     const xpDelta = won ? XP_WIN : XP_LOSS
     const rpDelta = won ? RP_WIN : RP_LOSS
-
     const newXp = currentXp + xpDelta
     const newRp = Math.max(0, currentRp + rpDelta)
     const newLevel = levelFromXp(newXp)
     const newTitle = titleFromRp(newRp)
-
     const patchRes = await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${userId}`, {
       method: 'PATCH',
       headers: {
@@ -82,7 +72,6 @@ async function awardResolutionXp(userId: string, won: boolean, marketId: string)
       console.error(`awardResolutionXp: users-Update fehlgeschlagen (${patchRes.status}) für User ${userId}.`)
       return
     }
-
     const eventRes = await fetch(`${SUPABASE_URL}/rest/v1/xp_events`, {
       method: 'POST',
       headers: {
@@ -106,11 +95,32 @@ async function awardResolutionXp(userId: string, won: boolean, marketId: string)
     console.error('awardResolutionXp: unerwarteter Fehler', err)
   }
 }
-
+// Schreibt den payout-Trade für's Wochenranking (analog zu resolve-soccer-market,
+// resolve-crypto-market, resolve-finance-market). Fehlte hier bisher komplett —
+// F1-Gewinne tauchten deshalb nie im Wochenranking auf.
+async function writePayoutTrade(marketId: string, userId: string, amount: number) {
+  await fetch(`${SUPABASE_URL}/rest/v1/trades`, {
+    method: 'POST',
+    headers: {
+      apikey: SERVICE_KEY,
+      Authorization: `Bearer ${SERVICE_KEY}`,
+      'Content-Type': 'application/json',
+      Prefer: 'return=minimal',
+    },
+    body: JSON.stringify({
+      market_id: marketId,
+      user_id: userId,
+      type: 'payout',
+      shares: amount,
+      cost: amount,
+      price_before: 0,
+      price_after: 0,
+    }),
+  })
+}
 async function payoutWinners(marketId: string, resolution: 'yes' | 'no') {
   const field      = resolution === 'yes' ? 'shares_yes' : 'shares_no'
   const loserField = resolution === 'yes' ? 'shares_no'  : 'shares_yes'
-
   const posRes = await fetch(
     `${SUPABASE_URL}/rest/v1/positions?market_id=eq.${marketId}&${field}=gt.0`,
     { headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` } }
@@ -126,19 +136,16 @@ async function payoutWinners(marketId: string, resolution: 'yes' | 'no') {
       if (markets.length) {
         const market = markets[0]
         const totalShares = positions.reduce((sum: number, p: any) => sum + p[field], 0)
-
         for (const pos of positions) {
           const userShares = pos[field] as number
           const payout     = Math.round((userShares / totalShares) * (market.q_yes + market.q_no) * market.b)
           if (payout <= 0) continue
-
           const userRes = await fetch(
             `${SUPABASE_URL}/rest/v1/users?id=eq.${pos.user_id}&select=balance`,
             { headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` } }
           )
           const users: any[] = await userRes.json()
           if (!users.length) continue
-
           const patchRes = await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${pos.user_id}`, {
             method: 'PATCH',
             headers: {
@@ -150,13 +157,13 @@ async function payoutWinners(marketId: string, resolution: 'yes' | 'no') {
             body: JSON.stringify({ balance: users[0].balance + payout }),
           })
           if (patchRes.ok) {
+            await writePayoutTrade(marketId, pos.user_id, payout)
             await awardResolutionXp(pos.user_id, true, marketId)
           }
         }
       }
     }
   }
-
   // Verlierer-Seite: nur Loss-XP/RP, kein Payout
   const loserPosRes = await fetch(
     `${SUPABASE_URL}/rest/v1/positions?market_id=eq.${marketId}&${loserField}=gt.0`,
@@ -169,25 +176,21 @@ async function payoutWinners(marketId: string, resolution: 'yes' | 'no') {
     }
   }
 }
-
 function driverInTop(results: any[], familyName: string, topN: number): boolean {
   return results.some(
     (r: any) => r.Driver?.familyName === familyName && parseInt(r.position) <= topN
   )
 }
-
 function driverPosition(results: any[], familyName: string): number {
   const r = results.find((r: any) => r.Driver?.familyName === familyName)
   return r ? parseInt(r.position) : 999
 }
-
 function isClassified(results: any[], familyName: string): boolean {
   return results.some(
     (r: any) => r.Driver?.familyName === familyName &&
     r.status !== 'Retired' && r.status !== 'Accident'
   )
 }
-
 export async function POST() {
   try {
     const [raceData, qualiData, openMarkets] = await Promise.all([
@@ -195,32 +198,24 @@ export async function POST() {
       getLastQualifyingResults(),
       getOpenF1Markets(),
     ])
-
     if (!openMarkets.length) return NextResponse.json({ skipped: 'Keine offenen F1-Märkte' })
-
     const raceResults: any[]  = raceData?.Results ?? []
     const qualiResults: any[] = qualiData?.QualifyingResults ?? []
     const raceName: string    = raceData?.raceName ?? ''
     const qualiRaceName: string = qualiData?.raceName ?? ''
-
     // Nur auflösen wenn API wirklich Ergebnisse hat
     const raceFinished  = raceResults.length > 0
     const qualiFinished = qualiResults.length > 0
-
     const resolved: string[] = []
-
     for (const market of openMarkets) {
       const label: string        = market.short_label ?? ''
       const displayGroup: string = market.display_group ?? ''
       let resolution: 'yes' | 'no' | null = null
-
       // Saison-Märkte: nie automatisch auflösen
       if (displayGroup === 'F1 WM 2026' || displayGroup === 'F1 Saison 2026') continue
-
       // Rennen-Märkte: nur auflösen wenn die API Ergebnisse für dieses Rennen hat
       const raceMatchesMarket = displayGroup.includes(raceName) && raceFinished
       const qualiMatchesMarket = displayGroup.includes(qualiRaceName) && qualiFinished
-
       if (label === 'Ferrari Startreihe 1') {
         if (!qualiMatchesMarket) continue
         const top2      = qualiResults.slice(0, 2)
@@ -230,7 +225,6 @@ export async function POST() {
         resolution = ferrariIn ? 'yes' : 'no'
       } else {
         if (!raceMatchesMarket) continue
-
         if (label === 'McLaren Podium') {
           resolution = (driverInTop(raceResults, 'Norris', 3) || driverInTop(raceResults, 'Piastri', 3)) ? 'yes' : 'no'
         }
@@ -256,14 +250,12 @@ export async function POST() {
             : 'no'
         }
       }
-
       if (resolution) {
         await resolveMarket(market.id, resolution)
         await payoutWinners(market.id, resolution)
         resolved.push(`${label} → ${resolution}`)
       }
     }
-
     return NextResponse.json({ ok: true, resolved })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })
