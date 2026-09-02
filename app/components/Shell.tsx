@@ -1,5 +1,4 @@
 'use client'
-
 import { useEffect, useState, useCallback, useRef, ReactNode } from 'react'
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
@@ -12,22 +11,18 @@ import {
   AuthMode,
 } from './AppShellContext'
 import { Icon, PillIcon } from './Icons'
-
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-
 // Puffer, ab dem proaktiv erneuert wird, bevor der access_token wirklich abläuft.
 const REFRESH_BUFFER_MS = 5 * 60 * 1000
 // Intervall, in dem geprüft wird, ob ein Refresh fällig ist.
 const REFRESH_CHECK_INTERVAL_MS = 60 * 1000
-
 interface StoredSession {
   access_token: string
   refresh_token?: string
   user_id: string
   expires_at?: number
 }
-
 async function dbGet(table: string, params: string) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}`, {
     headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
@@ -35,7 +30,6 @@ async function dbGet(table: string, params: string) {
   })
   return res.json()
 }
-
 async function supabaseAuth(path: string, body: object) {
   const res = await fetch(`${SUPABASE_URL}/auth/v1/${path}`, {
     method: 'POST',
@@ -44,7 +38,6 @@ async function supabaseAuth(path: string, body: object) {
   })
   return res.json()
 }
-
 // DIAGNOSE-FIX: prüft jetzt res.ok statt den Response-Status zu ignorieren.
 // Gibt { ok, status, data } zurück, damit der Aufrufer echte Fehler (z. B. RLS-Verstoß)
 // sehen und anzeigen kann, statt sie stillschweigend zu verschlucken.
@@ -62,13 +55,11 @@ async function dbPost(table: string, body: object, token: string) {
   const data = await res.json()
   return { ok: res.ok, status: res.status, data }
 }
-
 function calcProb(qYes: number, qNo: number, b: number): number {
   const eYes = Math.exp(qYes / b)
   const eNo  = Math.exp(qNo  / b)
   return Math.round((eYes / (eYes + eNo)) * 100)
 }
-
 // Liest die aktuell gespeicherte Session aus localStorage. Zentral genutzt von
 // refreshSession() und dem Mount-Restore-Effect, um Duplikation zu vermeiden.
 function readStoredSession(): StoredSession | null {
@@ -80,7 +71,6 @@ function readStoredSession(): StoredSession | null {
     return parsed as StoredSession
   } catch { return null }
 }
-
 interface LeaderboardEntry {
   user_id: string
   username: string
@@ -88,7 +78,6 @@ interface LeaderboardEntry {
   avatar_url?: string
   title?: string
 }
-
 interface WeeklyEntry {
   user_id: string
   username: string
@@ -96,7 +85,6 @@ interface WeeklyEntry {
   avatar_url?: string
   title?: string
 }
-
 interface WinToast {
   id: string
   coin?: string
@@ -106,12 +94,10 @@ interface WinToast {
   direction: 'yes' | 'no'
   loserPct?: number
 }
-
 interface LoginBonusToast {
   amount: number
   isBankrupt: boolean
 }
-
 const AVATAR_COLORS = [
   { bg: '#eff6ff', color: '#1d4ed8' },
   { bg: '#f0fdf4', color: '#166534' },
@@ -119,17 +105,14 @@ const AVATAR_COLORS = [
   { bg: '#fffbeb', color: '#92400e' },
   { bg: '#f0f9ff', color: '#075985' },
 ]
-
 function avatarColor(str: string) {
   let h = 0
   for (let i = 0; i < str.length; i++) h = str.charCodeAt(i) + ((h << 5) - h)
   return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length]
 }
-
 const COIN_COLORS: Record<string, string> = {
   BTC: '#f59e0b', ETH: '#6366f1', SOL: '#9945ff', XRP: '#00aae4',
 }
-
 function RankBadge({ rank }: { rank: number }) {
   const isFirst = rank === 1
   return (
@@ -145,7 +128,6 @@ function RankBadge({ rank }: { rank: number }) {
     </span>
   )
 }
-
 interface NavItemDef {
   id: string
   href: string
@@ -154,7 +136,6 @@ interface NavItemDef {
   flag?: string
   children?: NavItemDef[]
 }
-
 // href ist der Pfad ohne führenden Slash (siehe app/[...category]/page.tsx CATEGORY_MAP).
 // Jeder Eintrag ist jetzt eine echte, eigenständige URL — parentOnly entfällt, da auch
 // die vormals reinen Toggle-Einträge (Politik, Finanzen) selbst navigierbare Seiten sind.
@@ -181,7 +162,6 @@ const NAV_ITEMS: NavItemDef[] = [
   { id: 'Wetter',        href: 'wetter',        label: 'Wetter',        icon: 'cloud' },
   { id: 'Kultur',        href: 'kultur',         label: 'Kultur',        icon: 'ticket' },
 ]
-
 // Dupliziert aus app/[...category]/page.tsx CATEGORY_MAP (nur Pfad -> categoryId).
 // Bei Änderungen dort muss diese Map manuell synchron gehalten werden.
 const PATH_TO_CATEGORY: Record<string, string> = {
@@ -203,7 +183,6 @@ const PATH_TO_CATEGORY: Record<string, string> = {
   'wetter':               'Wetter',
   'kultur':               'Kultur',
 }
-
 // category ist jetzt kein State mehr, sondern wird bei jedem Render direkt aus der
 // aktuellen URL abgeleitet — wichtig, da Navigation jetzt über echte <Link>-Klicks
 // läuft (Client-Navigation ohne Remount), nicht mehr über setCategory().
@@ -212,7 +191,6 @@ function categoryFromPathname(pathname: string | null): string {
   const path = pathname.replace(/^\/+/, '').replace(/\/+$/, '')
   return PATH_TO_CATEGORY[path] ?? 'Politik-Deutschland'
 }
-
 const MOBILE_CAT_PILLS: { id: string; href: string; label: string; icon?: string; flag?: string }[] = [
   { id: 'Politik-Deutschland', href: 'politik/deutschland', label: 'Politik', flag: 'DE' },
   { id: 'Bundesliga',          href: 'sport/bundesliga',    label: 'Fußball', icon: 'ball-football' },
@@ -226,7 +204,6 @@ const MOBILE_CAT_PILLS: { id: string; href: string; label: string; icon?: string
   { id: 'F1',                  href: 'sport/f1',            label: 'Formel 1', icon: 'steering-wheel' },
   { id: 'Kultur',              href: 'kultur',               label: 'Kultur',  icon: 'ticket' },
 ]
-
 export default function Shell({ children }: { children: ReactNode }) {
   const pathname = usePathname()
   const [user, setUser]                       = useState<User | null>(null)
@@ -243,11 +220,9 @@ export default function Shell({ children }: { children: ReactNode }) {
     if (typeof window === 'undefined') return ''
     return new URLSearchParams(window.location.search).get('q') ?? ''
   })
-
   const [leaderboard, setLeaderboard]         = useState<LeaderboardEntry[]>([])
   const [weeklyBoard, setWeeklyBoard]         = useState<WeeklyEntry[]>([])
   const [showLeaderboard, setShowLeaderboard] = useState(false)
-
   const [showAuth, setShowAuth]               = useState(false)
   const [authMode, setAuthMode]               = useState<AuthMode>('login')
   const [authEmail, setAuthEmail]             = useState('')
@@ -255,22 +230,18 @@ export default function Shell({ children }: { children: ReactNode }) {
   const [authUsername, setAuthUsername]       = useState('')
   const [authError, setAuthError]             = useState('')
   const [authLoading, setAuthLoading]         = useState(false)
-
   const [winToasts, setWinToasts]             = useState<WinToast[]>([])
   const [loginBonusToast, setLoginBonusToast] = useState<LoginBonusToast | null>(null)
   const [expandedNav, setExpandedNav]         = useState<Record<string, boolean>>({ Sport: true, Fußball: true, Politik: true })
-
   // Seiten-spezifischer Aktions-Slot in nav-left (z. B. der Zurück-Button auf der
   // Marktdetailseite). Wird von der jeweiligen Seite per useAppShell().setPageAction
   // gesetzt und im Unmount/Routenwechsel wieder auf null zurückgesetzt.
   const [pageAction, setPageAction]           = useState<ReactNode>(null)
-
   const shownToastsRef                        = useRef<Set<string>>(new Set())
   const userRef                               = useRef<User | null>(null)
   // Verhindert parallele Refresh-Anfragen (z. B. wenn Mount-Check und Interval-Check
   // gleichzeitig feuern).
   const refreshInFlightRef                    = useRef(false)
-
   useEffect(() => {
     try {
       const saved = localStorage.getItem('mobius_shown_toasts')
@@ -280,23 +251,19 @@ export default function Shell({ children }: { children: ReactNode }) {
       }
     } catch {}
   }, [])
-
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light')
     localStorage.setItem('mobius_darkmode', String(darkMode))
   }, [darkMode])
-
   const logout = useCallback(() => {
     setUser(null); userRef.current = null
     localStorage.removeItem('mobius_session')
     setView('markets'); setMobileTab('markets'); setWinToasts([]); shownToastsRef.current = new Set()
     setLoginBonusToast(null)
   }, [])
-
   const resetAuthForm = useCallback(() => {
     setAuthEmail(''); setAuthPassword(''); setAuthUsername(''); setAuthError('')
   }, [])
-
   const openAuth = useCallback((mode: AuthMode) => {
     // Fix: Wochenranking-Modal muss geschlossen werden, sonst stacken beide Modals
     // übereinander (auf Mobile landet dadurch der Anmelden-Button außerhalb des
@@ -304,7 +271,6 @@ export default function Shell({ children }: { children: ReactNode }) {
     setShowLeaderboard(false)
     resetAuthForm(); setAuthMode(mode); setShowAuth(true)
   }, [resetAuthForm])
-
   // Erneuert den access_token über den gespeicherten refresh_token. Gibt bei Erfolg
   // den neuen access_token zurück, sonst null. Bei ungültigem/abgelaufenem
   // refresh_token wird der User ausgeloggt und das Auth-Modal geöffnet, da hier
@@ -335,7 +301,6 @@ export default function Shell({ children }: { children: ReactNode }) {
       refreshInFlightRef.current = false
     }
   }, [logout, openAuth])
-
   useEffect(() => {
     const session = readStoredSession()
     if (!session) return
@@ -349,7 +314,6 @@ export default function Shell({ children }: { children: ReactNode }) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-
   // Proaktiver Refresh-Timer: läuft nur während ein User eingeloggt ist, prüft
   // minütlich ob der access_token bald abläuft und erneuert ihn dann im Voraus.
   useEffect(() => {
@@ -362,7 +326,6 @@ export default function Shell({ children }: { children: ReactNode }) {
     const id = setInterval(check, REFRESH_CHECK_INTERVAL_MS)
     return () => clearInterval(id)
   }, [user?.id, refreshSession])
-
   const loadLeaderboard = useCallback(async () => {
     const data = await dbGet('users', 'select=id,username,balance,avatar_url,title&order=balance.desc&limit=10')
     setLeaderboard(
@@ -375,14 +338,42 @@ export default function Shell({ children }: { children: ReactNode }) {
       }))
     )
   }, [])
-
+  // Wochenranking: reiner Gewinn statt Auszahlungssumme.
+  // Vorher wurde nur payout.shares summiert — das ist die komplette Auszahlung
+  // (Einsatz + Gewinn), nicht der reine Gewinn. Jetzt wird pro Payout der
+  // ursprüngliche Einsatz abgezogen: über markets.resolution wird die gewinnende
+  // Seite bestimmt, darüber die zugehörigen buy_yes/buy_no-Trades desselben
+  // Nutzers auf demselben Markt gefunden und deren cost aufsummiert.
+  // Das cost-Feld der payout-Trades selbst wird bewusst ignoriert — es wird in
+  // mehreren Resolve-Routen unterschiedlich (und teils falsch) befüllt.
+  // Einschränkung: Verkäufe vor Marktauflösung (sell_yes/sell_no) werden hier
+  // nicht berücksichtigt — der volle ursprüngliche Einsatz wird trotzdem abgezogen.
   const loadWeeklyBoard = useCallback(async () => {
     const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
-    const trades = await dbGet('trades', `type=eq.payout&created_at=gte.${since}&select=user_id,shares`)
-    if (!trades || trades.length === 0) { setWeeklyBoard([]); return }
+    const payouts = await dbGet('trades', `type=eq.payout&created_at=gte.${since}&select=user_id,market_id,shares`)
+    if (!payouts || payouts.length === 0) { setWeeklyBoard([]); return }
+    // Distinkte Markt-IDs aus den Payouts (manuelle Deduplizierung statt [...new Set()])
+    const marketIdSeen: Record<string, boolean> = {}
+    const marketIds: string[] = []
+    payouts.forEach((p: { market_id: string }) => {
+      if (!marketIdSeen[p.market_id]) { marketIdSeen[p.market_id] = true; marketIds.push(p.market_id) }
+    })
+    const markets = await dbGet('markets', `id=in.(${marketIds.join(',')})&select=id,resolution`)
+    const resolutionMap: Record<string, string> = {}
+    markets?.forEach((m: { id: string; resolution: string }) => { resolutionMap[m.id] = m.resolution })
+    const buyTrades = await dbGet('trades', `market_id=in.(${marketIds.join(',')})&type=in.(buy_yes,buy_no)&select=user_id,market_id,type,cost`)
+    const costMap: Record<string, number> = {}
+    buyTrades?.forEach((t: { user_id: string; market_id: string; type: string; cost: number }) => {
+      const key = `${t.market_id}:${t.user_id}:${t.type}`
+      costMap[key] = (costMap[key] ?? 0) + (t.cost ?? 0)
+    })
     const gainMap: Record<string, number> = {}
-    trades.forEach((t: { user_id: string; shares: number }) => {
-      gainMap[t.user_id] = (gainMap[t.user_id] ?? 0) + (t.shares ?? 0)
+    payouts.forEach((p: { user_id: string; market_id: string; shares: number }) => {
+      const resolution = resolutionMap[p.market_id]
+      const winningType = resolution === 'yes' ? 'buy_yes' : resolution === 'no' ? 'buy_no' : null
+      const cost = winningType ? (costMap[`${p.market_id}:${p.user_id}:${winningType}`] ?? 0) : 0
+      const profit = (p.shares ?? 0) - cost
+      gainMap[p.user_id] = (gainMap[p.user_id] ?? 0) + profit
     })
     const topIds = Object.entries(gainMap).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([id]) => id)
     if (topIds.length === 0) { setWeeklyBoard([]); return }
@@ -399,11 +390,9 @@ export default function Shell({ children }: { children: ReactNode }) {
       title: userMap[id]?.title,
     })))
   }, [])
-
   useEffect(() => {
     loadLeaderboard()
   }, [loadLeaderboard])
-
   // Deep-Link Support: ?view=portfolio|ranking|profil (z. B. von der Marktdetailseite aus)
   useEffect(() => {
     const viewParam = new URLSearchParams(window.location.search).get('view')
@@ -416,7 +405,6 @@ export default function Shell({ children }: { children: ReactNode }) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-
   // Suche auf ?q= synchronisieren. Bewusst history.replaceState() statt router.push/replace():
   // page.tsx/[...category]/page.tsx nutzen cache: 'no-store' für den Supabase-Fetch — eine
   // Router-Navigation würde bei jedem Tastendruck einen neuen Server-Fetch auslösen, obwohl
@@ -432,7 +420,6 @@ export default function Shell({ children }: { children: ReactNode }) {
     }
     window.history.replaceState(null, '', url.pathname + url.search)
   }, [searchQuery])
-
   const checkWins = useCallback(async (userId: string) => {
     const since = new Date(Date.now() - 10 * 60 * 1000).toISOString()
     const trades = await dbGet('trades', `user_id=eq.${userId}&type=in.(buy_yes,buy_no)&created_at=gte.${since}&select=market_id,type,shares`)
@@ -468,14 +455,12 @@ export default function Shell({ children }: { children: ReactNode }) {
       newToasts.forEach(toast => { setTimeout(() => setWinToasts(prev => prev.filter(t => t.id !== toast.id)), 7000) })
     }
   }, [])
-
   useEffect(() => {
     if (!user?.id) return
     const id = setInterval(() => checkWins(user.id), 15000)
     checkWins(user.id)
     return () => clearInterval(id)
   }, [user?.id, checkWins])
-
   const handleLogin = async () => {
     setAuthError('')
     if (!authEmail || !authPassword) { setAuthError('Bitte alle Felder ausfüllen.'); return }
@@ -508,7 +493,6 @@ export default function Shell({ children }: { children: ReactNode }) {
       setShowAuth(false); resetAuthForm()
     } else { setAuthError('Benutzer nicht gefunden.') }
   }
-
   const handleRegister = async () => {
     setAuthError('')
     if (!authEmail || !authPassword || !authUsername) { setAuthError('Bitte alle Felder ausfüllen.'); return }
@@ -549,7 +533,6 @@ export default function Shell({ children }: { children: ReactNode }) {
       setShowAuth(false); resetAuthForm(); loadLeaderboard()
     } else { setAuthError('Konto erstellt! Bitte melde dich jetzt an.') }
   }
-
   // Reset von view/mobileTab/searchQuery bei Kategorie-Navigation — läuft jetzt über
   // echte <Link>-Klicks (siehe NavItem/MOBILE_CAT_PILLS/Logo weiter unten), die diese
   // Funktion im onClick zusätzlich zur normalen Link-Navigation aufrufen.
@@ -559,7 +542,6 @@ export default function Shell({ children }: { children: ReactNode }) {
   // die URL ist jetzt alleinige Quelle der Wahrheit dafür.
   const selectCategory = (_id: string) => handleNavClick()
   const toggleNav = (id: string) => setExpandedNav(prev => ({ ...prev, [id]: !prev[id] }))
-
   const handleMobileTab = (tab: MobileTab) => {
     setMobileTab(tab)
     if (tab === 'markets') setView('markets')
@@ -570,7 +552,6 @@ export default function Shell({ children }: { children: ReactNode }) {
       else openAuth('login')
     }
   }
-
   const contextValue = {
     user, setUser, logout,
     darkMode, setDarkMode,
@@ -582,7 +563,6 @@ export default function Shell({ children }: { children: ReactNode }) {
     openAuth,
     pageAction, setPageAction,
   }
-
   return (
     <AppShellContext.Provider value={contextValue}>
       {/* Win Toasts */}
@@ -620,7 +600,6 @@ export default function Shell({ children }: { children: ReactNode }) {
           </div>
         )}
       </div>
-
       {/* Leaderboard Modal */}
       {showLeaderboard && (
         <div className="modal-backdrop" onClick={() => setShowLeaderboard(false)}>
@@ -666,7 +645,6 @@ export default function Shell({ children }: { children: ReactNode }) {
           </div>
         </div>
       )}
-
       {/* Auth Modal */}
       {showAuth && (
         <div className="modal-backdrop" onClick={() => setShowAuth(false)}>
@@ -687,7 +665,6 @@ export default function Shell({ children }: { children: ReactNode }) {
           </div>
         </div>
       )}
-
       {/* Nav */}
       <nav className="nav">
         <div className="nav-left">
@@ -736,7 +713,6 @@ export default function Shell({ children }: { children: ReactNode }) {
           <button className="nav-icon-btn" onClick={() => setDarkMode(!darkMode)}><Icon name={darkMode ? 'sun' : 'moon'} size={17} /></button>
         </div>
       </nav>
-
       {/* Mobile Category Pills */}
       <div className="mobile-cat-scroll">
         {MOBILE_CAT_PILLS.map(pill => {
@@ -755,10 +731,8 @@ export default function Shell({ children }: { children: ReactNode }) {
           )
         })}
       </div>
-
       {/* Layout */}
       <div style={{ display: 'flex', minHeight: 'calc(100vh - var(--nav-height, 56px))', maxWidth: 1400, margin: '0 auto' }}>
-
         {/* Desktop Sidebar */}
         <aside style={{ width: 220, flexShrink: 0, borderRight: '1px solid var(--border)', padding: '20px 0', position: 'sticky', top: 'var(--nav-height, 56px)', height: 'calc(100vh - var(--nav-height, 56px))', overflowY: 'auto', background: 'var(--bg)' }}>
           {user && (<div style={{ padding: '0 16px 16px', borderBottom: '1px solid var(--border)', marginBottom: 12 }}><div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Guthaben</div><div style={{ fontSize: 20, fontWeight: 800, color: 'var(--text)' }}>{user.balance.toLocaleString('de')} ₫</div></div>)}
@@ -788,12 +762,10 @@ export default function Shell({ children }: { children: ReactNode }) {
             </a>
           </div>
         </aside>
-
         <main style={{ flex: 1, minWidth: 0, padding: '24px 32px' }}>
           {children}
         </main>
       </div>
-
       {/* Mobile Bottom Tab Bar */}
       <nav className="mobile-tab-bar">
         {[
@@ -812,7 +784,6 @@ export default function Shell({ children }: { children: ReactNode }) {
           </button>
         ))}
       </nav>
-
       <style>{`
         @keyframes slideInRight { from { transform: translateX(120%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
         .nav-item-btn { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 12px; border: none; background: transparent; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 500; color: var(--text-muted); text-align: left; transition: background 0.1s, color 0.1s; }
@@ -830,7 +801,6 @@ export default function Shell({ children }: { children: ReactNode }) {
     </AppShellContext.Provider>
   )
 }
-
 function NavItem({ item, pathname, expandedNav, onNavigate, onToggle, depth }: {
   item: NavItemDef; pathname: string; expandedNav: Record<string, boolean>
   onNavigate: () => void; onToggle: (id: string) => void; depth: number
