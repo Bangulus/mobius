@@ -230,6 +230,7 @@ export default function Shell({ children }: { children: ReactNode }) {
   const [authUsername, setAuthUsername]       = useState('')
   const [authError, setAuthError]             = useState('')
   const [authLoading, setAuthLoading]         = useState(false)
+  const [authAgeConfirmed, setAuthAgeConfirmed] = useState(false)
   const [winToasts, setWinToasts]             = useState<WinToast[]>([])
   const [loginBonusToast, setLoginBonusToast] = useState<LoginBonusToast | null>(null)
   const [expandedNav, setExpandedNav]         = useState<Record<string, boolean>>({ Sport: true, Fußball: true, Politik: true })
@@ -262,7 +263,7 @@ export default function Shell({ children }: { children: ReactNode }) {
     setLoginBonusToast(null)
   }, [])
   const resetAuthForm = useCallback(() => {
-    setAuthEmail(''); setAuthPassword(''); setAuthUsername(''); setAuthError('')
+    setAuthEmail(''); setAuthPassword(''); setAuthUsername(''); setAuthError(''); setAuthAgeConfirmed(false)
   }, [])
   const openAuth = useCallback((mode: AuthMode) => {
     // Fix: Wochenranking-Modal muss geschlossen werden, sonst stacken beide Modals
@@ -496,6 +497,7 @@ export default function Shell({ children }: { children: ReactNode }) {
   const handleRegister = async () => {
     setAuthError('')
     if (!authEmail || !authPassword || !authUsername) { setAuthError('Bitte alle Felder ausfüllen.'); return }
+    if (!authAgeConfirmed) { setAuthError('Bitte bestätige, dass du mindestens 16 Jahre alt bist.'); return }
     if (authEmail.length > 254) { setAuthError('E-Mail zu lang.'); return }
     if (authUsername.length < 3 || authUsername.length > 50) { setAuthError('Benutzername: 3–50 Zeichen.'); return }
     if (authPassword.length < 6 || authPassword.length > 128) { setAuthError('Passwort muss 6–128 Zeichen lang sein.'); return }
@@ -657,6 +659,22 @@ export default function Shell({ children }: { children: ReactNode }) {
             {authMode === 'register' && (<input type="text" placeholder="Benutzername" value={authUsername} onChange={(e) => setAuthUsername(e.target.value)} maxLength={50} style={{ width: '100%' }} />)}
             <input type="email" placeholder="E-Mail" value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} maxLength={254} style={{ width: '100%' }} autoFocus />
             <input type="password" placeholder="Passwort" value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} maxLength={128} onKeyDown={(e) => e.key === 'Enter' && (authMode === 'login' ? handleLogin() : handleRegister())} style={{ width: '100%' }} />
+            {authMode === 'register' && (
+              <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 12, color: 'var(--text-subtle)', lineHeight: 1.5, cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={authAgeConfirmed}
+                  onChange={(e) => setAuthAgeConfirmed(e.target.checked)}
+                  style={{ marginTop: 2, width: 'auto' }}
+                />
+                <span>
+                  Ich bin mindestens 16 Jahre alt und akzeptiere die{' '}
+                  <a href="/agb" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent, #6366f1)' }}>AGB</a>{' '}
+                  sowie die{' '}
+                  <a href="/datenschutz" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent, #6366f1)' }}>Datenschutzerklärung</a>.
+                </span>
+              </label>
+            )}
             {authError && <div className="alert alert-error">{authError}</div>}
             <button className="submit-btn yes" onClick={authMode === 'login' ? handleLogin : handleRegister} disabled={authLoading} style={{ marginTop: 4 }}>
               {authLoading ? 'not me waiting...' : authMode === 'login' ? 'Anmelden' : 'Konto erstellen'}
@@ -759,6 +777,14 @@ export default function Shell({ children }: { children: ReactNode }) {
             <a href="/impressum" className="nav-item-btn" style={{ display: 'flex', alignItems: 'center', gap: 8, textDecoration: 'none', fontSize: 13, fontWeight: 500, color: 'var(--text-muted)', padding: '8px 12px', borderRadius: 8 }}>
               <Icon name="mail" size={16} />
               <span>Kontakt</span>
+            </a>
+            <a href="/datenschutz" className="nav-item-btn" style={{ display: 'flex', alignItems: 'center', gap: 8, textDecoration: 'none', fontSize: 13, fontWeight: 500, color: 'var(--text-muted)', padding: '8px 12px', borderRadius: 8 }}>
+              <Icon name="world" size={16} />
+              <span>Datenschutz</span>
+            </a>
+            <a href="/agb" className="nav-item-btn" style={{ display: 'flex', alignItems: 'center', gap: 8, textDecoration: 'none', fontSize: 13, fontWeight: 500, color: 'var(--text-muted)', padding: '8px 12px', borderRadius: 8 }}>
+              <Icon name="building-bank" size={16} />
+              <span>AGB</span>
             </a>
           </div>
         </aside>
