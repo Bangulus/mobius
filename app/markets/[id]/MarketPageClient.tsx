@@ -824,8 +824,14 @@ export default function MarketPageClient() {
     setPosition(pos); positionRef.current = pos
   }, [marketId])
 
+  // FIX (11.09.2026): match_id=is.null ergänzt — ohne diesen Filter enthielt
+  // liveMarkets auch Bundesliga-Märkte (is_auto=true, aber coin='BTC' als
+  // Platzhalterwert), was den "Zum Live-Markt"-Button nach Ablauf eines
+  // 3-Minuten-BTC-Marktes fälschlich zu Bundesliga statt zum neuen BTC-Markt
+  // führte (liveMarkets.find(m => m.coin === market.coin ...) matchte auf die
+  // falsche Zeile). Gleiche Bug-Klasse wie der frühere BTC-Guard-Fix.
   const loadLiveMarkets = useCallback(async () => {
-    const data = await dbGet('markets', `is_auto=eq.true&resolved=eq.false&select=*&order=closes_at.asc`)
+    const data = await dbGet('markets', `is_auto=eq.true&resolved=eq.false&match_id=is.null&select=*&order=closes_at.asc`)
     setLiveMarkets(data ?? [])
   }, [])
 
